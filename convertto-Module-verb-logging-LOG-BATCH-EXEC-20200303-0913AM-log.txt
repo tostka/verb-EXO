@@ -1,0 +1,267 @@
+﻿2020-03-03 09:13:13 INFO: #*======v START PASS:convertto-Module.ps1 v======
+2020-03-03 09:13:13 INFO: 09:13:13:$ModuleName interpolated from verb-EXO.ps1: verb-EXO
+2020-03-03 09:13:13 INFO: 09:13:13:$ModuleDesc specified: Powershell Exchange Online generic functions module
+2020-03-03 09:13:22 INFO: Invoke-Plaster w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+TemplatePath                   C:\sc\powershell\FullModuleTemplate\                                                                                       
+DestinationPath                C:\sc\verb-EXO                                                                                                             
+ModuleName                     verb-EXO                                                                                                                   
+ModuleDesc                     Powershell Exchange Online generic functions module
+2020-03-03 09:13:22 INFO: 
+**IN THE PROMPTS BELOW, USE THE FOLLOWING!**:
+Github Repo Name For This Module:	verb-EXO
+Github Repo Url For This Module:	https://github.com/tostka/verb-EXO
+
+2020-03-03 09:15:56 INFO: Opening a copy of $oModSrcFile:
+C:\usr\work\exch\scripts\verb-EXO.ps1
+for reference
+2020-03-03 09:15:57 INFO: Opening a copy of $psmFile:
+(C:\sc\verb-EXO\verb-EXO\verb-EXO.psm1.fullname)
+for EDITING
+2020-03-03 09:16:04 INFO: new-item w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+path                           C:\sc\verb-EXO\Public\Get-O365AdminCred.ps1                                                                                
+whatif                         False
+2020-03-03 09:16:04 INFO: Pre-populating the Get-O365AdminCred.ps1 with the function body
+(may *not* include associated aliases!)
+2020-03-03 09:16:04 INFO: new-item w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+path                           C:\sc\verb-EXO\Public\Reconnect-EXO.ps1                                                                                    
+whatif                         False
+2020-03-03 09:16:04 INFO: Pre-populating the Reconnect-EXO.ps1 with the function body
+(may *not* include associated aliases!)
+2020-03-03 09:16:05 INFO: new-item w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+path                           C:\sc\verb-EXO\Public\rxotol.ps1                                                                                           
+whatif                         False
+2020-03-03 09:16:05 INFO: Pre-populating the rxotol.ps1 with the function body
+(may *not* include associated aliases!)
+2020-03-03 09:16:05 INFO: new-item w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+path                           C:\sc\verb-EXO\Public\rxocmw.ps1                                                                                           
+whatif                         False
+2020-03-03 09:16:05 INFO: Pre-populating the rxocmw.ps1 with the function body
+(may *not* include associated aliases!)
+2020-03-03 09:16:05 INFO: new-item w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+path                           C:\sc\verb-EXO\Public\rxotor.ps1                                                                                           
+whatif                         False
+2020-03-03 09:16:05 INFO: Pre-populating the rxotor.ps1 with the function body
+(may *not* include associated aliases!)
+2020-03-03 09:16:05 INFO: new-item w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+path                           C:\sc\verb-EXO\Public\Connect-EXO.ps1                                                                                      
+whatif                         False
+2020-03-03 09:16:05 INFO: Pre-populating the Connect-EXO.ps1 with the function body
+(may *not* include associated aliases!)
+2020-03-03 09:16:05 INFO: new-item w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+path                           C:\sc\verb-EXO\Public\cxotol.ps1                                                                                           
+whatif                         False
+2020-03-03 09:16:06 INFO: Pre-populating the cxotol.ps1 with the function body
+(may *not* include associated aliases!)
+2020-03-03 09:16:06 INFO: new-item w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+path                           C:\sc\verb-EXO\Public\cxocmw.ps1                                                                                           
+whatif                         False
+2020-03-03 09:16:06 INFO: Pre-populating the cxocmw.ps1 with the function body
+(may *not* include associated aliases!)
+2020-03-03 09:16:06 INFO: new-item w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+path                           C:\sc\verb-EXO\Public\cxotor.ps1                                                                                           
+whatif                         False
+2020-03-03 09:16:06 INFO: Pre-populating the cxotor.ps1 with the function body
+(may *not* include associated aliases!)
+2020-03-03 09:16:06 INFO: new-item w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+path                           C:\sc\verb-EXO\Public\Disconnect-EXO.ps1                                                                                   
+whatif                         False
+2020-03-03 09:16:06 INFO: Pre-populating the Disconnect-EXO.ps1 with the function body
+(may *not* include associated aliases!)
+2020-03-03 09:16:06 INFO: new-item w
+Name                           Value                                                                                                                      
+----                           -----                                                                                                                      
+path                           C:\sc\verb-EXO\Public\Disconnect-PssBroken.ps1                                                                             
+whatif                         False
+2020-03-03 09:16:06 INFO: Pre-populating the Disconnect-PssBroken.ps1 with the function body
+(may *not* include associated aliases!)
+2020-03-03 09:16:06 INFO: Parsing function list out of C:\usr\work\exch\scripts\verb-EXO.ps1
+use these with FunctionsToExport 'func1', 'func2' at bottom of the .psm1 file
+2020-03-03 09:16:07 INFO: Updating manifest .psd1 FunctionsToExport to reflect all functions above:
+(C:\sc\verb-EXO\verb-EXO\verb-EXO.psd1)
+2020-03-03 09:18:36 INFO: Updating the Psd1 FunctionsToExport to match
+2020-03-03 09:37:09 INFO: Copying module guid to the $TestScriptPath:C:\sc\verb-EXO\Tests\verb-EXO.tests.ps1
+2020-03-03 09:37:49 INFO: Opening a copy of the Manifest (.psd1) file:
+C:\sc\verb-EXO\verb-EXO\verb-EXO.psd1
+for EDITING
+2020-03-03 09:37:56 INFO: BuildVariables for C:\usr\work\exch\scripts\verb-EXO.ps1:
+$-----------
+
+$-----------
+
+2020-03-03 09:37:56 INFO: 
+#*------v FOLLOW-ON PROCEDURE v------
+
+1) **Edit the following portion of the verb-EXO.psd1 file:**
+
+     - Populate FunctionsToExport,
+    Functions parsed from the C:\usr\work\exch\scripts\verb-EXO.ps1 include:
+    
+
+    - Psd1 version is: 
+    Set ModuleVersion in 'n.n.n' format, or you'll see ...
+    Publish-PSArtifactUtility : Failed to publish module 'verb-transcript': 'File does not exist
+    ... .nupkg file errors
+    - Make sure the psm1 CBH Version: n.n.n tag is updated to match (optional)
+
+2) **Copy the public/exported functions from the source .ps1/psm1 into the the matching new function-named files in the Public folder
+  & Internal folders (for non-exported functions)
+
+3) Edit the readme.md file.
+    notepad2.exe C:\sc\verb-EXO\README.md
+
+4) Edit the .psm1 file
+    notepad2.exe C:\sc\verb-EXO\verb-EXO\verb-EXO.psm1
+
+5) Optional all-in-one that encapsulates remaining steps below: (RUN AS SID, REQ'S PERMS TO REPO & ADMIN PROFILE)
+
+# To do a monolithic merged .psm1, sign, and publish to specified Repo,
+.\process-NewModule.ps1 -ModuleName "verb-EXO" -ModDirPath "C:\sc\verb-EXO" -Repository "lyncRepo" -Merge -showdebug -whatif ;
+
+==Following are the component pieces of the encapsulating process-NewModule.ps1 processing above:
+
+6) Optionally Merge the default Dyanamic-Include version of the .psm1, to a Monolithic .psm1 (faster loading):
+    .\merge-Module.ps1 -ModuleName verb-EXO -ModuleSourcePath "C:\sc\verb-EXO\Public","C:\sc\verb-EXO\Internal" -ModuleDestinationPath C:\sc\verb-EXO\verb-EXO -showdebug -whatif ;
+
+7) Sign relevenent files:
+$rgxfiles='\.(CAT|MSI|JAR,OCX|PS1|PSM1|PSD1|PS1XML|PSC1|MSP|CMD|BAT|VBS)$' ;
+$rgxIncludeDirs='\\(Public|Internal|Classes)\\' ;
+$files = gci C:\sc\verb-EXO\* -recur |?{$_.extension -match $rgxfiles} | ?{$_.fullname -notmatch $rgxIncludeDirs} ;
+sign-file -file $files.fullname ;
+
+8) Clear any existing copy in $PSProfilePath: (use SID at work w lyncRepo!)
+    remove-item -Recurse -Path C:\Users\kadrits\Documents\WindowsPowerShell\Modules\verb-EXO\*.* -whatif ;
+
+9) Then copy the module to the $PSProfilePath: (excluding .git & .vscode subfolders ; use SID at work w lyncRepo!
+
+$from='C:\sc\verb-EXO' ; $to = 'C:\Users\kadrits\Documents\WindowsPowerShell\Modules\verb-EXO' ;
+ $exclude = @('main.js') ; $excludeMatch = @('.git','.vscode') ;
+[regex] $excludeMatchRegEx = '(?i)' + (($excludeMatch |foreach {[regex]::escape($_)}) -join "|") + '' ;
+Get-ChildItem -Path $from -Recurse -Exclude $exclude |
+where { $excludeMatch -eq $null -or $_.FullName.Replace($from, '') -notmatch $excludeMatchRegEx} |
+Copy-Item -Destination {  if ($_.PSIsContainer) { Join-Path $to $_.Parent.FullName.Substring($from.length) }
+else { Join-Path $to $_.FullName.Substring($from.length) }    } -Force -Exclude $exclude -whatif ;
+
+
+
+10) Validate module function (should be visible in the results)
+    Get-Module -ListAvailable -Name verb-EXO
+
+11) Exit and restart PS to fully register module (though listed by Get-Module, can see
+    'Publish-Module : ...no module with that name was found in any module directory.'
+    ... errors, until post-restart.epository lyncRepo -Verbose -whatif
+
+
+12)	Publish to the Repo: Verify the repo is present & publish:
+    Get-PSRepository ;
+
+    Publish-Module -Name verb-EXO -Repository lyncRepo -Verbose -whatif
+    # or from source dir
+    Publish-Module -Name C:\sc\verb-EXO -R
+
+13) Confirm publication: list all the modules in your repo, (or search)
+    Find-Module -Name verb-EXO ;
+
+14) Installing mods from the repo:
+
+    Pre-clear all files in local non-installed version in $PSProfilePath: (isn't manageable, use SID at work w lyncRepo!)
+    gci -Recurse -Path "C:\Users\kadrits\Documents\WindowsPowerShell\Modules\verb-EXO\*.*" |?{ ! $_.PSIsContainer } | remove-item -whatif ;
+
+    Install the Repo version:
+    Install-Module -Name verb-EXO -Repository lyncRepo -scope CurrentUser -AllowClobber -force -whatif ;
+
+===========
+TO FIND & UPDATE DEPENDANT FILES THAT CURRENTLY LEVERAGE verb-EXO.ps1, RUN:
+
+gci C:\sc\powershell\*.ps1 -recur | sort name| ss '\$tModFile\s=\s"verb-EXO\.ps1"'
+
+
+For each matching .ps1:
+a) Rem/remove any load block like the above
+b) Above params, at script start, add a suitable #Requires for this updated installed module:
+		#Requires -Modules verb-EXO
+    (can be on separate lines, or comma-delimited list of like items).
+    Other Requres directives that may be suitable with this change: (## => Rem'd conflicting variant)
+        ##Requires –Version 2.0
+        #Requires –Version 3
+        #requires -PSEdition Desktop
+        ##requires -PSEdition Core
+        #Requires –PSSnapin Microsoft.Exchange.Management.PowerShell.E2010
+        #Requires -Modules ActiveDirectory,  Azure,  AzureAD,  AzureRM,  GroupPolicy,  Lync,  Microsoft.Online.SharePoint.PowerShell,  MSOnline,  ScheduledTasks,  SkypeOnlineConnector
+        #Requires -RunasAdministrator
+
+===========
+TO BRING UPDATED REPO/MODULE ONTO ANOTHER MACHINE
+
+    a) Clone in the repo from GitHub:
+
+    cd C:\sc\ ;
+    # & Git clone [gh repo https clone url]
+    Git clone https://github.com/tostka/verb-EXO.git --porcelain ;
+
+
+    b) Add Repo to GitHubDesktop
+
+    c) Run steps 7-13 above, to install into local repo, and install Module locally onto machine(s) from published Repo
+
+===========
+TO DO FUTURE REVISION UPDATES:
+
+    a) Profile & increment current Psd1 version: -By (Build|Major|Minor|Patch)
+    cd C:\sc\verb-EXO ; 
+    import-module buildhelpers ; Set-BuildEnvironment ;
+    Step-ModuleVersion -Path  -By build
+    
+    ==Optionally, all-in-one, Merge & Uninstall/Repub/Reinstall/Test-import script:
+    .\process-NewModule.ps1 -ModuleName "verb-EXO" -ModDirPath "C:\sc\verb-EXO" -Repository lyncRepo  -Merge -showdebug -whatif ;
+
+    ==Or do one piece at a time:
+    b) Uninstall the existing version (avoids update-module's habit of
+        leaving out of date content in place.)
+
+        Uninstall-Module -Name verb-EXO -AllVersions -force -whatif ;
+
+    c) Copy the updated module to the PSProfilePath:
+
+$from='C:\sc\verb-EXO' ; $to = 'C:\Users\kadrits\Documents\WindowsPowerShell\Modules\verb-EXO' ;
+$exclude = @('main.js') ; $excludeMatch = @('.git','.vscode') ;
+[regex] $excludeMatchRegEx = '(?i)' + (($excludeMatch |foreach {[regex]::escape($_)}) -join "|") + '' ;
+Get-ChildItem -Path $from -Recurse -Exclude $exclude |
+where { $excludeMatch -eq $null -or $_.FullName.Replace($from, '') -notmatch $excludeMatchRegEx} |
+Copy-Item -Destination {  if ($_.PSIsContainer) { Join-Path $to $_.Parent.FullName.Substring($from.length) }
+else { Join-Path $to $_.FullName.Substring($from.length) }    } -Force -Exclude $exclude -whatif ;
+
+
+    d) Republish the updated module:
+
+    Publish-Module -Name verb-EXO -Repository lyncRepo -Verbose -whatif
+
+    e) Reinstall from the Repo
+
+    Install-Module -Name verb-EXO -Repository lyncRepo -whatif ;
+
+
+#*------^ END FOLLOW-ON PROCEDURE  ^------
+
+
