@@ -29,7 +29,7 @@ Function Reconnect-EXO {
     foreach-object script block.  I was driven to this because disconnections
     happen so often/so unpredictably in my current customer's environment:
     .PARAMETER  Credential
-    Credential to use for this connection [-credential 's-todd.kadrie@toro.com']
+    Credential to use for this connection [-credential 'account@domain.com']
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS

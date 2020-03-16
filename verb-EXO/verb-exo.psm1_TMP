@@ -1,11 +1,11 @@
-﻿# verb-exo.psm1
+# verb-exo.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.4.0
+  Version     : 1.0.2.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -14,23 +14,52 @@
   License     : MIT
   Copyright   : (c) 3/3/2020 Todd Kadrie
   Github      : https://github.com/tostka
+  AddedCredit : REFERENCE
+  AddedWebsite:	REFERENCEURL
+  AddedTwitter:	@HANDLE / http://twitter.com/HANDLE
   REVISIONS
   * 4:38 PM 3/16/2020 public cleanup
-  * 8:45 AM 3/3/2020 1.0.0.0 public cleanup
-  * 9:52 PM 1/16/2020 cleanup
-  * 11:36 AM 12/30/2019 ran vsc alias-expan
-  * 10:55 AM 12/6/2019 Connect-EXO:added suffix to TitleBar tag for non-TOR tenants, also config'd a central tab vari
-  * 5:14 PM 11/27/2019 repl $MFA code with get-TenantMFARequirement
-  * 1:07 PM 11/25/2019 added 3-letter alias variants for connect & reconnect
-  # 9:57 AM 11/20/2019 added Credential param to reconnect, with passthru.
-  # 1:26 PM 11/19/2019 added MFA detection fr infastrings .ps1 globals
-  * 10:10 AM 6/20/2019 added local $rgxExoPsHostName, swapped dxo to use the vari, added showdebug to rxo & cxo, added $pltPSS wplat dump to the import-pssession cmd block
-  * 1:02 PM 11/7/2018 added Disconnect-PssBroken
-  * 2:55 PM 10/11/2018 connect-exo: added pre sleep skip on tryno 1
-  # 9:24 PM 7/16/2018 broad cleanup & tightening
-  # 9:04 PM 7/11/2018 synced to tsksid-incl-ServerApp.ps1
+  * 3/3/2020 - 1.0.0.0
   .DESCRIPTION
   verb-EXO - Powershell Exchange Online generic functions module
+  .PARAMETER  PARAMNAME
+  PARAMDESC
+  .PARAMETER  Mbx
+  Mailbox identifier [samaccountname,name,emailaddr,alias]
+  .PARAMETER  Computer
+  Computer Name [-ComputerName server]
+  .PARAMETER  ServerFqdn
+  Server Fqdn (24-25char) [-serverFqdn lynms650.global.ad.toro.com)] 
+  .PARAMETER  Server
+  Server NBname (8-9chars) [-server lynms650)]
+  .PARAMETER  SiteName
+  Specify Site to analyze [-SiteName (USEA|GBMK|AUSYD]
+  .PARAMETER  Ticket
+  Ticket # [-Ticket nnnnn]
+  .PARAMETER  Path
+  Path [-path c:\path-to\]
+  .PARAMETER  File
+  File [-file c:\path-to\file.ext]
+  .PARAMETER  String
+  2-30 char string [-string 'word']
+  .PARAMETER  Credential
+  Credential (PSCredential obj) [-credential ]
+  .PARAMETER  Logonly
+  Run a Test no-change pass, and log results [-Logonly]
+  .PARAMETER  FORCEALLPINS
+  Reset All PINs (boolean) [-FORCEALLPINS:True]
+  .PARAMETER Whatif
+  Parameter to run a Test no-change pass, and log results [-Whatif switch]
+  .PARAMETER ShowProgress
+  Parameter to display progress meter [-ShowProgress switch]
+  .PARAMETER ShowDebug
+  Parameter to display Debugging messages [-ShowDebug switch]
+  .INPUTS
+  None
+  .OUTPUTS
+  None
+  .EXAMPLE
+  .EXAMPLE
   .LINK
   https://github.com/tostka/verb-EXO
   #>
@@ -519,29 +548,3 @@ function rxoTOR {Reconnect-EXO -cred $credO365TORSID}
 
 Export-ModuleMember -Function Connect-EXO,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Disconnect-PssBroken,Get-O365AdminCred,Reconnect-EXO,rxoCMW,rxoTOL,rxoTOR -Alias *
 
-
-# SIG # Begin signature block
-# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
-# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvpqIjqW9ZFsq2ILWxYIlEwUO
-# MMCgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
-# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
-# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
-# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
-# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
-# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
-# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
-# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
-# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
-# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
-# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
-# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
-# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
-# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
-# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSEed4S
-# 4VCTDd4GOJzOgKyKdSQK7zANBgkqhkiG9w0BAQEFAASBgCjTOXc7eVwv7IQGQMtj
-# 3kDB0lSVEiHKuQzx8tFdGM51cvI0P1B7iKawOL9McErgPjoPjmT2cvZncGYsZCHC
-# u1Jub99HA1oxmZEsOJIN2fo5pmsCkg81/hNbZ1qwxiei4dmre9P5eCwPlqQ5njIp
-# QqgMwc/J87AnVGxT4ONj2MY8
-# SIG # End signature block
