@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.5.0
+  Version     : 1.0.6.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -370,40 +370,6 @@ if(!(get-alias | Where-Object{$_.name -like "dxo"})) {Set-Alias 'dxo' -Value 'Di
 
 #*------^ Disconnect-EXO.ps1 ^------
 
-#*------v Disconnect-PssBroken.ps1 v------
-Function Disconnect-PssBroken {
-    <#
-    .SYNOPSIS
-    Disconnect-PssBroken - Remove all local broken PSSessions
-    .NOTES
-    Version     : 1.0.0
-    Author      : Todd Kadrie
-    Website     :	http://www.toddomation.com
-    Twitter     :	@tostka / http://twitter.com/tostka
-    CreatedDate : 2020-03-03
-    FileName    : 
-    License     : 
-    Copyright   : 
-    Github      : https://github.com/tostka
-    Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
-    REVISIONS   :
-    * 12:56 PM 11/7/2018 fix typo $s.state.value, switched tests to the strings, over values (not sure worked at all)
-    * 1:50 PM 12/8/2016 initial version
-    .DESCRIPTION
-    Disconnect-PssBroken - Remove all local broken PSSessions
-    .INPUTS
-    None. Does not accepted piped input.
-    .OUTPUTS
-    None. Returns no objects or output.
-    .EXAMPLE
-    Disconnect-PssBroken ;
-    .LINK
-    #>
-    Get-PsSession |Where-Object{$_.State -ne 'Opened' -or $_.Availability -ne 'Available'} | Remove-PSSession -Verbose ;
-}
-
-#*------^ Disconnect-PssBroken.ps1 ^------
-
 #*------v Get-O365AdminCred.ps1 v------
 Function Get-O365AdminCred {
     If (-not($o365cred)) {
@@ -517,14 +483,14 @@ function rxoTOR {Reconnect-EXO -cred $credO365TORSID}
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Connect-EXO,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Disconnect-PssBroken,Get-O365AdminCred,Reconnect-EXO,rxoCMW,rxoTOL,rxoTOR -Alias *
+Export-ModuleMember -Function Connect-EXO,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Get-O365AdminCred,Reconnect-EXO,rxoCMW,rxoTOL,rxoTOR -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUusSWuWCzpn7S6vrRAoapwdD/
-# kz+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQURzZ1E67QwbDdvq67vo8uMESb
+# dV6gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -539,9 +505,9 @@ Export-ModuleMember -Function Connect-EXO,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Di
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTXS4IN
-# JFM82N1E3mUFr3xl0Aq73TANBgkqhkiG9w0BAQEFAASBgJSjRPu1xWhBLIoIFeG/
-# E7wfTwkACAj0wcgzOonX1LeR3I8z5ZK0vt4/BFWYHbQ5U6NYds4Sxo7ZtT2XL3G8
-# 8eHNYzho+hJ9OOagKSKJDMRrBqNENhugMOKuhaUoo0KS+8pSI15PZ8AG+jKhc3U6
-# tNPYSR5iI3XmyDN4hkDnMwRB
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSOorp9
+# b9/Chls6HivWCf6W7cJFEzANBgkqhkiG9w0BAQEFAASBgAsnC2W5aEL/+qDsEZ0b
+# ungcukpDUfiEsH324MLsovSqlfC3Tu+ssBcNu+/6siJ0CKBqeYiQjF35Z99xvba+
+# OzPu+DX8syRAmdpQfFgwZMORA4bQ5hQIwRpnOc5xEB2tQ0lxuYInFjU0vORDEr8p
+# BTI+g5uF7k1XEkp3H4u6WyTe
 # SIG # End signature block

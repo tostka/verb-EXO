@@ -1,4 +1,4 @@
-# verb-EXO.psm1
+﻿# verb-EXO.psm1
 
 
   <#
@@ -370,6 +370,40 @@ if(!(get-alias | Where-Object{$_.name -like "dxo"})) {Set-Alias 'dxo' -Value 'Di
 
 #*------^ Disconnect-EXO.ps1 ^------
 
+#*------v Disconnect-PssBroken.ps1 v------
+Function Disconnect-PssBroken {
+    <#
+    .SYNOPSIS
+    Disconnect-PssBroken - Remove all local broken PSSessions
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-03-03
+    FileName    : 
+    License     : 
+    Copyright   : 
+    Github      : https://github.com/tostka
+    Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
+    REVISIONS   :
+    * 12:56 PM 11/7/2018 fix typo $s.state.value, switched tests to the strings, over values (not sure worked at all)
+    * 1:50 PM 12/8/2016 initial version
+    .DESCRIPTION
+    Disconnect-PssBroken - Remove all local broken PSSessions
+    .INPUTS
+    None. Does not accepted piped input.
+    .OUTPUTS
+    None. Returns no objects or output.
+    .EXAMPLE
+    Disconnect-PssBroken ;
+    .LINK
+    #>
+    Get-PsSession |Where-Object{$_.State -ne 'Opened' -or $_.Availability -ne 'Available'} | Remove-PSSession -Verbose ;
+}
+
+#*------^ Disconnect-PssBroken.ps1 ^------
+
 #*------v Get-O365AdminCred.ps1 v------
 Function Get-O365AdminCred {
     If (-not($o365cred)) {
@@ -483,5 +517,31 @@ function rxoTOR {Reconnect-EXO -cred $credO365TORSID}
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Connect-EXO,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Get-O365AdminCred,Reconnect-EXO,rxoCMW,rxoTOL,rxoTOR -Alias *
+Export-ModuleMember -Function Connect-EXO,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Disconnect-PssBroken,Get-O365AdminCred,Reconnect-EXO,rxoCMW,rxoTOL,rxoTOR -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUusSWuWCzpn7S6vrRAoapwdD/
+# kz+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTXS4IN
+# JFM82N1E3mUFr3xl0Aq73TANBgkqhkiG9w0BAQEFAASBgJSjRPu1xWhBLIoIFeG/
+# E7wfTwkACAj0wcgzOonX1LeR3I8z5ZK0vt4/BFWYHbQ5U6NYds4Sxo7ZtT2XL3G8
+# 8eHNYzho+hJ9OOagKSKJDMRrBqNENhugMOKuhaUoo0KS+8pSI15PZ8AG+jKhc3U6
+# tNPYSR5iI3XmyDN4hkDnMwRB
+# SIG # End signature block
