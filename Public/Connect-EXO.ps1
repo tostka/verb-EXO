@@ -1,4 +1,4 @@
-﻿#*------v Function Connect-EXO v------
+﻿#*------v Connect-EXO.ps1 v------
 Function Connect-EXO {
     <#
     .SYNOPSIS
@@ -21,6 +21,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 8:38 AM 4/17/2020 added a new test of $global:EOLSession, to detect initial cred fail (pw chg, outofdate creds, locked out)
     * 8:45 AM 3/3/2020 public cleanup, refactored connect-exo for Meta's
     * 9:52 PM 1/16/2020 cleanup
     * 10:55 AM 12/6/2019 Connect-EXO:added suffix to TitleBar tag for other tenants, also config'd a central tab vari
@@ -235,6 +236,11 @@ Function Connect-EXO {
                 EXIT ;
             } ;
         } ;
+        if(!$global:EOLSession){
+            write-warning "$((get-date).ToString('HH:mm:ss')):FAILED TO RETURN PSSESSION!`nAUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
+            throw "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
+            EXIT ;
+        } ; 
         $pltPSS = [ordered]@{
             Session             = $global:EOLSession ;
             Prefix              = $CommandPrefix ;
@@ -255,4 +261,4 @@ Function Connect-EXO {
     } ;
 
 } ; #*------^ END Function Connect-EXO ^------
-if(!(get-alias | Where-Object{$_.name -like "cxo"})) {Set-Alias 'cxo' -Value 'Connect-EXO' ; } ;
+if(!(get-alias | Where-Object{$_.name -like "cxo"})) {Set-Alias 'cxo' -Value 'Connect-EXO' ; }

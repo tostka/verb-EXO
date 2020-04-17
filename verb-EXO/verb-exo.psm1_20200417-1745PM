@@ -1,11 +1,11 @@
-﻿# verb-exo.psm1
+﻿# verb-EXO.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.7.0
+  Version     : 1.0.6.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -66,7 +66,6 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
-    * 8:38 AM 4/17/2020 added a new test of $global:EOLSession, to detect initial cred fail (pw chg, outofdate creds, locked out)
     * 8:45 AM 3/3/2020 public cleanup, refactored connect-exo for Meta's
     * 9:52 PM 1/16/2020 cleanup
     * 10:55 AM 12/6/2019 Connect-EXO:added suffix to TitleBar tag for other tenants, also config'd a central tab vari
@@ -281,11 +280,6 @@ Function Connect-EXO {
                 EXIT ;
             } ;
         } ;
-        if(!$global:EOLSession){
-            write-warning "$((get-date).ToString('HH:mm:ss')):FAILED TO RETURN PSSESSION!`nAUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-            throw "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-            EXIT ;
-        } ; 
         $pltPSS = [ordered]@{
             Session             = $global:EOLSession ;
             Prefix              = $CommandPrefix ;
@@ -495,8 +489,8 @@ Export-ModuleMember -Function Connect-EXO,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Ge
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5Yu2xCvk23VnuxPbXh54JgiR
-# bVygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQURzZ1E67QwbDdvq67vo8uMESb
+# dV6gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -511,9 +505,9 @@ Export-ModuleMember -Function Connect-EXO,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Ge
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBR8O8bE
-# oAJ0SzYGEujDifYCnDXcATANBgkqhkiG9w0BAQEFAASBgKmaez0Hn2XvX55Hi8Jh
-# IhoS9GWImt1hjkd2DaIb16DTg9RAInxxXVbIXiALkc+K/sNvWOg3KJBuqkGBzFQ1
-# Od7RvTK6C/uHvRLJEVFZ+LSNQguXlXK/Oler5hRP/sa+Kh6pLi/BD8iGTZy8aFyw
-# zJ5q87wpnenMlWTCkx4+7f/g
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSOorp9
+# b9/Chls6HivWCf6W7cJFEzANBgkqhkiG9w0BAQEFAASBgAsnC2W5aEL/+qDsEZ0b
+# ungcukpDUfiEsH324MLsovSqlfC3Tu+ssBcNu+/6siJ0CKBqeYiQjF35Z99xvba+
+# OzPu+DX8syRAmdpQfFgwZMORA4bQ5hQIwRpnOc5xEB2tQ0lxuYInFjU0vORDEr8p
+# BTI+g5uF7k1XEkp3H4u6WyTe
 # SIG # End signature block
