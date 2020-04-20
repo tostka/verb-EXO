@@ -1,4 +1,4 @@
-# verb-exo.psm1
+﻿# verb-exo.psm1
 
 
   <#
@@ -345,7 +345,6 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
-    * 2:34 PM 4/20/2020 added local $rgxExoPsHostName
     * 8:45 AM 3/3/2020 public cleanup
     * 9:52 AM 11/20/2019 reviewed for credential matl, no way to see the credential on a given pssession, so there's no way to target and disconnect discretely. It's a shotgun close.
     # 10:27 AM 6/20/2019 switched to common $rgxExoPsHostName
@@ -366,7 +365,6 @@ Function Disconnect-EXO {
     .LINK
     https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     #>
-    if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
     # 9:25 AM 3/21/2017 getting undefined on the below, pretest them
     if($Global:EOLModule){$Global:EOLModule | Remove-Module -Force ; } ;
     if($global:EOLSession){$global:EOLSession | Remove-PSSession ; } ;
@@ -401,7 +399,6 @@ Function Reconnect-EXO {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
-    * 2:38 PM 4/20/2020 added local $rgxExoPsHostName
     * 8:45 AM 3/3/2020 public cleanup
     * 9:52 PM 1/16/2020 cleanup
     * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
@@ -452,9 +449,7 @@ Function Reconnect-EXO {
       [switch] $showDebug
     ) ;
 
-    if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
-    
-    # fault tolerant looping exo connect, don't let it exit until a connection is present, and stable, or return error for hard time out
+    # ault tolerant looping exo connect, don't let it exit until a connection is present, and stable, or return error for hard time out
     $tryNo=0 ;
     Do {
         $tryNo++ ;
@@ -496,3 +491,29 @@ function rxoTOR {Reconnect-EXO -cred $credO365TORSID}
 
 Export-ModuleMember -Function Connect-EXO,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Get-O365AdminCred,Reconnect-EXO,rxoCMW,rxoTOL,rxoTOR -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5Yu2xCvk23VnuxPbXh54JgiR
+# bVygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBR8O8bE
+# oAJ0SzYGEujDifYCnDXcATANBgkqhkiG9w0BAQEFAASBgKmaez0Hn2XvX55Hi8Jh
+# IhoS9GWImt1hjkd2DaIb16DTg9RAInxxXVbIXiALkc+K/sNvWOg3KJBuqkGBzFQ1
+# Od7RvTK6C/uHvRLJEVFZ+LSNQguXlXK/Oler5hRP/sa+Kh6pLi/BD8iGTZy8aFyw
+# zJ5q87wpnenMlWTCkx4+7f/g
+# SIG # End signature block

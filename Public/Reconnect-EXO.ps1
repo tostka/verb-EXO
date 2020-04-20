@@ -10,6 +10,7 @@ Function Reconnect-EXO {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 2:38 PM 4/20/2020 added local $rgxExoPsHostName
     * 8:45 AM 3/3/2020 public cleanup
     * 9:52 PM 1/16/2020 cleanup
     * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
@@ -60,7 +61,9 @@ Function Reconnect-EXO {
       [switch] $showDebug
     ) ;
 
-    # ault tolerant looping exo connect, don't let it exit until a connection is present, and stable, or return error for hard time out
+    if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
+    
+    # fault tolerant looping exo connect, don't let it exit until a connection is present, and stable, or return error for hard time out
     $tryNo=0 ;
     Do {
         $tryNo++ ;

@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.7.0
+  Version     : 1.0.8.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -345,6 +345,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 2:34 PM 4/20/2020 added local $rgxExoPsHostName
     * 8:45 AM 3/3/2020 public cleanup
     * 9:52 AM 11/20/2019 reviewed for credential matl, no way to see the credential on a given pssession, so there's no way to target and disconnect discretely. It's a shotgun close.
     # 10:27 AM 6/20/2019 switched to common $rgxExoPsHostName
@@ -365,6 +366,7 @@ Function Disconnect-EXO {
     .LINK
     https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     #>
+    if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
     # 9:25 AM 3/21/2017 getting undefined on the below, pretest them
     if($Global:EOLModule){$Global:EOLModule | Remove-Module -Force ; } ;
     if($global:EOLSession){$global:EOLSession | Remove-PSSession ; } ;
@@ -399,6 +401,7 @@ Function Reconnect-EXO {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 2:38 PM 4/20/2020 added local $rgxExoPsHostName
     * 8:45 AM 3/3/2020 public cleanup
     * 9:52 PM 1/16/2020 cleanup
     * 1:07 PM 11/25/2019 added *tol/*tor/*cmw alias variants for connect & reconnect
@@ -449,7 +452,9 @@ Function Reconnect-EXO {
       [switch] $showDebug
     ) ;
 
-    # ault tolerant looping exo connect, don't let it exit until a connection is present, and stable, or return error for hard time out
+    if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
+    
+    # fault tolerant looping exo connect, don't let it exit until a connection is present, and stable, or return error for hard time out
     $tryNo=0 ;
     Do {
         $tryNo++ ;
@@ -495,8 +500,8 @@ Export-ModuleMember -Function Connect-EXO,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Ge
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5Yu2xCvk23VnuxPbXh54JgiR
-# bVygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUO4uKfalG5R03nzthVqxDfMqH
+# d4ugggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -511,9 +516,9 @@ Export-ModuleMember -Function Connect-EXO,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Ge
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBR8O8bE
-# oAJ0SzYGEujDifYCnDXcATANBgkqhkiG9w0BAQEFAASBgKmaez0Hn2XvX55Hi8Jh
-# IhoS9GWImt1hjkd2DaIb16DTg9RAInxxXVbIXiALkc+K/sNvWOg3KJBuqkGBzFQ1
-# Od7RvTK6C/uHvRLJEVFZ+LSNQguXlXK/Oler5hRP/sa+Kh6pLi/BD8iGTZy8aFyw
-# zJ5q87wpnenMlWTCkx4+7f/g
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTU80GD
+# 70G8Ax+L8QU28323dj+sSTANBgkqhkiG9w0BAQEFAASBgEMsnIs6+P/+XaAl0RjK
+# X8/0O5+euLmYBk952f+IYyNyW6UF/ihav5ZNjVuvDXN2rPhYqMEsQ+PMSYpo5AYT
+# 61BPSQYWXdTb4avCyYex2etYnr8pfQtV/Q8wtbrU4j8CgEUg5+0ZVqNxRHoGtHPY
+# GLx0TmrKkrEQX2Jn9ZPk57C8
 # SIG # End signature block
