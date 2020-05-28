@@ -18,6 +18,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 11:50 AM 5/27/2020 added alias:dxo win func
     * 2:34 PM 4/20/2020 added local $rgxExoPsHostName
     * 8:45 AM 3/3/2020 public cleanup
     * 9:52 AM 11/20/2019 reviewed for credential matl, no way to see the credential on a given pssession, so there's no way to target and disconnect discretely. It's a shotgun close.
@@ -39,12 +40,13 @@ Function Disconnect-EXO {
     .LINK
     https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     #>
+    [CmdletBinding()]
+    [Alias('dxo')]
+    Param() 
     if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
-    # 9:25 AM 3/21/2017 getting undefined on the below, pretest them
     if($Global:EOLModule){$Global:EOLModule | Remove-Module -Force ; } ;
     if($global:EOLSession){$global:EOLSession | Remove-PSSession ; } ;
     Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName } | Remove-PSSession ;
     Disconnect-PssBroken ;
     Remove-PSTitlebar 'EXO' ;
 } ; #*------^ END Function Disconnect-EXO ^------
-if(!(get-alias | Where-Object{$_.name -like "dxo"})) {Set-Alias 'dxo' -Value 'Disconnect-EXO' ; } ;

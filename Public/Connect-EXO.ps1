@@ -21,6 +21,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 11:50 AM 5/27/2020 added alias:cxo win func
     * 8:38 AM 4/17/2020 added a new test of $global:EOLSession, to detect initial cred fail (pw chg, outofdate creds, locked out)
     * 8:45 AM 3/3/2020 public cleanup, refactored connect-exo for Meta's
     * 9:52 PM 1/16/2020 cleanup
@@ -65,6 +66,8 @@ Function Connect-EXO {
     .LINK
     https://github.com/JeremyTBradshaw
     #>
+    [CmdletBinding()]
+    [Alias('cxo')]
     Param(
         [Parameter(HelpMessage = "Use Proxy-Aware SessionOption settings [-ProxyEnabled]")][boolean]$ProxyEnabled = $False,
         [Parameter(HelpMessage = "[verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-CommandPrefix tag]")][string]$CommandPrefix = 'exo',

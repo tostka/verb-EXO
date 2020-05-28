@@ -10,6 +10,7 @@ Function Reconnect-EXO {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 11:48 AM 5/27/2020 added func alias:rxo within the func
     * 2:38 PM 4/20/2020 added local $rgxExoPsHostName
     * 8:45 AM 3/3/2020 public cleanup
     * 9:52 PM 1/16/2020 cleanup
@@ -53,6 +54,8 @@ Function Reconnect-EXO {
     .LINK
     https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     #>
+    [CmdletBinding()]
+    [Alias('rxo')]
     Param(
       [Parameter(HelpMessage="Use Proxy-Aware SessionOption settings [-ProxyEnabled]")]
       [boolean]$ProxyEnabled = $False,
@@ -82,4 +85,3 @@ Function Reconnect-EXO {
     } Until ((Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName -AND $_.State -eq "Opened" -AND $_.Availability -eq "Available"}))
 
 }#*------^ END Function Reconnect-EXO ^------
-if(!(get-alias | Where-Object{$_.name -like "rxo"})) {Set-Alias 'rxo' -Value 'Reconnect-EXO' ; } ;
