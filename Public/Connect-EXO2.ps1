@@ -21,6 +21,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 5:14 PM 7/21/2020 added VEN supp
     * 3:42 PM 4/28/2020 update to EXOv2
     * 8:38 AM 4/17/2020 added a new test of $global:EOLSession, to detect initial cred fail (pw chg, outofdate creds, locked out)
     * 8:45 AM 3/3/2020 public cleanup, refactored Connect-EXO2 for Meta's
@@ -83,20 +84,26 @@ Function Connect-EXO2 {
     } ;
 
     $sTitleBarTag = "EXO" ;
-    if ($Credential) {
-        switch -regex ($Credential.username.split('@')[1]) {
-            "$($TORMeta['rgxUpn'])" {
-                # leave untagged
-                # $sTitleBarTag = $sTitleBarTag + $TORMeta['o365_Prefix'] ; # leave untagged
-            }
-            "$($TOLMeta['rgxUpn'])" {
-                $sTitleBarTag = $sTitleBarTag + $TOLMeta['o365_Prefix'] ;
-            }
-            "$($CMWMeta['rgxUpn'])" {
-                $sTitleBarTag = $sTitleBarTag + $CMWMeta['o365_Prefix'] ;
-            }
-        } ;
-    } ;
+    $credDom = ($Credential.username.split("@"))[1] ;
+    if($Credential.username.contains('.onmicrosoft.com')){
+        # cloud-first acct
+        switch ($credDom){
+            "$($TORMeta['o365_TenantDomain'])" { } 
+            "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
+            "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+            "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
+            default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
+        } ; 
+    } else { 
+        # OP federated domain
+        switch ($credDom){
+            "$($TORMeta['o365_OPDomain'])" { }
+            "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
+            "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+            "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
+            default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
+        } ; 
+    } ; 
 
     $ImportPSSessionProps = @{
         AllowClobber        = $true ;

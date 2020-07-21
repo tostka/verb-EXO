@@ -1,4 +1,4 @@
-# verb-EXO.psm1
+﻿# verb-EXO.psm1
 
 
   <#
@@ -66,7 +66,6 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
-    * 5:12 PM 7/21/2020 added ven supp
     * 11:50 AM 5/27/2020 added alias:cxo win func
     * 8:38 AM 4/17/2020 added a new test of $global:EOLSession, to detect initial cred fail (pw chg, outofdate creds, locked out)
     * 8:45 AM 3/3/2020 public cleanup, refactored connect-exo for Meta's
@@ -131,26 +130,20 @@ Function Connect-EXO {
     } ;
 
     $sTitleBarTag = "EXO" ;
-    $credDom = ($Credential.username.split("@"))[1] ;
-        if($Credential.username.contains('.onmicrosoft.com')){
-            # cloud-first acct
-            switch ($credDom){
-                "$($TORMeta['o365_TenantDomain'])" { } 
-                "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
-                "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
-                "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
-                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
-            } ; 
-        } else { 
-            # OP federated domain
-            switch ($credDom){
-                "$($TORMeta['o365_OPDomain'])" { }
-                "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
-                "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
-                "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
-                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
-            } ; 
-        } ; 
+    if ($Credential) {
+        switch -regex ($Credential.username.split('@')[1]) {
+            "$($TORMeta['rgxUpn'])" {
+                # leave untagged
+                # $sTitleBarTag = $sTitleBarTag + $TORMeta['o365_Prefix'] ; # leave untagged
+            }
+            "$($TOLMeta['rgxUpn'])" {
+                $sTitleBarTag = $sTitleBarTag + $TOLMeta['o365_Prefix'] ;
+            }
+            "$($CMWMeta['rgxUpn'])" {
+                $sTitleBarTag = $sTitleBarTag + $CMWMeta['o365_Prefix'] ;
+            }
+        } ;
+    } ;
 
     $ImportPSSessionProps = @{
         AllowClobber        = $true ;
@@ -343,7 +336,6 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
-    * 5:14 PM 7/21/2020 added VEN supp
     * 3:42 PM 4/28/2020 update to EXOv2
     * 8:38 AM 4/17/2020 added a new test of $global:EOLSession, to detect initial cred fail (pw chg, outofdate creds, locked out)
     * 8:45 AM 3/3/2020 public cleanup, refactored Connect-EXO2 for Meta's
@@ -406,26 +398,20 @@ Function Connect-EXO2 {
     } ;
 
     $sTitleBarTag = "EXO" ;
-    $credDom = ($Credential.username.split("@"))[1] ;
-    if($Credential.username.contains('.onmicrosoft.com')){
-        # cloud-first acct
-        switch ($credDom){
-            "$($TORMeta['o365_TenantDomain'])" { } 
-            "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
-            "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
-            "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
-            default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
-        } ; 
-    } else { 
-        # OP federated domain
-        switch ($credDom){
-            "$($TORMeta['o365_OPDomain'])" { }
-            "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
-            "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
-            "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
-            default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
-        } ; 
-    } ; 
+    if ($Credential) {
+        switch -regex ($Credential.username.split('@')[1]) {
+            "$($TORMeta['rgxUpn'])" {
+                # leave untagged
+                # $sTitleBarTag = $sTitleBarTag + $TORMeta['o365_Prefix'] ; # leave untagged
+            }
+            "$($TOLMeta['rgxUpn'])" {
+                $sTitleBarTag = $sTitleBarTag + $TOLMeta['o365_Prefix'] ;
+            }
+            "$($CMWMeta['rgxUpn'])" {
+                $sTitleBarTag = $sTitleBarTag + $CMWMeta['o365_Prefix'] ;
+            }
+        } ;
+    } ;
 
     $ImportPSSessionProps = @{
         AllowClobber        = $true ;
@@ -784,3 +770,29 @@ function rxoVEN {Reconnect-EXO -cred $credO365VENCSID}
 
 Export-ModuleMember -Function Connect-EXO,Connect-EXO2,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-EXO,Reconnect-EXO,rxoCMW,rxoTOL,rxoTOR,rxoVEN -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU8eI7O6N/e4JlwR3k3dvMhU4J
+# MC+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS+eNn6
+# THF+U3xKhz84dZU1baJuDTANBgkqhkiG9w0BAQEFAASBgFZgjyxe3b0Opzt2npL5
+# gMYpUNTIymItS6EzbwgGwe1354di8cax65MNLblSwT72BrdONiFJ8e8c283/ebo3
+# F53T2HUjXkYK1hOdd7BmxmxRRbOcQr8j9fjZok6gqec5HJ4Brx8gKsPBSudEF+nG
+# 0rheNffZxImuPwzZZueFbzKy
+# SIG # End signature block

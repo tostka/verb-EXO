@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.9.0
+  Version     : 1.0.11.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -66,6 +66,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 5:12 PM 7/21/2020 added ven supp
     * 11:50 AM 5/27/2020 added alias:cxo win func
     * 8:38 AM 4/17/2020 added a new test of $global:EOLSession, to detect initial cred fail (pw chg, outofdate creds, locked out)
     * 8:45 AM 3/3/2020 public cleanup, refactored connect-exo for Meta's
@@ -130,20 +131,26 @@ Function Connect-EXO {
     } ;
 
     $sTitleBarTag = "EXO" ;
-    if ($Credential) {
-        switch -regex ($Credential.username.split('@')[1]) {
-            "$($TORMeta['rgxUpn'])" {
-                # leave untagged
-                # $sTitleBarTag = $sTitleBarTag + $TORMeta['o365_Prefix'] ; # leave untagged
-            }
-            "$($TOLMeta['rgxUpn'])" {
-                $sTitleBarTag = $sTitleBarTag + $TOLMeta['o365_Prefix'] ;
-            }
-            "$($CMWMeta['rgxUpn'])" {
-                $sTitleBarTag = $sTitleBarTag + $CMWMeta['o365_Prefix'] ;
-            }
-        } ;
-    } ;
+    $credDom = ($Credential.username.split("@"))[1] ;
+        if($Credential.username.contains('.onmicrosoft.com')){
+            # cloud-first acct
+            switch ($credDom){
+                "$($TORMeta['o365_TenantDomain'])" { } 
+                "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
+                "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+                "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
+                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
+            } ; 
+        } else { 
+            # OP federated domain
+            switch ($credDom){
+                "$($TORMeta['o365_OPDomain'])" { }
+                "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
+                "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+                "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
+                default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
+            } ; 
+        } ; 
 
     $ImportPSSessionProps = @{
         AllowClobber        = $true ;
@@ -336,6 +343,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 5:14 PM 7/21/2020 added VEN supp
     * 3:42 PM 4/28/2020 update to EXOv2
     * 8:38 AM 4/17/2020 added a new test of $global:EOLSession, to detect initial cred fail (pw chg, outofdate creds, locked out)
     * 8:45 AM 3/3/2020 public cleanup, refactored Connect-EXO2 for Meta's
@@ -398,20 +406,26 @@ Function Connect-EXO2 {
     } ;
 
     $sTitleBarTag = "EXO" ;
-    if ($Credential) {
-        switch -regex ($Credential.username.split('@')[1]) {
-            "$($TORMeta['rgxUpn'])" {
-                # leave untagged
-                # $sTitleBarTag = $sTitleBarTag + $TORMeta['o365_Prefix'] ; # leave untagged
-            }
-            "$($TOLMeta['rgxUpn'])" {
-                $sTitleBarTag = $sTitleBarTag + $TOLMeta['o365_Prefix'] ;
-            }
-            "$($CMWMeta['rgxUpn'])" {
-                $sTitleBarTag = $sTitleBarTag + $CMWMeta['o365_Prefix'] ;
-            }
-        } ;
-    } ;
+    $credDom = ($Credential.username.split("@"))[1] ;
+    if($Credential.username.contains('.onmicrosoft.com')){
+        # cloud-first acct
+        switch ($credDom){
+            "$($TORMeta['o365_TenantDomain'])" { } 
+            "$($TOLMeta['o365_TenantDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
+            "$($CMWMeta['o365_TenantDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+            "$($VENMeta['o365_TenantDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
+            default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_TenantDomain' props, for credential domain:$($CredDom)" } ;
+        } ; 
+    } else { 
+        # OP federated domain
+        switch ($credDom){
+            "$($TORMeta['o365_OPDomain'])" { }
+            "$($TOLMeta['o365_OPDomain'])" {$sTitleBarTag += $TOLMeta['o365_Prefix']}
+            "$($CMWMeta['o365_OPDomain'])" {$sTitleBarTag += $CMWMeta['o365_Prefix']}
+            "$($VENMeta['o365_OPDomain'])" {$sTitleBarTag += $VENMeta['o365_Prefix']}
+            default {throw "Failed to resolve a `$credVariTag` from populated global 'o365_OPDomain' props, for credential domain:$($CredDom)" } ;
+        } ; 
+    } ; 
 
     $ImportPSSessionProps = @{
         AllowClobber        = $true ;
@@ -596,6 +610,11 @@ function cxoTOR {Connect-EXO -cred $credO365TORSID}
 
 #*------^ cxotor.ps1 ^------
 
+#*------v cxoVEN.ps1 v------
+function cxoVEN {Connect-EXO -cred $credO365VENCSID}
+
+#*------^ cxoVEN.ps1 ^------
+
 #*------v Disconnect-EXO.ps1 v------
 Function Disconnect-EXO {
     <#
@@ -756,16 +775,21 @@ function rxoTOR {Reconnect-EXO -cred $credO365TORSID}
 
 #*------^ rxotor.ps1 ^------
 
+#*------v rxoVEN.ps1 v------
+function rxoVEN {Reconnect-EXO -cred $credO365VENCSID}
+
+#*------^ rxoVEN.ps1 ^------
+
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Connect-EXO,Connect-EXO2,cxoCMW,cxoTOL,cxoTOR,Disconnect-EXO,Reconnect-EXO,rxoCMW,rxoTOL,rxoTOR -Alias *
+Export-ModuleMember -Function Connect-EXO,Connect-EXO2,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-EXO,Reconnect-EXO,rxoCMW,rxoTOL,rxoTOR,rxoVEN -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUkPitXPHIG6W81Q8OmKoOG5Dt
-# pHSgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUDi8sDlYmsqDIcxzuhj54ffWD
+# tdigggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -780,9 +804,9 @@ Export-ModuleMember -Function Connect-EXO,Connect-EXO2,cxoCMW,cxoTOL,cxoTOR,Disc
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBScynOX
-# Y8lOW2HG733uMxdiZf1w3DANBgkqhkiG9w0BAQEFAASBgC/1eGR5nqXfNehO6xXE
-# ZBIPAt+0abq4TwO2FswHV5Tq6sFHc/Oa0Hr82HPRtLsxnfwsiK22LBclk50KPRub
-# kFCpFXr8hDGrsKl+ECDc+d+BAQrEXfwDRUr6m++h5viF4nmGEHSDJg/4XKjK7fL0
-# 6dlVV1pcvo1IYgp+nZ+g64e+
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSZgKeB
+# i5MIjZYev96meU683iTSezANBgkqhkiG9w0BAQEFAASBgC1vuH9MXsO4BP1Exb4k
+# 2G0DY124K7VxXM6u5bs9BI8fn1uRYsmS0xUbk7zGBE/H9DkY/HfclGZuewyfVHDD
+# OD9B5W5apAerBtSESTeT52m7cPOr/G4Wft/FrZIzM7JUTGRNvqGJZNi7EsaVz5ng
+# AQhQkUiSH83RaE1U3Ib8aEfs
 # SIG # End signature block
