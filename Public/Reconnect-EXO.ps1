@@ -1,4 +1,4 @@
-﻿#*------v Function Reconnect-EXO v------
+﻿#*------v Reconnect-EXO.ps1 v------
 Function Reconnect-EXO {
    <#
     .SYNOPSIS
@@ -10,6 +10,7 @@ Function Reconnect-EXO {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 3:24 PM 7/24/2020 updated to support tenant-alignment & sub'd out showdebug for verbose
     * 11:48 AM 5/27/2020 added func alias:rxo within the func
     * 2:38 PM 4/20/2020 added local $rgxExoPsHostName
     * 8:45 AM 3/3/2020 public cleanup
@@ -59,11 +60,12 @@ Function Reconnect-EXO {
     Param(
       [Parameter(HelpMessage="Use Proxy-Aware SessionOption settings [-ProxyEnabled]")]
       [boolean]$ProxyEnabled = $False,
-      [Parameter(HelpMessage="Credential to use for this connection [-credential [credential obj variable]")][System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+      [Parameter(HelpMessage="Credential to use for this connection [-credential [credential obj variable]")]
+      [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
       [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
       [switch] $showDebug
     ) ;
-
+    $verbose = ($VerbosePreference -eq "Continue") ; 
     if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
     
     # fault tolerant looping exo connect, don't let it exit until a connection is present, and stable, or return error for hard time out
@@ -73,15 +75,28 @@ Function Reconnect-EXO {
         write-host "." -NoNewLine; if($tryNo -gt 1){Start-Sleep -m (1000 * 5)} ;
         # appears MFA may not properly support passing back a session vari, so go right to strict hostname matches
         if( !(Get-PSSession|Where-Object{($_.ComputerName -match $rgxExoPsHostName) -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}) ){
-            if($showdebug){ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):Reconnecting:No existing PSSESSION matching $($rgxExoPsHostName) with valid Open/Availability:$((Get-PSSession|Where-Object{$_.ComputerName -match $rgxExoPsHostName}| Format-Table -a State,Availability |out-string).trim())" } ;
+            write-verbose "$((get-date).ToString('HH:mm:ss')):Reconnecting:No existing PSSESSION matching $($rgxExoPsHostName) with valid Open/Availability:$((Get-PSSession|Where-Object{$_.ComputerName -match $rgxExoPsHostName}| Format-Table -a State,Availability |out-string).trim())" ;
             Disconnect-Exo ; Disconnect-PssBroken ;Start-Sleep -Seconds 3;
             if(!$Credential){
                 connect-EXO ;
             } else {
                 connect-EXO -credential:$($Credential) ;
             } ;
-        }  ;
+        }elseif((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
+                write-verbose "(Authenticated to EXO:$($Credential.username.split('@')[1].tostring()))" ; 
+        } else { 
+            write-verbose "(NOT Authenticated to Credentialed Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+            Write-Host "Authenticating to EXO:$($Credential.username.split('@')[1].tostring())..."  ;
+            Disconnect-Exo ; Disconnect-PssBroken ;Start-Sleep -Seconds 3;
+            if(!$Credential){
+                connect-EXO -verbose:$($verbose) ;
+            } else {
+                connect-EXO -credential:$($Credential) -verbose:$($verbose) ;
+            } ;
+        } ; 
+
         if($tryNo -gt $DoRetries ){throw "RETRIED EXO CONNECT $($tryNo) TIMES, ABORTING!" } ;
     } Until ((Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName -AND $_.State -eq "Opened" -AND $_.Availability -eq "Available"}))
 
-}#*------^ END Function Reconnect-EXO ^------
+}
+#*------^ Reconnect-EXO.ps1 ^------

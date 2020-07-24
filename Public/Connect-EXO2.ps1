@@ -21,6 +21,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 3:24 PM 7/24/2020 updated to support tenant-alignment & sub'd out showdebug for verbose
     * 7:13 AM 7/22/2020 replaced codeblock w get-TenantTag()
     * 5:14 PM 7/21/2020 added VEN supp
     * 3:42 PM 4/28/2020 update to EXOv2
@@ -75,7 +76,7 @@ Function Connect-EXO2 {
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
         [switch] $showDebug
     ) ;
-
+    $verbose = ($VerbosePreference -eq "Continue") ; 
     $MFA = get-TenantMFARequirement -Credential $Credential ;
 
     # disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
@@ -107,12 +108,21 @@ Function Connect-EXO2 {
                 ErrorAction = 'Stop' ;
             } ;
 
-            if ($showDebug) { write-host -foregroundcolor green "Get-ChildItem w`n$(($ExoPSModuleSearchProperties|out-string).trim())" } ;
+            write-verbose "Get-ChildItem w`n$(($ExoPSModuleSearchProperties|out-string).trim())"  ;
             $ExoPSModule = Get-ChildItem @ExoPSModuleSearchProperties |
-            Where-Object { $_.FullName -notmatch '_none_' } |
-            Sort-Object LastWriteTime |
-            Select-Object -Last 1 ;
+                Where-Object { $_.FullName -notmatch '_none_' } |
+                    Sort-Object LastWriteTime | Select-Object -Last 1 ;
+            if($VerbosePreference = "Continue"){
+                $VerbosePrefPrior = $VerbosePreference ;
+                $VerbosePreference = "SilentlyContinue" ;
+                $verbose = ($VerbosePreference -eq "Continue") ;
+            } ; 
             Import-Module $ExoPSModule.FullName -ErrorAction:Stop ;
+            # reenable VerbosePreference:Continue, if set, during mod loads 
+            if($VerbosePrefPrior -eq "Continue"){
+                $VerbosePreference = $VerbosePrefPrior ;
+                $verbose = ($VerbosePreference -eq "Continue") ;
+            } ; 
             $ExoPSModuleManifest = $ExoPSModule.FullName -replace '\.dll', '.psd1' ;
             if (!(Get-Module $ExoPSModule.FullName -ListAvailable -ErrorAction 0 )) {
                 write-verbose -verbose:$true  "Unable to`nGet-Module $($ExoPSModule.FullName) -ListAvailable`ndiverting to hardcoded exoMFAModule`nRequires that it be locally copied below`n$env:userprofile\documents\WindowsPowerShell\Modules\exoMFAModule\`n " ;
@@ -124,9 +134,8 @@ Function Connect-EXO2 {
                     ErrorAction = 'Stop' ;
                 } ;
                 $ExoPSModule = Get-ChildItem @ExoPSModuleSearchProperties |
-                Where-Object { $_.FullName -notmatch '_none_' } |
-                Sort-Object LastWriteTime |
-                Select-Object -Last 1 ;
+                    Where-Object { $_.FullName -notmatch '_none_' } |
+                        Sort-Object LastWriteTime | Select-Object -Last 1 ;
                 # roll an otf psd1+psm1 module
                 # pull the broken ModuleVersion   = "$((Get-Module $ExoPSModule.FullName -ListAvailable).Version.ToString())" ;
                 $NewExoPSModuleManifestProps = @{
@@ -135,7 +144,9 @@ Function Connect-EXO2 {
                     Author      = 'Jeremy Bradshaw (https://github.com/JeremyTBradshaw)' ;
                     CompanyName = 'jb365' ;
                 } ;
-                if (Get-Content "$($env:userprofile)\Documents\WindowsPowerShell\Modules\exoMFAModule\Microsoft.Exchange.Management.ExoPowershellModule.manifest" | Select-String '<assemblyIdentity\sname="mscorlib"\spublicKeyToken="b77a5c561934e089"\sversion="(\d\.\d\.\d\.\d)"\s/>' | Where-Object { $_ -match '(\d\.\d\.\d\.\d)' }) {
+                if (Get-Content "$($env:userprofile)\Documents\WindowsPowerShell\Modules\exoMFAModule\Microsoft.Exchange.Management.ExoPowershellModule.manifest" | 
+                    Select-String '<assemblyIdentity\sname="mscorlib"\spublicKeyToken="b77a5c561934e089"\sversion="(\d\.\d\.\d\.\d)"\s/>' | 
+                        Where-Object { $_ -match '(\d\.\d\.\d\.\d)' }) {
                     $NewExoPSModuleManifestProps.add('ModuleVersion', $matches[0]) ;
                 } ;
             } else {
@@ -148,15 +159,26 @@ Function Connect-EXO2 {
                     CompanyName   = 'jb365' ;
                 } ;
             } ;
-            if ($showDebug) { write-host -foregroundcolor green "New-ModuleManifest w`n$(($NewExoPSModuleManifestProps|out-string).trim())" } ;
+            write-verbose "New-ModuleManifest w`n$(($NewExoPSModuleManifestProps|out-string).trim())"  ;
             New-ModuleManifest @NewExoPSModuleManifestProps ;
+            # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
+            if($VerbosePreference = "Continue"){
+                $VerbosePrefPrior = $VerbosePreference ;
+                $VerbosePreference = "SilentlyContinue" ;
+                $verbose = ($VerbosePreference -eq "Continue") ;
+            } ; 
             Import-Module $ExoPSModule.FullName -Global -ErrorAction:Stop ;
+            # reenable VerbosePreference:Continue, if set, during mod loads 
+            if($VerbosePrefPrior -eq "Continue"){
+                $VerbosePreference = $VerbosePrefPrior ;
+                $verbose = ($VerbosePreference -eq "Continue") ;
+            } ; 
             $CreateExoPSSessionPs1 = Get-ChildItem -Path $ExoPSModule.PSParentPath -Filter 'CreateExoPSSession.ps1' ;
             $CreateExoPSSessionManifest = $CreateExoPSSessionPs1.FullName -replace '\.ps1', '.psd1' ;
             $CreateExoPSSessionPs1 = $CreateExoPSSessionPs1 |
             Get-Content | Where-Object { -not ($_ -like 'Write-Host*') } ;
             $CreateExoPSSessionPs1 -join "`n" |
-            Set-Content -Path "$($CreateExoPSSessionManifest -replace '\.psd1','.psm1')" ;
+                Set-Content -Path "$($CreateExoPSSessionManifest -replace '\.psd1','.psm1')" ;
             $NewCreateExoPSSessionManifest = @{
                 Path          = $CreateExoPSSessionManifest ;
                 RootModule    = Split-Path -Path ($CreateExoPSSessionManifest -replace '\.psd1', '.psm1') -Leaf ;
@@ -164,9 +186,20 @@ Function Connect-EXO2 {
                 Author        = 'Todd Kadrie (https://github.com/tostka)' ;
                 CompanyName   = 'toddomation.com' ;
             } ;
-            if ($showDebug) { write-host -foregroundcolor green "New-ModuleManifest w`n$(($NewCreateExoPSSessionManifest|out-string).trim())" } ;
+            write-verbose "New-ModuleManifest w`n$(($NewCreateExoPSSessionManifest|out-string).trim())"  ;
             New-ModuleManifest @NewCreateExoPSSessionManifest ;
+            # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
+            if($VerbosePreference = "Continue"){
+                $VerbosePrefPrior = $VerbosePreference ;
+                $VerbosePreference = "SilentlyContinue" ;
+                $verbose = ($VerbosePreference -eq "Continue") ;
+            } ; 
             Import-Module "$($ExoPSModule.PSParentPath)\CreateExoPSSession.psm1" -Global -ErrorAction:Stop ;
+            # reenable VerbosePreference:Continue, if set, during mod loads 
+            if($VerbosePrefPrior -eq "Continue"){
+                $VerbosePreference = $VerbosePrefPrior ;
+                $verbose = ($VerbosePreference -eq "Continue") ;
+            } ; 
         } catch {
             Write-Warning -Message "Tried but failed to import the EXO PS module.`n`nError message:" ;
             throw $_ ;
@@ -185,10 +218,21 @@ Function Connect-EXO2 {
                 PSSessionOption                 = $global:PSSessionOption ;
                 BypassMailboxAnchoring          = $global:BypassMailboxAnchoring ;
             } ;
-            if ($showDebug) { write-host -foregroundcolor green "New-ExoPSSession w`n$(($ExoPSSession|out-string).trim())" } ;
+            write-verbose "New-ExoPSSession w`n$(($ExoPSSession|out-string).trim())"  ;
             $ExoPSSession = New-ExoPSSession @ExoPSSession -ErrorAction:Stop ;
-            if ($showDebug) { write-host -foregroundcolor green "Import-PSSession w`n$(($ImportPSSessionProps|out-string).trim())" } ;
+            write-verbose "Import-PSSession w`n$(($ImportPSSessionProps|out-string).trim())"  ;
+            # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
+            if($VerbosePreference = "Continue"){
+                $VerbosePrefPrior = $VerbosePreference ;
+                $VerbosePreference = "SilentlyContinue" ;
+                $verbose = ($VerbosePreference -eq "Continue") ;
+            } ; 
             Import-Module (Import-PSSession $ExoPSSession @ImportPSSessionProps) -Prefix $CommandPrefix -Global -DisableNameChecking -ErrorAction:Stop ;
+            # reenable VerbosePreference:Continue, if set, during mod loads 
+            if($VerbosePrefPrior -eq "Continue"){
+                $VerbosePreference = $VerbosePrefPrior ;
+                $verbose = ($VerbosePreference -eq "Continue") ;
+            } ; 
             UpdateImplicitRemotingHandler ;
             Add-PSTitleBar $sTitleBarTag ;
         } catch {
@@ -209,13 +253,12 @@ Function Connect-EXO2 {
 
         If ($ProxyEnabled) {
             $EXOsplat.Add("sessionOption", $(New-PsSessionOption -ProxyAccessType IEConfig -ProxyAuthentication basic));
-            Write-Host "Connecting to Exchange Online via Proxy"  ;
+            Write-Host "Connecting to Exchange Online ($($credential.username.split('@')[1])) via Proxy"  ;
         } Else {
-            Write-Host "Connecting to Exchange Online"  ;
+            Write-Host "Connecting to Exchange Online ($($credential.username.split('@')[1]))"  ;
         } ;
-        if ($showDebug) {
-            write-host -foregroundcolor green "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
-        } ;
+        write-verbose "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
+        
         Try {
             #$global:ExoPSSession = New-PSSession @EXOsplat ;
             $global:EOLSession = New-PSSession @EXOsplat ;
@@ -242,11 +285,20 @@ Function Connect-EXO2 {
             AllowClobber        = $true ;
             ErrorAction         = 'Stop' ;
         } ;
-        if ($showDebug) {
-            write-host -foregroundcolor green "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltPSS|out-string).trim())" ;
-        } ;
+        write-verbose "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltPSS|out-string).trim())" ;
         Try {
+            # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
+            if($VerbosePreference = "Continue"){
+                $VerbosePrefPrior = $VerbosePreference ;
+                $VerbosePreference = "SilentlyContinue" ;
+                $verbose = ($VerbosePreference -eq "Continue") ;
+            } ; 
             $Global:EOLModule = Import-Module (Import-PSSession @pltPSS) -Global -Prefix $CommandPrefix -PassThru -DisableNameChecking   ;
+            # reenable VerbosePreference:Continue, if set, during mod loads 
+            if($VerbosePrefPrior -eq "Continue"){
+                $VerbosePreference = $VerbosePrefPrior ;
+                $verbose = ($VerbosePreference -eq "Continue") ;
+            } ; 
             Add-PSTitleBar $sTitleBarTag ;
         } catch {
             Write-Warning -Message "Tried but failed to import the EXO PS module.`n`nError message:" ;
@@ -255,4 +307,3 @@ Function Connect-EXO2 {
     } ;
 
 } ; #*------^ END Function Connect-EXO2 ^------
-if(!(get-alias | Where-Object{$_.name -like "cxo"})) {Set-Alias 'cxo' -Value 'Connect-EXO2' ; }

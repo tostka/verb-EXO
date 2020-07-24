@@ -1,4 +1,4 @@
-﻿#*------v Function Disconnect-EXO v------
+﻿#*------v Disconnect-EXO.ps1 v------
 Function Disconnect-EXO {
     <#
     .SYNOPSIS
@@ -18,6 +18,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 3:24 PM 7/24/2020 updated to support tenant-alignment & sub'd out showdebug for verbose
     * 11:50 AM 5/27/2020 added alias:dxo win func
     * 2:34 PM 4/20/2020 added local $rgxExoPsHostName
     * 8:45 AM 3/3/2020 public cleanup
@@ -43,10 +44,12 @@ Function Disconnect-EXO {
     [CmdletBinding()]
     [Alias('dxo')]
     Param() 
+    $verbose = ($VerbosePreference -eq "Continue") ; 
     if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
     if($Global:EOLModule){$Global:EOLModule | Remove-Module -Force ; } ;
     if($global:EOLSession){$global:EOLSession | Remove-PSSession ; } ;
     Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName } | Remove-PSSession ;
-    Disconnect-PssBroken ;
+    Disconnect-PssBroken -verbose:$($verbose) ;
     Remove-PSTitlebar 'EXO' ;
-} ; #*------^ END Function Disconnect-EXO ^------
+}
+#*------^ Disconnect-EXO.ps1 ^------
