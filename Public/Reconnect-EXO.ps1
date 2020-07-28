@@ -10,6 +10,7 @@ Function Reconnect-EXO {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 10:35 AM 7/28/2020 tweaked retry loop to not retry-sleep 1st attempt
     * 3:24 PM 7/24/2020 updated to support tenant-alignment & sub'd out showdebug for verbose
     * 11:48 AM 5/27/2020 added func alias:rxo within the func
     * 2:38 PM 4/20/2020 added local $rgxExoPsHostName
@@ -69,8 +70,9 @@ Function Reconnect-EXO {
     if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
     
     # fault tolerant looping exo connect, don't let it exit until a connection is present, and stable, or return error for hard time out
-    $tryNo=0 ;
+    $tryNo=0 ; $1F=$false ;
     Do {
+        if($1F){Sleep -s 5} ;
         $tryNo++ ;
         write-host "." -NoNewLine; if($tryNo -gt 1){Start-Sleep -m (1000 * 5)} ;
         # appears MFA may not properly support passing back a session vari, so go right to strict hostname matches
@@ -83,7 +85,8 @@ Function Reconnect-EXO {
                 connect-EXO -credential:$($Credential) ;
             } ;
         }elseif((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
-                write-verbose "(Authenticated to EXO:$($Credential.username.split('@')[1].tostring()))" ; 
+            # validate that the connected EXO is to the $Credential tenant    
+            write-verbose "(Authenticated to EXO:$($Credential.username.split('@')[1].tostring()))" ; 
         } else { 
             write-verbose "(NOT Authenticated to Credentialed Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
             Write-Host "Authenticating to EXO:$($Credential.username.split('@')[1].tostring())..."  ;
@@ -94,7 +97,7 @@ Function Reconnect-EXO {
                 connect-EXO -credential:$($Credential) -verbose:$($verbose) ;
             } ;
         } ; 
-
+        $1F=$true ;
         if($tryNo -gt $DoRetries ){throw "RETRIED EXO CONNECT $($tryNo) TIMES, ABORTING!" } ;
     } Until ((Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName -AND $_.State -eq "Opened" -AND $_.Availability -eq "Available"}))
 
