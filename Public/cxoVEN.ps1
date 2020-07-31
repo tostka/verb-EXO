@@ -1,3 +1,11 @@
-﻿#*------v Function cxoVEN v------
-function cxoVEN {Connect-EXO -cred $credO365VENCSID};
-#*------^ END Function cxoVEN ^------
+﻿#*------v cxoVEN.ps1 v------
+function cxoVEN {
+    <#
+    .SYNOPSIS
+    cxoVEN - Connect-EXO to specified Tenant
+    .DESCRIPTION
+    Connect-EXO - Establish PSS to https://ps.outlook.com/powershell/
+    #>
+    Connect-EXO -cred $credO365VENCSID
+}
+#*------^ cxoVEN.ps1 ^------

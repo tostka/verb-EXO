@@ -1,8 +1,8 @@
-﻿#*------v Disconnect-EXO.ps1 v------
-Function Disconnect-EXO {
+﻿#*------v Function Remove-EXOBrokenClosed v------
+function Remove-EXOBrokenClosed(){
     <#
     .SYNOPSIS
-    Disconnect-EXO - Disconnects any PSS to https://ps.outlook.com/powershell/ (cleans up session after a batch or other temp work is done)
+    Remove-EXOBrokenClosed - Remove broken and closed exchange online PSSessions
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
@@ -14,10 +14,11 @@ Function Disconnect-EXO {
     Copyright   : 
     Github      : https://github.com/tostka
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
-    AddedCredit : ExactMike Perficient
+    AddedCredit : 
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 9:29 AM 7/30/2020 lifted from EXO V2 connect-exchangeonline() as RemoveBrokenOrClosedPSSession()
     * 3:24 PM 7/24/2020 updated to support tenant-alignment & sub'd out showdebug for verbose
     * 11:50 AM 5/27/2020 added alias:dxo win func
     * 2:34 PM 4/20/2020 added local $rgxExoPsHostName
@@ -37,37 +38,19 @@ Function Disconnect-EXO {
     .OUTPUTS
     None. Returns no objects or output.
     .EXAMPLE
-    Disconnect-EXO;
+    Remove-EXOBrokenClosed;
     .LINK
     https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     #>
     [CmdletBinding()]
-    [Alias('dxo')]
-    Param() 
-    $verbose = ($VerbosePreference -eq "Continue") ; 
-    
-    if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
-    if($Global:EOLModule){$Global:EOLModule | Remove-Module -Force ; } ;
-    if($global:EOLSession){$global:EOLSession | Remove-PSSession ; } ;
-    Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName } | Remove-PSSession ;
-    Disconnect-PssBroken -verbose:$($verbose) ;
-    Remove-PSTitlebar 'EXO' ;
-    
-    <#
-    $existingPSSession = Get-PSSession | Where-Object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*"} ;
-    if ($existingPSSession.count -gt 0){
-        for ($index = 0; $index -lt $existingPSSession.count; $index++) {
-            $session = $existingPSSession[$index] ;
-            Remove-PSSession -session $session ;
-            Write-Host "Removed the PSSession $($session.Name) connected to $($session.ComputerName)" ;
-        } ;
+    [Alias('dxob')]
+    $psBroken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"} ;
+    $psClosed = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Closed*"} ;
+    if ($psBroken.count -gt 0){
+        for ($index = 0; $index -lt $psBroken.count; $index++) {Remove-PSSession -session $psBroken[$index] } ;
     } ;
-    # Clear any left over PS tmp modules - keys off of vari set wi UpdateImplicitRemotingHandler (post import-pssession) 
-    if ($global:_EXO_PreviousModuleName -ne $null){
-        Remove-Module -Name $global:_EXO_PreviousModuleName -ErrorAction SilentlyContinue ;
-        $global:_EXO_PreviousModuleName = $null ;
+    if ($psClosed.count -gt 0){
+        for ($index = 0; $index -lt $psClosed.count; $index++) {Remove-PSSession -session $psClosed[$index] } ;
     } ;
-    #>
-}
-
-#*------^ Disconnect-EXO.ps1 ^------
+} ;
+#*------^ END Function Remove-EXOBrokenClosed ^------

@@ -43,9 +43,6 @@ Function Connect-EXO {
     * # 12:10 PM 3/15/2017 Connect-EXO typo, disable prefix auto spec, unless actually blanked. switch ProxyEnabled to non-Mandatory.
     .DESCRIPTION
     Connect-EXO - Establish PSS to https://ps.outlook.com/powershell/
-    Original concept based on 'overlapping functions' concept by: ExactMike Perficient, Global Knowl... (Partner)
-    Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
-    Extended with Jeremy Bradshaw's on-the-fly EXO MFA module concept (https://github.com/JeremyTBradshaw)'s Connect-Exchange()
     .PARAMETER  ProxyEnabled
     Use Proxy-Aware SessionOption settings [-ProxyEnabled]
     .PARAMETER  CommandPrefix
@@ -131,6 +128,10 @@ Function Connect-EXO {
             } ;
 
             if ($MFA) {
+                
+                throw "MFA is not currently supported by the connect-exo cmdlet!. Use connect-exo2 instead" ; 
+                Exit 
+                <# 4:24 PM 7/30/2020 HAD TO UNINSTALL THE EXOMFA module, a bundled cmdlet fundementally conflicted with ExchangeOnlineManagement
                 try {
                     $ExoPSModuleSearchProperties = @{
                         Path        = "$($env:LOCALAPPDATA)\Apps\2.0\" ;
@@ -271,6 +272,7 @@ Function Connect-EXO {
                     Write-Warning -Message "Failed to connect to EXO via the imported EXO PS module.`n`nError message:" ;
                     throw $_ ;
                 } ;
+                #>
 
             } else {
                 $EXOsplat = @{

@@ -69,6 +69,18 @@ Function Reconnect-EXO {
     $verbose = ($VerbosePreference -eq "Continue") ; 
     if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
     
+    # if we're using EXOv1-style BasicAuth, clear incompatible existing EXOv2 PSS's
+    $exov2Good = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')} ; 
+    $exov2Broken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"}
+    $exov2Closed = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Closed*"}
+
+    if($exov2Good  ){
+        write-verbose "EXOv1:Disconnecting conflicting EXOv2 connection" ; 
+        DisConnect-EXO2 ; 
+    } ; 
+    if ($exov2Broken.count -gt 0){for ($index = 0 ;$index -lt $psBroken.count ;$index++){Remove-PSSession -session $psBroken[$index]} };
+    if ($exov2Closed.count -gt 0){for ($index = 0 ;$index -lt $psClosed.count ; $index++){Remove-PSSession -session $psClosed[$index] } } ; 
+    
     # fault tolerant looping exo connect, don't let it exit until a connection is present, and stable, or return error for hard time out
     $tryNo=0 ; $1F=$false ;
     Do {
@@ -76,30 +88,37 @@ Function Reconnect-EXO {
         $tryNo++ ;
         write-host "." -NoNewLine; if($tryNo -gt 1){Start-Sleep -m (1000 * 5)} ;
         # appears MFA may not properly support passing back a session vari, so go right to strict hostname matches
-        if( !(Get-PSSession|Where-Object{($_.ComputerName -match $rgxExoPsHostName) -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}) ){
-            write-verbose "$((get-date).ToString('HH:mm:ss')):Reconnecting:No existing PSSESSION matching $($rgxExoPsHostName) with valid Open/Availability:$((Get-PSSession|Where-Object{$_.ComputerName -match $rgxExoPsHostName}| Format-Table -a State,Availability |out-string).trim())" ;
+
+        $legPSSession = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "(Session|WinRM)\d*" -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}
+        
+        if(Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "(Session|WinRM)\d*" -AND (($_.State -ne 'Opened') -OR ($_.Availability -ne 'Available')) }){
+            write-verbose "$((get-date).ToString('HH:mm:ss')):Reconnecting:No existing PSSESSION matching Name -match (Session|WinRM) with valid Open/Availability:$((Get-PSSession|Where-Object{$_.ComputerName -match $rgxExoPsHostName}| Format-Table -a State,Availability |out-string).trim())" ;
             Disconnect-Exo ; Disconnect-PssBroken ;Start-Sleep -Seconds 3;
             if(!$Credential){
                 connect-EXO ;
             } else {
                 connect-EXO -credential:$($Credential) ;
             } ;
-        }elseif((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
-            # validate that the connected EXO is to the $Credential tenant    
-            write-verbose "(Authenticated to EXO:$($Credential.username.split('@')[1].tostring()))" ; 
-        } else { 
-            write-verbose "(NOT Authenticated to Credentialed Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
-            Write-Host "Authenticating to EXO:$($Credential.username.split('@')[1].tostring())..."  ;
-            Disconnect-Exo ; Disconnect-PssBroken ;Start-Sleep -Seconds 3;
-            if(!$Credential){
-                connect-EXO -verbose:$($verbose) ;
-            } else {
-                connect-EXO -credential:$($Credential) -verbose:$($verbose) ;
-            } ;
+        
+        }elseif($legPSSession){
+            if((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
+                # validate that the connected EXO is to the $Credential tenant    
+                write-verbose "(Authenticated to EXO:$($Credential.username.split('@')[1].tostring()))" ; 
+            } else { 
+                write-verbose "(NOT Authenticated to Credentialed Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
+                Write-Host "Authenticating to EXO:$($Credential.username.split('@')[1].tostring())..."  ;
+                Disconnect-Exo ; Disconnect-PssBroken ;Start-Sleep -Seconds 3;
+                if(!$Credential){
+                    connect-EXO -verbose:$($verbose) ;
+                } else {
+                    connect-EXO -credential:$($Credential) -verbose:$($verbose) ;
+                } ;
+            } ; 
+        } else {
+            throw "FAILED EXO CONNECT!"
         } ; 
         $1F=$true ;
         if($tryNo -gt $DoRetries ){throw "RETRIED EXO CONNECT $($tryNo) TIMES, ABORTING!" } ;
     } Until ((Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName -AND $_.State -eq "Opened" -AND $_.Availability -eq "Available"}))
-
 }
 #*------^ Reconnect-EXO.ps1 ^------
