@@ -21,6 +21,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 12:57 PM 8/4/2020 sorted ExchangeOnlineMgmt mod issues (splatting wo using splat char), if MS hadn't completely rewritten the access, this rewrite wouldn't have been necessary in the 1st place. I'm not looking forward to the org wide rewrites to recode verb-exoNoun -> verb-xoNoun, to accomodate the breaking-change blocking -Prefix 'exo'. ; # 1:04 PM 8/4/2020 cute: now the above error's stopped occuring on the problem tenant. Can't do further testing of the workaround, unless/until it breaks again
     * 12:20 PM 7/29/2020 rewrite/port from connect-EXO to replace import-pssession with new connect-ExchangeOnline cmdlet (supports MFA natively) - #127 # *** LEFT OFF HERE 5:01 PM 7/29/2020 *** not sure if it supports allowclobber, if it's actually wrapping pssession, it sure as shit does!
     * 11:21 AM 7/28/2020 added Credential -> AcceptedDomains Tenant validation, also testing existing conn, and skipping reconnect unless unhealthy or wrong tenant to match credential
     * 3:24 PM 7/24/2020 updated to support tenant-alignment & sub'd out showdebug for verbose
@@ -47,6 +48,9 @@ Function Connect-EXO2 {
     [verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-CommandPrefix tag]
     .PARAMETER  Credential
     Credential to use for this connection [-credential 's-todd.kadrie@toro.com']
+    .PARAMETER
+    ConnectionUri
+    Connection Uri for the Remote PowerShell endpoint [-ConnectionUri 'https://outlook.office365.com/powershell-liveid/']
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
@@ -70,12 +74,14 @@ Function Connect-EXO2 {
         [string]$CommandPrefix = 'xo',
         [Parameter(HelpMessage = "Credential to use for this connection [-credential [credential obj variable]")]
         [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage = "Connection Uri for the Remote PowerShell endpoint [-ConnectionUri 'https://outlook.office365.com/powershell-liveid/']")]
+        [string] $ConnectionUri = '',
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
         [switch] $showDebug
     ) ;
-    BEGIN{
-        $verbose = ($VerbosePreference -eq "Continue") ; 
-        if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
+    BEGIN {
+        $verbose = ($VerbosePreference -eq "Continue") ;
+        if (!$rgxExoPsHostName) { $rgxExoPsHostName = "^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
         # disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
@@ -85,32 +91,32 @@ Function Connect-EXO2 {
         } ;
 
         $sTitleBarTag = "EXO" ;
-        $TentantTag=get-TenantTag -Credential $Credential ; 
-        if($TentantTag -ne 'TOR'){
+        $TentantTag = get-TenantTag -Credential $Credential ;
+        if ($TentantTag -ne 'TOR') {
             # explicitly leave this tenant (default) untagged
             $sTitleBarTag += $TentantTag ;
-        } ; 
-    } ;  # BEG-E
-    PROCESS{
-        $bExistingEXOGood = $false ; 
-        
-        $modname = 'ExchangeOnlineManagement' ; 
+        } ;
+    } ; # BEG-E
+    PROCESS {
+        $bExistingEXOGood = $false ;
+
+        $modname = 'ExchangeOnlineManagement' ;
         #Try {Get-Module $modname -listavailable -ErrorAction Stop | out-null } Catch {Install-Module $modname -scope CurrentUser ; } ;                 # installed
-        Try {Get-Module $modname -ErrorAction Stop | out-null } Catch {Import-Module -Name $modname -MinimumVersion '1.0.1' -ErrorAction Stop  } ; # imported
-        
+        Try { Get-Module $modname -ErrorAction Stop | out-null } Catch { Import-Module -Name $modname -MinimumVersion '1.0.1' -ErrorAction Stop } ; # imported
+
         <# Get-PSSession | fl ConfigurationName,name,state,availability,computername
         -legacy remote-ps New-PSSession results in this PSS:
           ConfigurationName : Microsoft.Exchange
           Name              : WinRM2 (seems to increment)
           State             : Opened
           Availability      : Available
-          ComputerName      : ps.outlook.com  
+          ComputerName      : ps.outlook.com
         - legacy remote from jumpbox:
         ConfigurationName : Microsoft.Exchange
           Name              : Session6
           State             : Opened
           Availability      : Available
-          ComputerName      : ps.outlook.com        
+          ComputerName      : ps.outlook.com
         -while a connect-ExchangeOnline (non-MFA, haven't verified) connect results in this PSS:
           ConfigurationName : Microsoft.Exchange
           Name              : ExchangeOnlineInternalSession_4
@@ -120,62 +126,63 @@ Function Connect-EXO2 {
         #>
         #if( Get-PSSession|Where-Object{($_.ComputerName -match $rgxExoPsHostName) -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}){
         # Get-PSSession | fl ConfigurationName,name,state,availability
-        if( $existingPSSession = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "(Session|WinRM)\d*" } ){
+        if ( $existingPSSession = Get-PSSession | where-object { $_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "(Session|WinRM)\d*" } ) {
             # ignore state & Avail, close the conflicting legacy conn's
             if ($existingPSSession.count -gt 0) {
-                write-host -foregroundcolor gray "(closing $($existingPSSession.count) legacy EXO sessions...)" ; 
-                for ($index = 0; $index -lt $existingPSSession.count; $index++){
-                    $session = $existingPSSession[$index] ; 
-                    Remove-PSSession -session $session ; 
-                    Write-Host "Removed the PSSession $($session.Name) connected to $($session.ComputerName)" ; 
-                } ; 
-                $bExistingEXOGood = $false ; 
-            } ; 
-        } ; 
-        if( Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')} ){
-            if( get-command Get-xoAcceptedDomain -ea 0) {
-                if ((Get-xoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
-                    # validate that the connected EXO is to the $Credential tenant    
-                    write-verbose "(Existing EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
-                    $bExistingEXOGood = $true ; 
-                } else { 
-                    write-verbose "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ; 
-                    DisConnect-EXO2 ; 
-                    $bExistingEXOGood = $false ; 
-                } ; 
-            } else { 
+                write-host -foregroundcolor gray "(closing $($existingPSSession.count) legacy EXO sessions...)" ;
+                for ($index = 0; $index -lt $existingPSSession.count; $index++) {
+                    $session = $existingPSSession[$index] ;
+                    Remove-PSSession -session $session ;
+                    Write-Host "Removed the PSSession $($session.Name) connected to $($session.ComputerName)" ;
+                } ;
+                $bExistingEXOGood = $false ;
+            } ;
+        } ;
+        if ( Get-PSSession | where-object { $_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available') } ) {
+            if ( get-command Get-xoAcceptedDomain -ea 0) {
+                if ((Get-xoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())) {
+                    # validate that the connected EXO is to the $Credential tenant
+                    write-verbose "(Existing EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ;
+                    $bExistingEXOGood = $true ;
+                } else {
+                    write-verbose "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ;
+                    DisConnect-EXO2 ;
+                    $bExistingEXOGood = $false ;
+                } ;
+            } else {
                 # capture outlier: shows a session wo the test cmdlet, force reset
-                DisConnect-EXO2 ; 
-                $bExistingEXOGood = $false ; 
-            } ; 
-        } ; 
+                DisConnect-EXO2 ;
+                $bExistingEXOGood = $false ;
+            } ;
+        } ;
 
-        if($bExistingEXOGood -eq $false){
-        
+        if ($bExistingEXOGood -eq $false) {
+
             #Connect-ExchangeOnline -Credential $credO365TORSID -Prefix 'xo' -ShowBanner:$false ;
             # *** LEFT OFF HERE 5:01 PM 7/29/2020 *** not sure if it supports allowclobber, if it's actually wrapping pssession, it sure as shit does!
-            
+
             $pltCXO = @{
-                Prefix =$CommandPrefix ;
-                ShowBanner = $false ;
+                Prefix     = [string]$CommandPrefix ;
+                ShowBanner = [switch]$false ;
             } ;
-            
+
             if ($MFA) {
                 # -UserPrincipalName
-                $pltCXO.Add("UserPrincipalName", $Credential.username);
+                $pltCXO.Add("UserPrincipalName", [string]$Credential.username);
             } else {
                 # just use the passed $Credential vari
-                $pltCXO.Add("Credential", $Credential);
+                $pltCXO.Add("Credential", [System.Management.Automation.PSCredential]$Credential);
             } ;
-            
+
             #Write-Host "Connecting to EXOv2:($($credential.username.split('@')[1]))"  ;
             Write-Host "Connecting to EXOv2:($($credential.username))"  ;
             write-verbose "`n$((get-date).ToString('HH:mm:ss')):Connect-ExchangeOnline w`n$(($pltCXO|out-string).trim())" ;
             Try {
                 #$global:ExoPSSession = New-PSSession @pltCXO ;
-                # looks like connect-exchangonline does create a global: $global:_EXO_PreviousModuleName on successful connect
+                # looks like connect-exchangonline does create a global: $global:_EXO_PreviousModuleName on successful connect 
+                # - but haven't spotted it in debugging tho', so have to gcm for 1st cmdlt in the module to confirm connected, and then get-xoacceptedomain, to verify connected to desired tenant
                 #$global:EOLSession = New-PSSession @pltCXO ;
-                Connect-ExchangeOnline $pltCXO ;
+                Connect-ExchangeOnline @pltCXO ;
                 Add-PSTitleBar $sTitleBarTag ;
             } catch [System.ArgumentException] {
                 <# post an attempt fail w conn-exo properly stacks the error into $error[0]:
@@ -187,52 +194,54 @@ Function Connect-EXO2 {
                     +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                     + CategoryInfo          : InvalidResult: (:) [Import-PSSession], ArgumentException
                     + FullyQualifiedErrorId : ErrorMalformedDataFromRemoteCommand,Microsoft.PowerShell.Commands.ImportPSSessionCommand
-                      
-                    ╚[kadriTSS]::[PS]:D:\scripts$ $error[0]
+
+                    +[kadriTSS]::[PS]:D:\scripts$ $error[0]
                     Import-PSSession : Data returned by the remote Get-FormatData command is not in the expected format.
                     At C:\Program Files\WindowsPowerShell\Modules\ExchangeOnlineManagement\1.0.1\ExchangeOnlineManagement.psm1:454 char:40
                     + ... oduleInfo = Import-PSSession $PSSession -AllowClobber -DisableNameChe ...
                     +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
                     + CategoryInfo          : InvalidResult: (:) [Import-PSSession], ArgumentException
                     + FullyQualifiedErrorId : ErrorMalformedDataFromRemoteCommand,Microsoft.PowerShell.Commands.ImportPSSessionCommand
-                      
+
                     Should be trappable, even external function
+
+                    # 1:04 PM 8/4/2020 cute: now the above error's stopped occuring on the problem tenant. Can't do further testing of the workaround, unless/until it breaks again
                 #>
-                $pltCXO.Add('ConnectionUri','https://outlook.office365.com/powershell-liveid?SerializationLevel=Full') ;
+                $pltCXO.Add('ConnectionUri', [string]'https://outlook.office365.com/powershell-liveid?SerializationLevel=Full') ;
                 write-warning -verbose:$true "$((get-date).ToString('HH:mm:ss')):'Get-FormatData command is not in the expected format' EXO bug: Retrying with '&SerializationLevel=Full'ConnectionUri`n(details at https://answers.microsoft.com/en-us/msoffice/forum/all/cannot-connect-to-exchange-online-via-powershell/)" ;
                 write-verbose "`n$((get-date).ToString('HH:mm:ss')):Connect-ExchangeOnline w`n$(($pltCXO|out-string).trim())" ;
                 <# when this crashes, it leaves an open PSS matching below that TIES UP YOUR CONN QUOTA!
                 Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')}
                 #>
-                TRY{
+                TRY {
                     # cleanup the borked attempt left half-functioning
-                    Disconnect-ExchangeOnline -confirm:$false ; 
-                    Connect-ExchangeOnline $pltCXO ;
+                    Disconnect-ExchangeOnline -confirm:$false ;
+                    Connect-ExchangeOnline @pltCXO ;
                     Add-PSTitleBar $sTitleBarTag ;
                 } CATCH {
-                    $ErrTrapd = $_ ; 
+                    $ErrTrapd = $_ ;
                     Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                    Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
-                } ; 
-            } CATCH [System.Management.Automation.RuntimeException]{
+                    Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ;
+                } ;
+            } CATCH [System.Management.Automation.RuntimeException] {
                 # see if we can trap the weird blank ConnnectionURI error
                 # ConnectionUri = 'https://outlook.office365.com/PowerShell-LiveId' ;
                 <# in connect-exchangeonline, when it hits, ConnectionURI isn't a string:
                 $ConnectionUri
                 System.Collections.Hashtable
                 #>
-                $pltCXO.Add('ConnectionUri','https://outlook.office365.com/powershell-liveid/') ;
+                $pltCXO.Add('ConnectionUri', [string]'https://outlook.office365.com/powershell-liveid/') ;
                 write-warning -verbose:$true "$((get-date).ToString('HH:mm:ss')):'Blank ConnectionUri EXOv2 bug: Retrying with explicit 'ConnectionUri" ;
                 write-verbose "`n$((get-date).ToString('HH:mm:ss')):Connect-ExchangeOnline w`n$(($pltCXO|out-string).trim())" ;
-                TRY{
-                    #Disconnect-ExchangeOnline -confirm:$false ; 
-                    Connect-ExchangeOnline $pltCXO ;
+                TRY {
+                    #Disconnect-ExchangeOnline -confirm:$false ;
+                    Connect-ExchangeOnline @pltCXO ;
                     Add-PSTitleBar $sTitleBarTag ;
                 } CATCH {
-                    $ErrTrapd = $_ ; 
+                    $ErrTrapd = $_ ;
                     Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                    Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
-                } ; 
+                    Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ;
+                } ;
             } catch {
                 Write-Warning -Message "Tried but failed to connect to EXO V2 PS module.`n`nError message:" ;
                 throw $_ ;
@@ -246,25 +255,25 @@ Function Connect-EXO2 {
             } ;
 
         } ; #  # if-E $bExistingEXOGood
-    } ;  # PROC-E
+    } ; # PROC-E
     END {
-        if($bExistingEXOGood -eq $false){
+        if ($bExistingEXOGood -eq $false) {
             # verify the exov2 cmdlets actually imported as a tmp_ module w specifid prefix & 1st cmdlet:if(get-module -name tmp_* |%{gcm -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }){'Y'}else {'N'}
-            if(get-module -name tmp_* |%{gcm -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }){
-                $bExistingEXOGood = $true ; 
-            }else {$bExistingEXOGood = $false ; } 
-            if ((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
-                # validate that the connected EXO is to the $Credential tenant    
-                write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
-                $bExistingEXOGood = $true ; 
-            } else { 
-                write-error "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ; 
-                Disconnect-exo ; 
-                $bExistingEXOGood = $false ; 
+            if (get-module -name tmp_* | ForEach-Object { Get-Command -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }) {
+                $bExistingEXOGood = $true ;
+            } else { $bExistingEXOGood = $false ; }
+            if ((Get-xoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())) {
+                # validate that the connected EXO is to the $Credential tenant
+                write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ;
+                $bExistingEXOGood = $true ;
+            } else {
+                write-error "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ;
+                Disconnect-exo ;
+                $bExistingEXOGood = $false ;
             } ;
-        } ; 
-        $bExistingEXOGood | write-output ; 
-    }  # END-E 
+        } ;
+        $bExistingEXOGood | write-output ;
+    }  # END-E
 }
 
 #*------^ Connect-EXO2.ps1 ^------
