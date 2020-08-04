@@ -10,6 +10,7 @@ Function Reconnect-EXO2 {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 2:39 PM 8/4/2020 fixed -match "^(Session|WinRM)\d*" rgx (lacked ^, mismatched EXOv2 conns)
     * 3:55 PM 7/30/2020 rewrite/port from reconnect-EXO to replace import-pssession with new connect-ExchangeOnline cmdlet (supports MFA natively) - #127 # *** LEFT OFF HERE 5:01 PM 7/29/2020 *** not sure if it supports allowclobber, if it's actually wrapping pssession, it sure as shit does!
     * 10:35 AM 7/28/2020 tweaked retry loop to not retry-sleep 1st attempt
     * 3:24 PM 7/24/2020 updated to support tenant-alignment & sub'd out showdebug for verbose
@@ -77,12 +78,12 @@ Function Reconnect-EXO2 {
     } ;  # BEG-E
     PROCESS{
         $bExistingEXOGood = $false ; 
-        if( $legPSSession = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "(Session|WinRM)\d*" } ){
+        if( $legPSSession = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*" } ){
             # ignore state & Avail, close the conflicting legacy conn's
             Disconnect-Exo ; Disconnect-PssBroken ;Start-Sleep -Seconds 3;
             $bExistingEXOGood = $false ; 
         } ; 
-        # if we're using EXOv1-style BasicAuth, clear incompatible existing EXOv2 PSS's
+        #clear invalid existing EXOv2 PSS's
         $exov2Broken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"}
         $exov2Closed = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Closed*"}
         
@@ -127,6 +128,6 @@ Function Reconnect-EXO2 {
                 $bExistingEXOGood = $false ; 
             } ;
         } ; 
-    }  # END-E 
-}
+    } ; # END-E 
+} ; 
 #*------^ Reconnect-EXO2.ps1 ^------
