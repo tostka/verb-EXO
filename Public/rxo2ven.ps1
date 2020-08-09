@@ -6,6 +6,6 @@ function rxo2VEN {
     .DESCRIPTION
     Reconnect-EXO2 - Re-establish PSS to EXO V2 Modern Auth
     #>
-    Reconnect-EXO2 -cred $credO365VENCSID
+    Reconnect-EXO2 -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 #*------^ rxo2VEN.ps1 ^------

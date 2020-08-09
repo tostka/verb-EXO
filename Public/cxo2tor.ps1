@@ -5,7 +5,9 @@ function cxo2TOR {
     cxo2TOR - Connect-EXO to specified Tenant
     .DESCRIPTION
     Connect-EXO2 - Establish PSS to EXO V2 Modern Auth PS
+    .EXAMPLE
+    cxo2TOR
     #>
-    Connect-EXO -cred $credO365TORSID
+    Connect-EXO -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 #*------^ cxo2tor.ps1 ^------

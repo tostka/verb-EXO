@@ -5,7 +5,9 @@ function rxoTOL {
     rxoTOL - Reonnect-EXO to specified Tenant
     .DESCRIPTION
     Reconnect-EXO - Re-establish PSS to https://ps.outlook.com/powershell/
+    .EXAMPLE
+    rxoTOL
     #>
-    Reconnect-EXO -cred $credO365TOLSID
+    Reconnect-EXO -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 #*------^ rxotol.ps1 ^------

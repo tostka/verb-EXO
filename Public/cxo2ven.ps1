@@ -5,7 +5,9 @@ function cxo2VEN {
     cxo2VEN - Connect-EXO to specified Tenant
     .DESCRIPTION
     Connect-EXO2 - Establish PSS to EXO V2 Modern Auth PS
+    .EXAMPLE
+    cxo2VEN
     #>
-    Connect-EXO -cred $credO365VENCSID
+    Connect-EXO -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 #*------^ cxo2VEN.ps1 ^------

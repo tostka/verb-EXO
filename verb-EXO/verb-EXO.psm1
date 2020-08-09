@@ -1,11 +1,11 @@
-﻿# verb-exo.psm1
+﻿# verb-EXO.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.21.0
+  Version     : 1.0.25.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -741,8 +741,10 @@ function cxo2cmw {
     cxo2CMW - Connect-EXO to specified Tenant
     .DESCRIPTION
     Connect-EXO2 - Establish PSS to EXO V2 Modern Auth PS
+    .EXAMPLE
+    cxo2cmw
     #>
-    Connect-EXO -cred $credO365CMWCSID
+    Connect-EXO -cred $credO365CMWCSID-Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxo2cmw.ps1 ^------
@@ -754,8 +756,10 @@ function cxo2TOL {
     cxo2TOL - Connect-EXO to specified Tenant
     .DESCRIPTION
     Connect-EXO2 - Establish PSS to EXO V2 Modern Auth PS
+    .EXAMPLE
+    cxo2TOL
     #>
-    Connect-EXO -cred $credO365TOLSID
+    Connect-EXO -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxo2tol.ps1 ^------
@@ -767,8 +771,10 @@ function cxo2TOR {
     cxo2TOR - Connect-EXO to specified Tenant
     .DESCRIPTION
     Connect-EXO2 - Establish PSS to EXO V2 Modern Auth PS
+    .EXAMPLE
+    cxo2TOR
     #>
-    Connect-EXO -cred $credO365TORSID
+    Connect-EXO -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxo2tor.ps1 ^------
@@ -780,8 +786,10 @@ function cxo2VEN {
     cxo2VEN - Connect-EXO to specified Tenant
     .DESCRIPTION
     Connect-EXO2 - Establish PSS to EXO V2 Modern Auth PS
+    .EXAMPLE
+    cxo2VEN
     #>
-    Connect-EXO -cred $credO365VENCSID
+    Connect-EXO -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxo2ven.ps1 ^------
@@ -793,8 +801,10 @@ function cxoCMW {
     cxoCMW - Connect-EXO to specified Tenant
     .DESCRIPTION
     Connect-EXO - Establish PSS to https://ps.outlook.com/powershell/
+    .EXAMPLE
+    cxoCMW
     #>
-    Connect-EXO -cred $credO365CMWCSID
+    Connect-EXO -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxocmw.ps1 ^------
@@ -806,8 +816,10 @@ function cxoTOL {
     cxoTOL - Connect-EXO to specified Tenant
     .DESCRIPTION
     Connect-EXO - Establish PSS to https://ps.outlook.com/powershell/
+    .EXAMPLE
+    cxoTOL
     #>
-    Connect-EXO -cred $credO365TOLSID
+    Connect-EXO -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxotol.ps1 ^------
@@ -819,8 +831,10 @@ function cxoTOR {
     cxoTOR - Connect-EXO to specified Tenant
     .DESCRIPTION
     Connect-EXO - Establish PSS to https://ps.outlook.com/powershell/
+    .EXAMPLE
+    cxoTOR
     #>
-    Connect-EXO -cred $credO365TORSID
+    Connect-EXO -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxotor.ps1 ^------
@@ -832,8 +846,10 @@ function cxoVEN {
     cxoVEN - Connect-EXO to specified Tenant
     .DESCRIPTION
     Connect-EXO - Establish PSS to https://ps.outlook.com/powershell/
+    .EXAMPLE
+    cxoVEN
     #>
-    Connect-EXO -cred $credO365VENCSID
+    Connect-EXO -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxoVEN.ps1 ^------
@@ -1291,8 +1307,10 @@ function rxo2CMW {
     rxo2CMW - Reonnect-EXO2 to specified Tenant
     .DESCRIPTION
     Reconnect-EXO2 - Re-establish PSS to EXO V2 Modern Auth
+    .EXAMPLE
+    rxo2CMW
     #>
-    Reconnect-EXO2 -cred $credO365CMWCSID
+    Reconnect-EXO2 -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ rxo2cmw.ps1 ^------
@@ -1316,8 +1334,10 @@ function rxo2TOR {
     rxo2TOR - Reonnect-EXO to specified Tenant
     .DESCRIPTION
     Reconnect-EXO2 - Re-establish PSS to EXO V2 Modern Auth
+    .EXAMPLE
+    rxo2TOR
     #>
-    Reconnect-EXO2 -cred $credO365TORSID
+    Reconnect-EXO2 -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ rxo2tor.ps1 ^------
@@ -1330,7 +1350,7 @@ function rxo2VEN {
     .DESCRIPTION
     Reconnect-EXO2 - Re-establish PSS to EXO V2 Modern Auth
     #>
-    Reconnect-EXO2 -cred $credO365VENCSID
+    Reconnect-EXO2 -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ rxo2ven.ps1 ^------
@@ -1342,8 +1362,10 @@ function rxoCMW {
     rxoCMW - Reonnect-EXO to specified Tenant
     .DESCRIPTION
     Reconnect-EXO - Re-establish PSS to https://ps.outlook.com/powershell/
+    .EXAMPLE
+    rxoCMW
     #>
-    Reconnect-EXO -cred $credO365CMWCSID
+    Reconnect-EXO -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ rxocmw.ps1 ^------
@@ -1355,8 +1377,10 @@ function rxoTOL {
     rxoTOL - Reonnect-EXO to specified Tenant
     .DESCRIPTION
     Reconnect-EXO - Re-establish PSS to https://ps.outlook.com/powershell/
+    .EXAMPLE
+    rxoTOL
     #>
-    Reconnect-EXO -cred $credO365TOLSID
+    Reconnect-EXO -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ rxotol.ps1 ^------
@@ -1368,8 +1392,10 @@ function rxoTOR {
     rxoTOR - Reonnect-EXO to specified Tenant
     .DESCRIPTION
     Reconnect-EXO - Re-establish PSS to https://ps.outlook.com/powershell/
+    .EXAMPLE
+    rxoTOR
     #>
-    Reconnect-EXO -cred $credO365TORSID
+    Reconnect-EXO -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ rxotor.ps1 ^------
@@ -1381,22 +1407,89 @@ function rxoVEN {
     rxoVEN - Reonnect-EXO to specified Tenant
     .DESCRIPTION
     Reconnect-EXO - Re-establish PSS to https://ps.outlook.com/powershell/
+    .EXAMPLE
+    rxoVEN
     #>
-    Reconnect-EXO -cred $credO365VENCSID
+    Reconnect-EXO -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ rxoVEN.ps1 ^------
 
+#*------v test-EXOToken.ps1 v------
+function test-EXOToken {
+    <#
+    .SYNOPSIS
+    test-EXOToken - Retrieve and summarize EXO Active Token (leverages ExchangeOnlineManagement 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll')
+    .NOTES
+    Version     : 1.0.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-08-08
+    FileName    : test-EXOToken
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka/verb-aad
+    REVISIONS
+    * 11:58 AM 8/9/2020 init
+    .DESCRIPTION
+    test-EXOToken - Retrieve and summarize EXO Active Token (leverages ExchangeOnlineManagement 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll')
+    Trying to find a way to verify status of token, wo any interactive material, lifted concept from EXOM UpdateImplicitRemotingHandler() Test-ActiveToken doesn't appear to normally be exposed anywhere but with explicit load of the .dll
+    .EXAMPLE
+    $hasActiveToken = test-EXOToken 
+    $psss=Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" } ;  
+    $sessionIsOpened = $psss.Runspace.RunspaceStateInfo.State -eq 'Opened'
+    if (($hasActiveToken -eq $false) -or ($sessionIsOpened -ne $true)){
+        #If there is no active user token or opened session then ensure that we remove the old session
+        $shouldRemoveCurrentSession = $true;
+    } ; 
+    Retrieve and evaluate status of EXO user token against PSSessoin status for EXOv2
+    .LINK
+    https://github.com/tostka/verb-aad
+    #>
+    #Requires -Modules ExchangeOnlineManagement
+    [CmdletBinding()] 
+    Param() ;
+    BEGIN {
+      $verbose = ($VerbosePreference -eq "Continue") ;
+      $tmodpath = join-path -path (split-path (get-module exchangeonlinemanagement).path) -ChildPath 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll' ;
+      $error.clear() ;
+      TRY {
+          import-module -name $tmodpath -Cmdlet Test-ActiveToken;
+      } CATCH {
+          Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+          Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+      } ; 
+      
+    } ;
+    PROCESS {
+        if(gcm -name Test-ActiveToken){
+            $hasActiveToken = $false ; 
+            $error.clear() ;
+            TRY {
+                $hasActiveToken = Test-ActiveToken ; 
+            } CATCH {
+                Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+            } ;  
+            } else { 
+        } ; 
+    } ; 
+    END{ $hasActiveToken | write-output } ;
+}
+
+#*------^ test-EXOToken.ps1 ^------
+
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function Connect-EXO,Connect-EXO2,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-EXO,Disconnect-EXO2,Reconnect-EXO,Reconnect-EXO2,Remove-EXOBrokenClosed,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN -Alias *
+Export-ModuleMember -Function Connect-EXO,Connect-EXO2,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-EXO,Disconnect-EXO2,Reconnect-EXO,Reconnect-EXO2,Remove-EXOBrokenClosed,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-EXOToken -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUc8WAUacickRF6YWtUssdQzd0
-# iDOgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUOYQyF2uoIbsTALQ3RsrLB+15
+# B/ygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1411,9 +1504,9 @@ Export-ModuleMember -Function Connect-EXO,Connect-EXO2,cxo2cmw,cxo2TOL,cxo2TOR,c
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS65ad4
-# MjKg2er8ml6I2Wdc6MqlMjANBgkqhkiG9w0BAQEFAASBgDtRpQXh1fY6zSsuoSGS
-# 1qjx9d8pYWua5j0LnYDxZDOIKmS0irFX7en6RQETGqoHRDk5k33BYPT3UaqMs+ax
-# MugVTYqdUR9y9l77sXerL0n9c5GzC7C22N+V7INA661VeTICuhr3rc24zL8mgAdd
-# 2FeW+rFzcUivTDEGWJUmBOEz
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSp/Sg0
+# PE9BENfHnRRERXLR4SkU1zANBgkqhkiG9w0BAQEFAASBgExkCe3IwO1QpXVPw+yP
+# uuAlKlzcrLcIBOtneUC5ERaIwqazi+1JpXdBwJ1zwxIF1Abm+uzUS51vqdkUa0cF
+# OyXEJGXucAnBMB/5Q57gtzIIDIVX8IPsDrfxYjd8BVVR2w7R+6lXIMz1DtbctGUW
+# YhlvdBLdHgcTEnwZHg0BQVfL
 # SIG # End signature block

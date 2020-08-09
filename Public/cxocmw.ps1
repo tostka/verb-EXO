@@ -5,7 +5,9 @@ function cxoCMW {
     cxoCMW - Connect-EXO to specified Tenant
     .DESCRIPTION
     Connect-EXO - Establish PSS to https://ps.outlook.com/powershell/
+    .EXAMPLE
+    cxoCMW
     #>
-    Connect-EXO -cred $credO365CMWCSID
+    Connect-EXO -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 #*------^ cxocmw.ps1 ^------
