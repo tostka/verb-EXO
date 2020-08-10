@@ -1,11 +1,11 @@
-﻿# verb-EXO.psm1
+﻿# verb-exo.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.25.0
+  Version     : 1.0.26.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -1074,7 +1074,7 @@ Function Reconnect-EXO {
 
         $legPSSession = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*" -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}
         
-        if(Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*" -AND (($_.State -ne 'Opened') -OR ($_.Availability -ne 'Available')) }){
+        if( (Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*" -AND (($_.State -ne 'Opened') -OR ($_.Availability -ne 'Available')) }) -OR (-not(Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*"})) ){
             write-verbose "$((get-date).ToString('HH:mm:ss')):Reconnecting:No existing PSSESSION matching Name -match (Session|WinRM) with valid Open/Availability:$((Get-PSSession|Where-Object{$_.ComputerName -match $rgxExoPsHostName}| Format-Table -a State,Availability |out-string).trim())" ;
             Disconnect-Exo ; Disconnect-PssBroken ;Start-Sleep -Seconds 3;
             if(!$Credential){
@@ -1168,7 +1168,7 @@ Function Reconnect-EXO2 {
     https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     #>
     [CmdletBinding()]
-    [Alias('rxo')]
+    [Alias('rxo2')]
     Param(
       [Parameter(HelpMessage="Use Proxy-Aware SessionOption settings [-ProxyEnabled]")]
       [boolean]$ProxyEnabled = $False,
@@ -1488,8 +1488,8 @@ Export-ModuleMember -Function Connect-EXO,Connect-EXO2,cxo2cmw,cxo2TOL,cxo2TOR,c
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUOYQyF2uoIbsTALQ3RsrLB+15
-# B/ygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUIPGrM6NqcLp+Ffyy1ojJ4VvW
+# TK6gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1504,9 +1504,9 @@ Export-ModuleMember -Function Connect-EXO,Connect-EXO2,cxo2cmw,cxo2TOL,cxo2TOR,c
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSp/Sg0
-# PE9BENfHnRRERXLR4SkU1zANBgkqhkiG9w0BAQEFAASBgExkCe3IwO1QpXVPw+yP
-# uuAlKlzcrLcIBOtneUC5ERaIwqazi+1JpXdBwJ1zwxIF1Abm+uzUS51vqdkUa0cF
-# OyXEJGXucAnBMB/5Q57gtzIIDIVX8IPsDrfxYjd8BVVR2w7R+6lXIMz1DtbctGUW
-# YhlvdBLdHgcTEnwZHg0BQVfL
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSpN5k1
+# zS54ubw4L1F4/uWKvM/XeDANBgkqhkiG9w0BAQEFAASBgFunNXTdwUtl+FOD4OWh
+# Zrny3ZVpf+Gv1oCMhNh7pA3EexKDfqwMgFVa9mvL8tqBAIMqEUXhUdh4pjO7EU9+
+# VGaiC6tGTiGQrb4gWZRcf5KiOzo45HG4MutXbkQP7Poufq8qFX4sFlu6M71rr+xy
+# wb6glYjkfKjZq4DFfA8mEPSB
 # SIG # End signature block

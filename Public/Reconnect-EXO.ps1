@@ -92,7 +92,7 @@ Function Reconnect-EXO {
 
         $legPSSession = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*" -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}
         
-        if(Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*" -AND (($_.State -ne 'Opened') -OR ($_.Availability -ne 'Available')) }){
+        if( (Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*" -AND (($_.State -ne 'Opened') -OR ($_.Availability -ne 'Available')) }) -OR (-not(Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*"})) ){
             write-verbose "$((get-date).ToString('HH:mm:ss')):Reconnecting:No existing PSSESSION matching Name -match (Session|WinRM) with valid Open/Availability:$((Get-PSSession|Where-Object{$_.ComputerName -match $rgxExoPsHostName}| Format-Table -a State,Availability |out-string).trim())" ;
             Disconnect-Exo ; Disconnect-PssBroken ;Start-Sleep -Seconds 3;
             if(!$Credential){
