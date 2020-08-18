@@ -21,6 +21,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 1:18 PM 8/11/2020 fixed typo in *broken *closed varis in use; updated ExoV1 conn filter, to specificly target v1 (old matched v1 & v2) ; trimmed entire rem'd MFA block 
     * 4:52 PM 8/4/2020 fixed regex for id'ing legacy pss's
     * 4:27 PM 7/29/2020 added Catch workaround for EXO bug here:https://answers.microsoft.com/en-us/msoffice/forum/all/cannot-connect-to-exchange-online-via-powershell/25ca1cc2-e23a-470e-9c73-e6c56c4fbb46?page=7 Workaround 1) Use EXO V2 module - but it breaks historical use of -suffix 'exo' 2) use ?SerializationLevel=Full with the ConnectionURI: -ConnectionUri "https://outlook.office365.com/powershell-liveid?SerializationLevel=Full". Added Beg/Proc/End with trailing Tenant -cred align validation. Need to rewrite MFA, as the EXO V2 fundementally conflicts on a cmdlet that was part of the exoMFA mod, now uninstalled
     * 11:21 AM 7/28/2020 added Credential -> AcceptedDomains Tenant validation, also testing existing conn, and skipping reconnect unless unhealthy or wrong tenant to match credential
@@ -100,8 +101,24 @@ Function Connect-EXO {
         } ; 
     } ;  # BEG-E
     PROCESS{
+
+        # if we're using EXOv1-style BasicAuth, clear incompatible existing EXOv2 PSS's
+        $exov2Good = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')} ; 
+        $exov2Broken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"}
+        $exov2Closed = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Closed*"}
+
+        if($exov2Good  ){
+            write-verbose "EXOv1:Disconnecting conflicting EXOv2 connection" ; 
+            DisConnect-EXO2 ; 
+        } ; 
+        if ($exov2Broken.count -gt 0){for ($index = 0 ;$index -lt $exov2Broken.count ;$index++){Remove-PSSession -session $exov2Broken[$index]} };
+        if ($exov2Closed.count -gt 0){for ($index = 0 ;$index -lt $exov2Closed.count ; $index++){Remove-PSSession -session $exov2Closed[$index] } } ; 
+    
         $bExistingEXOGood = $false ; 
-        if( Get-PSSession|Where-Object{($_.ComputerName -match $rgxExoPsHostName) -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}){
+        # $existingPSSession = Get-PSSession | where-object { $_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*" }
+        #if( Get-PSSession|Where-Object{($_.ComputerName -match $rgxExoPsHostName) -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}){
+        # EXOv1 & v2 both use ComputerName -match $rgxExoPsHostName, need to use the distinctive differentiators instead
+        if(Get-PSSession | where-object { $_.ConfigurationName -like "Microsoft.Exchange" -AND $_.Name -match "^(Session|WinRM)\d*" -AND $_.State -eq 'Opened' -AND $_.Availability -eq 'Available' }){
             if( get-command Get-exoAcceptedDomain) {
                 if ((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
                     # validate that the connected EXO is to the $Credential tenant    
@@ -130,150 +147,9 @@ Function Connect-EXO {
 
             if ($MFA) {
                 
-                throw "MFA is not currently supported by the connect-exo cmdlet!. Use connect-exo2 instead" ; 
-                Exit 
-                <# 4:24 PM 7/30/2020 HAD TO UNINSTALL THE EXOMFA module, a bundled cmdlet fundementally conflicted with ExchangeOnlineManagement
-                try {
-                    $ExoPSModuleSearchProperties = @{
-                        Path        = "$($env:LOCALAPPDATA)\Apps\2.0\" ;
-                        Filter      = 'Microsoft.Exchange.Management.ExoPowerShellModule.dll' ;
-                        Recurse     = $true ;
-                        ErrorAction = 'Stop' ;
-                    } ;
-
-                    write-verbose "Get-ChildItem w`n$(($ExoPSModuleSearchProperties|out-string).trim())" ;
-                    $ExoPSModule = Get-ChildItem @ExoPSModuleSearchProperties |
-                        Where-Object { $_.FullName -notmatch '_none_' } | Sort-Object LastWriteTime |
-                            Select-Object -Last 1 ;
-                    # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
-                    if($VerbosePreference = "Continue"){
-                        $VerbosePrefPrior = $VerbosePreference ;
-                        $VerbosePreference = "SilentlyContinue" ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    Import-Module $ExoPSModule.FullName -ErrorAction:Stop ;
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    $ExoPSModuleManifest = $ExoPSModule.FullName -replace '\.dll', '.psd1' ;
-                    if (!(Get-Module $ExoPSModule.FullName -ListAvailable -ErrorAction 0 )) {
-                        write-verbose -verbose:$true  "Unable to`nGet-Module $($ExoPSModule.FullName) -ListAvailable`ndiverting to hardcoded exoMFAModule`nRequires that it be locally copied below`n$env:userprofile\documents\WindowsPowerShell\Modules\exoMFAModule\`n " ;
-                        # go to a hard load path $env:userprofile\documents\WindowsPowerShell\Modules\exoMFAModule\
-                        $ExoPSModuleSearchProperties = @{
-                            Path        = "$($env:userprofile)\documents\WindowsPowerShell\Modules\exoMFAModule\" ;
-                            Filter      = 'Microsoft.Exchange.Management.ExoPowerShellModule.dll' ;
-                            Recurse     = $true ;
-                            ErrorAction = 'Stop' ;
-                        } ;
-                        $ExoPSModule = Get-ChildItem @ExoPSModuleSearchProperties |
-                            Where-Object { $_.FullName -notmatch '_none_' } |
-                                Sort-Object LastWriteTime | Select-Object -Last 1 ;
-                        # roll an otf psd1+psm1 module
-                        # pull the broken ModuleVersion   = "$((Get-Module $ExoPSModule.FullName -ListAvailable).Version.ToString())" ;
-                        $NewExoPSModuleManifestProps = @{
-                            Path        = $ExoPSModuleManifest ;
-                            RootModule  = $ExoPSModule.Name
-                            Author      = 'Jeremy Bradshaw (https://github.com/JeremyTBradshaw)' ;
-                            CompanyName = 'jb365' ;
-                        } ;
-                        if (Get-Content "$($env:userprofile)\Documents\WindowsPowerShell\Modules\exoMFAModule\Microsoft.Exchange.Management.ExoPowershellModule.manifest" | 
-                            Select-String '<assemblyIdentity\sname="mscorlib"\spublicKeyToken="b77a5c561934e089"\sversion="(\d\.\d\.\d\.\d)"\s/>' | 
-                                Where-Object { $_ -match '(\d\.\d\.\d\.\d)' }) {
-                            $NewExoPSModuleManifestProps.add('ModuleVersion', $matches[0]) ;
-                        } ;
-                    } else {
-                        # roll an otf psd1+psm1 module
-                        $NewExoPSModuleManifestProps = @{
-                            Path          = $ExoPSModuleManifest ;
-                            RootModule    = $ExoPSModule.Name
-                            ModuleVersion = "$((Get-Module $ExoPSModule.FullName -ListAvailable).Version.ToString())" ;
-                            Author        = 'Jeremy Bradshaw (https://github.com/JeremyTBradshaw)' ;
-                            CompanyName   = 'jb365' ;
-                        } ;
-                    } ;
-                    write-verbose "New-ModuleManifest w`n$(($NewExoPSModuleManifestProps|out-string).trim())" ;
-                    New-ModuleManifest @NewExoPSModuleManifestProps ;
-                    # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
-                    if($VerbosePreference = "Continue"){
-                        $VerbosePrefPrior = $VerbosePreference ;
-                        $VerbosePreference = "SilentlyContinue" ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    Import-Module $ExoPSModule.FullName -Global -ErrorAction:Stop ;
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    $CreateExoPSSessionPs1 = Get-ChildItem -Path $ExoPSModule.PSParentPath -Filter 'CreateExoPSSession.ps1' ;
-                    $CreateExoPSSessionManifest = $CreateExoPSSessionPs1.FullName -replace '\.ps1', '.psd1' ;
-                    $CreateExoPSSessionPs1 = $CreateExoPSSessionPs1 |
-                    Get-Content | Where-Object { -not ($_ -like 'Write-Host*') } ;
-                    $CreateExoPSSessionPs1 -join "`n" |
-                    Set-Content -Path "$($CreateExoPSSessionManifest -replace '\.psd1','.psm1')" ;
-                    $NewCreateExoPSSessionManifest = @{
-                        Path          = $CreateExoPSSessionManifest ;
-                        RootModule    = Split-Path -Path ($CreateExoPSSessionManifest -replace '\.psd1', '.psm1') -Leaf ;
-                        ModuleVersion = '1.0' ;
-                        Author        = 'Todd Kadrie (https://github.com/tostka)' ;
-                        CompanyName   = 'toddomation.com' ;
-                    } ;
-                    write-verbose "New-ModuleManifest w`n$(($NewCreateExoPSSessionManifest|out-string).trim())"  ;
-                    New-ModuleManifest @NewCreateExoPSSessionManifest ;
-                    # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
-                    if($VerbosePreference = "Continue"){
-                        $VerbosePrefPrior = $VerbosePreference ;
-                        $VerbosePreference = "SilentlyContinue" ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    Import-Module "$($ExoPSModule.PSParentPath)\CreateExoPSSession.psm1" -Global -ErrorAction:Stop ;
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                } catch {
-                    Write-Warning -Message "Tried but failed to import the EXO PS module.`n`nError message:" ;
-                    throw $_ ;
-                } ;
-
-                try {
-                    $global:UserPrincipalName = $Credential.Username ;
-                    $global:ConnectionUri = 'https://outlook.office365.com/PowerShell-LiveId' ;
-                    $global:AzureADAuthorizationEndpointUri = 'https://login.windows.net/common' ;
-                    $global:PSSessionOption = New-PSSessionOption -CancelTimeout 5000 -IdleTimeout 43200000 ;
-                    $global:BypassMailboxAnchoring = $false ;
-                    $ExoPSSession = @{
-                        UserPrincipalName               = $global:UserPrincipalName ;
-                        ConnectionUri                   = $global:ConnectionUri ;
-                        AzureADAuthorizationEndpointUri = $global:AzureADAuthorizationEndpointUri ;
-                        PSSessionOption                 = $global:PSSessionOption ;
-                        BypassMailboxAnchoring          = $global:BypassMailboxAnchoring ;
-                    } ;
-                    write-verbose "New-ExoPSSession w`n$(($ExoPSSession|out-string).trim())" ;
-                    $ExoPSSession = New-ExoPSSession @ExoPSSession -ErrorAction:Stop ;
-                    write-verbose "Import-PSSession w`n$(($ImportPSSessionProps|out-string).trim())" ;
-                    # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
-                    if($VerbosePreference = "Continue"){
-                        $VerbosePrefPrior = $VerbosePreference ;
-                        $VerbosePreference = "SilentlyContinue" ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    Import-Module (Import-PSSession $ExoPSSession @ImportPSSessionProps) -Prefix $CommandPrefix -Global -DisableNameChecking -ErrorAction:Stop ;
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    UpdateImplicitRemotingHandler ;
-                    Add-PSTitleBar $sTitleBarTag ;
-                } catch {
-                    Write-Warning -Message "Failed to connect to EXO via the imported EXO PS module.`n`nError message:" ;
-                    throw $_ ;
-                } ;
-                #>
+                throw "MFA is not currently supported by the connect-exo cmdlet!. Use connect/disconnect/reconnect-exo2 instead" ; 
+                Break 
+                <# 4:24 PM 7/30/2020 HAD TO UNINSTALL THE EXOMFA module, a bundled cmdlet fundementally conflicted with ExchangeOnlineManagement#>
 
             } else {
                 $EXOsplat = @{
@@ -282,20 +158,16 @@ Function Connect-EXO {
                     Authentication    = "Basic" ;
                     AllowRedirection  = $true;
                 } ;
+                $EXOsplat.Add("Credential", $Credential); # just use the passed $Credential vari
 
-                # just use the passed $Credential vari
-                $EXOsplat.Add("Credential", $Credential);
-
+                $cMsg = "Connecting to Exchange Online ($($credential.username.split('@')[1]))"; 
                 If ($ProxyEnabled) {
-                    $EXOsplat.Add("sessionOption", $(New-PsSessionOption -ProxyAccessType IEConfig -ProxyAuthentication basic));
-                    Write-Host "Connecting to Exchange Online ($($credential.username.split('@')[1])) via Proxy"  ;
-                } Else {
-                    Write-Host "Connecting to Exchange Online ($($credential.username.split('@')[1]))"  ;
+                    $EXOsplat.Add("sessionOption", $(New-PsSessionOption -ProxyAccessType IEConfig -ProxyAuthentication basic)) ;
+                    $cMsg += " via Proxy"  ;
                 } ;
+                Write-Host $cMsg ;
                 write-verbose "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
-                Try {
-                    #$global:ExoPSSession = New-PSSession @EXOsplat ;
-                    $global:EOLSession = New-PSSession @EXOsplat ;
+                Try { $global:EOLSession = New-PSSession @EXOsplat ;
                 } catch {
                     Write-Warning -Message "Tried but failed to import the EXO PS module.`n`nError message:" ;
                     throw $_ ;
@@ -304,13 +176,13 @@ Function Connect-EXO {
                     if ($error[0].FullyQualifiedErrorId -eq '-2144108477,PSSessionOpenFailed') {
                         write-warning "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
                         throw "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-                        EXIT ;
+                        Break ;
                     } ;
                 } ;
                 if(!$global:EOLSession){
                     write-warning "$((get-date).ToString('HH:mm:ss')):FAILED TO RETURN PSSESSION!`nAUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
                     throw "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-                    EXIT ;
+                    Break ;
                 } ; 
                 $pltPSS = [ordered]@{
                     Session             = $global:EOLSession ;
@@ -322,7 +194,6 @@ Function Connect-EXO {
                 write-verbose "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltPSS|out-string).trim())" ;
                 Try {
                     # Verbose:Continue is VERY noisey for module loads. Bracketed suppress:
-                    # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
                     if($VerbosePreference = "Continue"){
                         $VerbosePrefPrior = $VerbosePreference ;
                         $VerbosePreference = "SilentlyContinue" ;
@@ -359,7 +230,7 @@ Function Connect-EXO {
                     } CATCH {
                         $ErrTrapd = $_ ; 
                         Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                        Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
+                        Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
                     } ; 
                     $pltPSS = [ordered]@{
                         Session             = $global:EOLSession ;
@@ -374,7 +245,7 @@ Function Connect-EXO {
                     } CATCH {
                         $ErrTrapd = $_ ; 
                         Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                        Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
+                        Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
                     } ; 
                     # reenable VerbosePreference:Continue, if set, during mod loads 
                     if($VerbosePrefPrior -eq "Continue"){

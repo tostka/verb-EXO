@@ -21,6 +21,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 1:18 PM 8/11/2020 fixed typo in *broken *closed varis in use; updated ExoV1 conn filter, to specificly target v1 (old matched v1 & v2) ; trimmed entire rem'd MFA block ; added trailing test-EXOToken confirm
     * 12:57 PM 8/4/2020 sorted ExchangeOnlineMgmt mod issues (splatting wo using splat char), if MS hadn't completely rewritten the access, this rewrite wouldn't have been necessary in the 1st place. I'm not looking forward to the org wide rewrites to recode verb-exoNoun -> verb-xoNoun, to accomodate the breaking-change blocking -Prefix 'exo'. ; # 1:04 PM 8/4/2020 cute: now the above error's stopped occuring on the problem tenant. Can't do further testing of the workaround, unless/until it breaks again ; * 2:39 PM 8/4/2020 fixed -match "^(Session|WinRM)\d*" rgx (lacked ^, mismatched EXOv2 conns)
     * 12:20 PM 7/29/2020 rewrite/port from connect-EXO to replace import-pssession with new connect-ExchangeOnline cmdlet (supports MFA natively) - #127 # *** LEFT OFF HERE 5:01 PM 7/29/2020 *** not sure if it supports allowclobber, if it's actually wrapping pssession, it sure as shit does!
     * 11:21 AM 7/28/2020 added Credential -> AcceptedDomains Tenant validation, also testing existing conn, and skipping reconnect unless unhealthy or wrong tenant to match credential
@@ -100,9 +101,21 @@ Function Connect-EXO2 {
     PROCESS {
         $bExistingEXOGood = $false ;
 
+        # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
         $modname = 'ExchangeOnlineManagement' ;
-        #Try {Get-Module $modname -listavailable -ErrorAction Stop | out-null } Catch {Install-Module $modname -scope CurrentUser ; } ;                 # installed
-        Try { Get-Module $modname -ErrorAction Stop | out-null } Catch { Import-Module -Name $modname -MinimumVersion '1.0.1' -ErrorAction Stop } ; # imported
+        $minvers = '1.0.1' ; 
+        Try {Get-Module -name $modname -listavailable -ErrorAction Stop | out-null } Catch {
+            $pltInMod=[ordered]@{Name=$modname} ; 
+            if( $env:COMPUTERNAME -match $rgxMyBoxUID ){$pltInMod.add('scope','CurrentUser')} else {$pltInMod.add('scope','AllUsers')} ;
+            write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):Install-Module w scope:$($pltInMod.scope)`n$(($pltInMod|out-string).trim())" ; 
+            Install-Module @pltIMod ; 
+        } ; # IsInstalled
+        $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; } ;
+        if($minvers){$pltIMod.add('MinimumVersion',$minvers) } ; 
+        Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
+            write-verbose "Import-Module w`n$(($pltIMod|out-string).trim())" ; 
+            Import-Module @pltIMod ; 
+        } ; # IsImported
 
         <# Get-PSSession | fl ConfigurationName,name,state,availability,computername
         -legacy remote-ps New-PSSession results in this PSS:
@@ -111,12 +124,14 @@ Function Connect-EXO2 {
           State             : Opened
           Availability      : Available
           ComputerName      : ps.outlook.com
+
         - legacy remote from jumpbox:
         ConfigurationName : Microsoft.Exchange
           Name              : Session6
           State             : Opened
           Availability      : Available
           ComputerName      : ps.outlook.com
+
         -while a connect-ExchangeOnline (non-MFA, haven't verified) connect results in this PSS:
           ConfigurationName : Microsoft.Exchange
           Name              : ExchangeOnlineInternalSession_4
@@ -221,15 +236,10 @@ Function Connect-EXO2 {
                 } CATCH {
                     $ErrTrapd = $_ ;
                     Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                    Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ;
+                    Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ;
                 } ;
             } CATCH [System.Management.Automation.RuntimeException] {
                 # see if we can trap the weird blank ConnnectionURI error
-                # ConnectionUri = 'https://outlook.office365.com/PowerShell-LiveId' ;
-                <# in connect-exchangeonline, when it hits, ConnectionURI isn't a string:
-                $ConnectionUri
-                System.Collections.Hashtable
-                #>
                 $pltCXO.Add('ConnectionUri', [string]'https://outlook.office365.com/powershell-liveid/') ;
                 write-warning -verbose:$true "$((get-date).ToString('HH:mm:ss')):'Blank ConnectionUri EXOv2 bug: Retrying with explicit 'ConnectionUri" ;
                 write-verbose "`n$((get-date).ToString('HH:mm:ss')):Connect-ExchangeOnline w`n$(($pltCXO|out-string).trim())" ;
@@ -240,7 +250,7 @@ Function Connect-EXO2 {
                 } CATCH {
                     $ErrTrapd = $_ ;
                     Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                    Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ;
+                    Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ;
                 } ;
             } catch {
                 Write-Warning -Message "Tried but failed to connect to EXO V2 PS module.`n`nError message:" ;
@@ -250,7 +260,7 @@ Function Connect-EXO2 {
                 if ($error[0].FullyQualifiedErrorId -eq '-2144108477,PSSessionOpenFailed') {
                     write-warning "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
                     throw "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-                    EXIT ;
+                    Break ;
                 } ;
             } ;
 
@@ -259,7 +269,7 @@ Function Connect-EXO2 {
     END {
         if ($bExistingEXOGood -eq $false) {
             # verify the exov2 cmdlets actually imported as a tmp_ module w specifid prefix & 1st cmdlet:if(get-module -name tmp_* |%{gcm -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }){'Y'}else {'N'}
-            if (get-module -name tmp_* | ForEach-Object { Get-Command -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }) {
+            if ( (get-module -name tmp_* | ForEach-Object { Get-Command -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }) -AND (test-EXOToken) ) {
                 $bExistingEXOGood = $true ;
             } else { $bExistingEXOGood = $false ; }
             if ((Get-xoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())) {
@@ -275,4 +285,5 @@ Function Connect-EXO2 {
         $bExistingEXOGood | write-output ;
     }  # END-E
 }
+
 #*------^ Connect-EXO2.ps1 ^------

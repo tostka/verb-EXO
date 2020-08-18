@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.26.0
+  Version     : 1.0.28.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -66,6 +66,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 1:18 PM 8/11/2020 fixed typo in *broken *closed varis in use; updated ExoV1 conn filter, to specificly target v1 (old matched v1 & v2) ; trimmed entire rem'd MFA block 
     * 4:52 PM 8/4/2020 fixed regex for id'ing legacy pss's
     * 4:27 PM 7/29/2020 added Catch workaround for EXO bug here:https://answers.microsoft.com/en-us/msoffice/forum/all/cannot-connect-to-exchange-online-via-powershell/25ca1cc2-e23a-470e-9c73-e6c56c4fbb46?page=7 Workaround 1) Use EXO V2 module - but it breaks historical use of -suffix 'exo' 2) use ?SerializationLevel=Full with the ConnectionURI: -ConnectionUri "https://outlook.office365.com/powershell-liveid?SerializationLevel=Full". Added Beg/Proc/End with trailing Tenant -cred align validation. Need to rewrite MFA, as the EXO V2 fundementally conflicts on a cmdlet that was part of the exoMFA mod, now uninstalled
     * 11:21 AM 7/28/2020 added Credential -> AcceptedDomains Tenant validation, also testing existing conn, and skipping reconnect unless unhealthy or wrong tenant to match credential
@@ -145,8 +146,24 @@ Function Connect-EXO {
         } ; 
     } ;  # BEG-E
     PROCESS{
+
+        # if we're using EXOv1-style BasicAuth, clear incompatible existing EXOv2 PSS's
+        $exov2Good = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')} ; 
+        $exov2Broken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"}
+        $exov2Closed = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Closed*"}
+
+        if($exov2Good  ){
+            write-verbose "EXOv1:Disconnecting conflicting EXOv2 connection" ; 
+            DisConnect-EXO2 ; 
+        } ; 
+        if ($exov2Broken.count -gt 0){for ($index = 0 ;$index -lt $exov2Broken.count ;$index++){Remove-PSSession -session $exov2Broken[$index]} };
+        if ($exov2Closed.count -gt 0){for ($index = 0 ;$index -lt $exov2Closed.count ; $index++){Remove-PSSession -session $exov2Closed[$index] } } ; 
+    
         $bExistingEXOGood = $false ; 
-        if( Get-PSSession|Where-Object{($_.ComputerName -match $rgxExoPsHostName) -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}){
+        # $existingPSSession = Get-PSSession | where-object { $_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*" }
+        #if( Get-PSSession|Where-Object{($_.ComputerName -match $rgxExoPsHostName) -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}){
+        # EXOv1 & v2 both use ComputerName -match $rgxExoPsHostName, need to use the distinctive differentiators instead
+        if(Get-PSSession | where-object { $_.ConfigurationName -like "Microsoft.Exchange" -AND $_.Name -match "^(Session|WinRM)\d*" -AND $_.State -eq 'Opened' -AND $_.Availability -eq 'Available' }){
             if( get-command Get-exoAcceptedDomain) {
                 if ((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
                     # validate that the connected EXO is to the $Credential tenant    
@@ -175,150 +192,9 @@ Function Connect-EXO {
 
             if ($MFA) {
                 
-                throw "MFA is not currently supported by the connect-exo cmdlet!. Use connect-exo2 instead" ; 
-                Exit 
-                <# 4:24 PM 7/30/2020 HAD TO UNINSTALL THE EXOMFA module, a bundled cmdlet fundementally conflicted with ExchangeOnlineManagement
-                try {
-                    $ExoPSModuleSearchProperties = @{
-                        Path        = "$($env:LOCALAPPDATA)\Apps\2.0\" ;
-                        Filter      = 'Microsoft.Exchange.Management.ExoPowerShellModule.dll' ;
-                        Recurse     = $true ;
-                        ErrorAction = 'Stop' ;
-                    } ;
-
-                    write-verbose "Get-ChildItem w`n$(($ExoPSModuleSearchProperties|out-string).trim())" ;
-                    $ExoPSModule = Get-ChildItem @ExoPSModuleSearchProperties |
-                        Where-Object { $_.FullName -notmatch '_none_' } | Sort-Object LastWriteTime |
-                            Select-Object -Last 1 ;
-                    # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
-                    if($VerbosePreference = "Continue"){
-                        $VerbosePrefPrior = $VerbosePreference ;
-                        $VerbosePreference = "SilentlyContinue" ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    Import-Module $ExoPSModule.FullName -ErrorAction:Stop ;
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    $ExoPSModuleManifest = $ExoPSModule.FullName -replace '\.dll', '.psd1' ;
-                    if (!(Get-Module $ExoPSModule.FullName -ListAvailable -ErrorAction 0 )) {
-                        write-verbose -verbose:$true  "Unable to`nGet-Module $($ExoPSModule.FullName) -ListAvailable`ndiverting to hardcoded exoMFAModule`nRequires that it be locally copied below`n$env:userprofile\documents\WindowsPowerShell\Modules\exoMFAModule\`n " ;
-                        # go to a hard load path $env:userprofile\documents\WindowsPowerShell\Modules\exoMFAModule\
-                        $ExoPSModuleSearchProperties = @{
-                            Path        = "$($env:userprofile)\documents\WindowsPowerShell\Modules\exoMFAModule\" ;
-                            Filter      = 'Microsoft.Exchange.Management.ExoPowerShellModule.dll' ;
-                            Recurse     = $true ;
-                            ErrorAction = 'Stop' ;
-                        } ;
-                        $ExoPSModule = Get-ChildItem @ExoPSModuleSearchProperties |
-                            Where-Object { $_.FullName -notmatch '_none_' } |
-                                Sort-Object LastWriteTime | Select-Object -Last 1 ;
-                        # roll an otf psd1+psm1 module
-                        # pull the broken ModuleVersion   = "$((Get-Module $ExoPSModule.FullName -ListAvailable).Version.ToString())" ;
-                        $NewExoPSModuleManifestProps = @{
-                            Path        = $ExoPSModuleManifest ;
-                            RootModule  = $ExoPSModule.Name
-                            Author      = 'Jeremy Bradshaw (https://github.com/JeremyTBradshaw)' ;
-                            CompanyName = 'jb365' ;
-                        } ;
-                        if (Get-Content "$($env:userprofile)\Documents\WindowsPowerShell\Modules\exoMFAModule\Microsoft.Exchange.Management.ExoPowershellModule.manifest" | 
-                            Select-String '<assemblyIdentity\sname="mscorlib"\spublicKeyToken="b77a5c561934e089"\sversion="(\d\.\d\.\d\.\d)"\s/>' | 
-                                Where-Object { $_ -match '(\d\.\d\.\d\.\d)' }) {
-                            $NewExoPSModuleManifestProps.add('ModuleVersion', $matches[0]) ;
-                        } ;
-                    } else {
-                        # roll an otf psd1+psm1 module
-                        $NewExoPSModuleManifestProps = @{
-                            Path          = $ExoPSModuleManifest ;
-                            RootModule    = $ExoPSModule.Name
-                            ModuleVersion = "$((Get-Module $ExoPSModule.FullName -ListAvailable).Version.ToString())" ;
-                            Author        = 'Jeremy Bradshaw (https://github.com/JeremyTBradshaw)' ;
-                            CompanyName   = 'jb365' ;
-                        } ;
-                    } ;
-                    write-verbose "New-ModuleManifest w`n$(($NewExoPSModuleManifestProps|out-string).trim())" ;
-                    New-ModuleManifest @NewExoPSModuleManifestProps ;
-                    # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
-                    if($VerbosePreference = "Continue"){
-                        $VerbosePrefPrior = $VerbosePreference ;
-                        $VerbosePreference = "SilentlyContinue" ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    Import-Module $ExoPSModule.FullName -Global -ErrorAction:Stop ;
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    $CreateExoPSSessionPs1 = Get-ChildItem -Path $ExoPSModule.PSParentPath -Filter 'CreateExoPSSession.ps1' ;
-                    $CreateExoPSSessionManifest = $CreateExoPSSessionPs1.FullName -replace '\.ps1', '.psd1' ;
-                    $CreateExoPSSessionPs1 = $CreateExoPSSessionPs1 |
-                    Get-Content | Where-Object { -not ($_ -like 'Write-Host*') } ;
-                    $CreateExoPSSessionPs1 -join "`n" |
-                    Set-Content -Path "$($CreateExoPSSessionManifest -replace '\.psd1','.psm1')" ;
-                    $NewCreateExoPSSessionManifest = @{
-                        Path          = $CreateExoPSSessionManifest ;
-                        RootModule    = Split-Path -Path ($CreateExoPSSessionManifest -replace '\.psd1', '.psm1') -Leaf ;
-                        ModuleVersion = '1.0' ;
-                        Author        = 'Todd Kadrie (https://github.com/tostka)' ;
-                        CompanyName   = 'toddomation.com' ;
-                    } ;
-                    write-verbose "New-ModuleManifest w`n$(($NewCreateExoPSSessionManifest|out-string).trim())"  ;
-                    New-ModuleManifest @NewCreateExoPSSessionManifest ;
-                    # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
-                    if($VerbosePreference = "Continue"){
-                        $VerbosePrefPrior = $VerbosePreference ;
-                        $VerbosePreference = "SilentlyContinue" ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    Import-Module "$($ExoPSModule.PSParentPath)\CreateExoPSSession.psm1" -Global -ErrorAction:Stop ;
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                } catch {
-                    Write-Warning -Message "Tried but failed to import the EXO PS module.`n`nError message:" ;
-                    throw $_ ;
-                } ;
-
-                try {
-                    $global:UserPrincipalName = $Credential.Username ;
-                    $global:ConnectionUri = 'https://outlook.office365.com/PowerShell-LiveId' ;
-                    $global:AzureADAuthorizationEndpointUri = 'https://login.windows.net/common' ;
-                    $global:PSSessionOption = New-PSSessionOption -CancelTimeout 5000 -IdleTimeout 43200000 ;
-                    $global:BypassMailboxAnchoring = $false ;
-                    $ExoPSSession = @{
-                        UserPrincipalName               = $global:UserPrincipalName ;
-                        ConnectionUri                   = $global:ConnectionUri ;
-                        AzureADAuthorizationEndpointUri = $global:AzureADAuthorizationEndpointUri ;
-                        PSSessionOption                 = $global:PSSessionOption ;
-                        BypassMailboxAnchoring          = $global:BypassMailboxAnchoring ;
-                    } ;
-                    write-verbose "New-ExoPSSession w`n$(($ExoPSSession|out-string).trim())" ;
-                    $ExoPSSession = New-ExoPSSession @ExoPSSession -ErrorAction:Stop ;
-                    write-verbose "Import-PSSession w`n$(($ImportPSSessionProps|out-string).trim())" ;
-                    # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
-                    if($VerbosePreference = "Continue"){
-                        $VerbosePrefPrior = $VerbosePreference ;
-                        $VerbosePreference = "SilentlyContinue" ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    Import-Module (Import-PSSession $ExoPSSession @ImportPSSessionProps) -Prefix $CommandPrefix -Global -DisableNameChecking -ErrorAction:Stop ;
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    UpdateImplicitRemotingHandler ;
-                    Add-PSTitleBar $sTitleBarTag ;
-                } catch {
-                    Write-Warning -Message "Failed to connect to EXO via the imported EXO PS module.`n`nError message:" ;
-                    throw $_ ;
-                } ;
-                #>
+                throw "MFA is not currently supported by the connect-exo cmdlet!. Use connect/disconnect/reconnect-exo2 instead" ; 
+                Break 
+                <# 4:24 PM 7/30/2020 HAD TO UNINSTALL THE EXOMFA module, a bundled cmdlet fundementally conflicted with ExchangeOnlineManagement#>
 
             } else {
                 $EXOsplat = @{
@@ -327,20 +203,16 @@ Function Connect-EXO {
                     Authentication    = "Basic" ;
                     AllowRedirection  = $true;
                 } ;
+                $EXOsplat.Add("Credential", $Credential); # just use the passed $Credential vari
 
-                # just use the passed $Credential vari
-                $EXOsplat.Add("Credential", $Credential);
-
+                $cMsg = "Connecting to Exchange Online ($($credential.username.split('@')[1]))"; 
                 If ($ProxyEnabled) {
-                    $EXOsplat.Add("sessionOption", $(New-PsSessionOption -ProxyAccessType IEConfig -ProxyAuthentication basic));
-                    Write-Host "Connecting to Exchange Online ($($credential.username.split('@')[1])) via Proxy"  ;
-                } Else {
-                    Write-Host "Connecting to Exchange Online ($($credential.username.split('@')[1]))"  ;
+                    $EXOsplat.Add("sessionOption", $(New-PsSessionOption -ProxyAccessType IEConfig -ProxyAuthentication basic)) ;
+                    $cMsg += " via Proxy"  ;
                 } ;
+                Write-Host $cMsg ;
                 write-verbose "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
-                Try {
-                    #$global:ExoPSSession = New-PSSession @EXOsplat ;
-                    $global:EOLSession = New-PSSession @EXOsplat ;
+                Try { $global:EOLSession = New-PSSession @EXOsplat ;
                 } catch {
                     Write-Warning -Message "Tried but failed to import the EXO PS module.`n`nError message:" ;
                     throw $_ ;
@@ -349,13 +221,13 @@ Function Connect-EXO {
                     if ($error[0].FullyQualifiedErrorId -eq '-2144108477,PSSessionOpenFailed') {
                         write-warning "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
                         throw "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-                        EXIT ;
+                        Break ;
                     } ;
                 } ;
                 if(!$global:EOLSession){
                     write-warning "$((get-date).ToString('HH:mm:ss')):FAILED TO RETURN PSSESSION!`nAUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
                     throw "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-                    EXIT ;
+                    Break ;
                 } ; 
                 $pltPSS = [ordered]@{
                     Session             = $global:EOLSession ;
@@ -367,7 +239,6 @@ Function Connect-EXO {
                 write-verbose "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltPSS|out-string).trim())" ;
                 Try {
                     # Verbose:Continue is VERY noisey for module loads. Bracketed suppress:
-                    # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
                     if($VerbosePreference = "Continue"){
                         $VerbosePrefPrior = $VerbosePreference ;
                         $VerbosePreference = "SilentlyContinue" ;
@@ -404,7 +275,7 @@ Function Connect-EXO {
                     } CATCH {
                         $ErrTrapd = $_ ; 
                         Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                        Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
+                        Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
                     } ; 
                     $pltPSS = [ordered]@{
                         Session             = $global:EOLSession ;
@@ -419,7 +290,7 @@ Function Connect-EXO {
                     } CATCH {
                         $ErrTrapd = $_ ; 
                         Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                        Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
+                        Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
                     } ; 
                     # reenable VerbosePreference:Continue, if set, during mod loads 
                     if($VerbosePrefPrior -eq "Continue"){
@@ -477,6 +348,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 1:18 PM 8/11/2020 fixed typo in *broken *closed varis in use; updated ExoV1 conn filter, to specificly target v1 (old matched v1 & v2) ; trimmed entire rem'd MFA block ; added trailing test-EXOToken confirm
     * 12:57 PM 8/4/2020 sorted ExchangeOnlineMgmt mod issues (splatting wo using splat char), if MS hadn't completely rewritten the access, this rewrite wouldn't have been necessary in the 1st place. I'm not looking forward to the org wide rewrites to recode verb-exoNoun -> verb-xoNoun, to accomodate the breaking-change blocking -Prefix 'exo'. ; # 1:04 PM 8/4/2020 cute: now the above error's stopped occuring on the problem tenant. Can't do further testing of the workaround, unless/until it breaks again ; * 2:39 PM 8/4/2020 fixed -match "^(Session|WinRM)\d*" rgx (lacked ^, mismatched EXOv2 conns)
     * 12:20 PM 7/29/2020 rewrite/port from connect-EXO to replace import-pssession with new connect-ExchangeOnline cmdlet (supports MFA natively) - #127 # *** LEFT OFF HERE 5:01 PM 7/29/2020 *** not sure if it supports allowclobber, if it's actually wrapping pssession, it sure as shit does!
     * 11:21 AM 7/28/2020 added Credential -> AcceptedDomains Tenant validation, also testing existing conn, and skipping reconnect unless unhealthy or wrong tenant to match credential
@@ -556,9 +428,21 @@ Function Connect-EXO2 {
     PROCESS {
         $bExistingEXOGood = $false ;
 
+        # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
         $modname = 'ExchangeOnlineManagement' ;
-        #Try {Get-Module $modname -listavailable -ErrorAction Stop | out-null } Catch {Install-Module $modname -scope CurrentUser ; } ;                 # installed
-        Try { Get-Module $modname -ErrorAction Stop | out-null } Catch { Import-Module -Name $modname -MinimumVersion '1.0.1' -ErrorAction Stop } ; # imported
+        $minvers = '1.0.1' ; 
+        Try {Get-Module -name $modname -listavailable -ErrorAction Stop | out-null } Catch {
+            $pltInMod=[ordered]@{Name=$modname} ; 
+            if( $env:COMPUTERNAME -match $rgxMyBoxUID ){$pltInMod.add('scope','CurrentUser')} else {$pltInMod.add('scope','AllUsers')} ;
+            write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):Install-Module w scope:$($pltInMod.scope)`n$(($pltInMod|out-string).trim())" ; 
+            Install-Module @pltIMod ; 
+        } ; # IsInstalled
+        $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; } ;
+        if($minvers){$pltIMod.add('MinimumVersion',$minvers) } ; 
+        Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
+            write-verbose "Import-Module w`n$(($pltIMod|out-string).trim())" ; 
+            Import-Module @pltIMod ; 
+        } ; # IsImported
 
         <# Get-PSSession | fl ConfigurationName,name,state,availability,computername
         -legacy remote-ps New-PSSession results in this PSS:
@@ -567,12 +451,14 @@ Function Connect-EXO2 {
           State             : Opened
           Availability      : Available
           ComputerName      : ps.outlook.com
+
         - legacy remote from jumpbox:
         ConfigurationName : Microsoft.Exchange
           Name              : Session6
           State             : Opened
           Availability      : Available
           ComputerName      : ps.outlook.com
+
         -while a connect-ExchangeOnline (non-MFA, haven't verified) connect results in this PSS:
           ConfigurationName : Microsoft.Exchange
           Name              : ExchangeOnlineInternalSession_4
@@ -677,15 +563,10 @@ Function Connect-EXO2 {
                 } CATCH {
                     $ErrTrapd = $_ ;
                     Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                    Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ;
+                    Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ;
                 } ;
             } CATCH [System.Management.Automation.RuntimeException] {
                 # see if we can trap the weird blank ConnnectionURI error
-                # ConnectionUri = 'https://outlook.office365.com/PowerShell-LiveId' ;
-                <# in connect-exchangeonline, when it hits, ConnectionURI isn't a string:
-                $ConnectionUri
-                System.Collections.Hashtable
-                #>
                 $pltCXO.Add('ConnectionUri', [string]'https://outlook.office365.com/powershell-liveid/') ;
                 write-warning -verbose:$true "$((get-date).ToString('HH:mm:ss')):'Blank ConnectionUri EXOv2 bug: Retrying with explicit 'ConnectionUri" ;
                 write-verbose "`n$((get-date).ToString('HH:mm:ss')):Connect-ExchangeOnline w`n$(($pltCXO|out-string).trim())" ;
@@ -696,7 +577,7 @@ Function Connect-EXO2 {
                 } CATCH {
                     $ErrTrapd = $_ ;
                     Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                    Exit #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ;
+                    Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ;
                 } ;
             } catch {
                 Write-Warning -Message "Tried but failed to connect to EXO V2 PS module.`n`nError message:" ;
@@ -706,7 +587,7 @@ Function Connect-EXO2 {
                 if ($error[0].FullyQualifiedErrorId -eq '-2144108477,PSSessionOpenFailed') {
                     write-warning "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
                     throw "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-                    EXIT ;
+                    Break ;
                 } ;
             } ;
 
@@ -715,7 +596,7 @@ Function Connect-EXO2 {
     END {
         if ($bExistingEXOGood -eq $false) {
             # verify the exov2 cmdlets actually imported as a tmp_ module w specifid prefix & 1st cmdlet:if(get-module -name tmp_* |%{gcm -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }){'Y'}else {'N'}
-            if (get-module -name tmp_* | ForEach-Object { Get-Command -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }) {
+            if ( (get-module -name tmp_* | ForEach-Object { Get-Command -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }) -AND (test-EXOToken) ) {
                 $bExistingEXOGood = $true ;
             } else { $bExistingEXOGood = $false ; }
             if ((Get-xoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())) {
@@ -1061,8 +942,8 @@ Function Reconnect-EXO {
         write-verbose "EXOv1:Disconnecting conflicting EXOv2 connection" ; 
         DisConnect-EXO2 ; 
     } ; 
-    if ($exov2Broken.count -gt 0){for ($index = 0 ;$index -lt $psBroken.count ;$index++){Remove-PSSession -session $psBroken[$index]} };
-    if ($exov2Closed.count -gt 0){for ($index = 0 ;$index -lt $psClosed.count ; $index++){Remove-PSSession -session $psClosed[$index] } } ; 
+    if ($exov2Broken.count -gt 0){for ($index = 0 ;$index -lt $exov2Broken.count ;$index++){Remove-PSSession -session $exov2Broken[$index]} };
+    if ($exov2Closed.count -gt 0){for ($index = 0 ;$index -lt $exov2Closed.count ; $index++){Remove-PSSession -session $exov2Closed[$index] } } ; 
     
     # fault tolerant looping exo connect, don't let it exit until a connection is present, and stable, or return error for hard time out
     $tryNo=0 ; $1F=$false ;
@@ -1119,6 +1000,7 @@ Function Reconnect-EXO2 {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 1:45 PM 8/11/2020 added trailing test-EXOToken confirm
     * 2:39 PM 8/4/2020 fixed -match "^(Session|WinRM)\d*" rgx (lacked ^, mismatched EXOv2 conns)
     * 3:55 PM 7/30/2020 rewrite/port from reconnect-EXO to replace import-pssession with new connect-ExchangeOnline cmdlet (supports MFA natively) - #127 # *** LEFT OFF HERE 5:01 PM 7/29/2020 *** not sure if it supports allowclobber, if it's actually wrapping pssession, it sure as shit does!
     * 10:35 AM 7/28/2020 tweaked retry loop to not retry-sleep 1st attempt
@@ -1196,8 +1078,8 @@ Function Reconnect-EXO2 {
         $exov2Broken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"}
         $exov2Closed = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Closed*"}
         
-        if ($exov2Broken.count -gt 0){for ($index = 0 ;$index -lt $psBroken.count ;$index++){Remove-PSSession -session $psBroken[$index]} };
-        if ($exov2Closed.count -gt 0){for ($index = 0 ;$index -lt $psClosed.count ; $index++){Remove-PSSession -session $psClosed[$index] } } ; 
+        if ($exov2Broken.count -gt 0){for ($index = 0 ;$index -lt $exov2Broken.count ;$index++){Remove-PSSession -session $exov2Broken[$index]} };
+        if ($exov2Closed.count -gt 0){for ($index = 0 ;$index -lt $exov2Closed.count ; $index++){Remove-PSSession -session $exov2Closed[$index] } } ; 
     
         # appears MFA may not properly support passing back a session vari, so go right to strict hostname matches
         $exov2Good = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')} ; 
@@ -1226,7 +1108,8 @@ Function Reconnect-EXO2 {
 
     } ;  # PROC-E
     END {
-        if(Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')} ){ 
+        # if ( (get-module -name tmp_* | ForEach-Object { Get-Command -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }) -AND (test-EXOToken) ) {
+        if( (Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')}) -AND (test-EXOToken) ){ 
             if ((Get-xoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
                 # validate that the connected EXO is to the $Credential tenant    
                 write-verbose "(EXOv2 Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
@@ -1288,14 +1171,10 @@ function Remove-EXOBrokenClosed(){
     #>
     [CmdletBinding()]
     [Alias('dxob')]
-    $psBroken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"} ;
-    $psClosed = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Closed*"} ;
-    if ($psBroken.count -gt 0){
-        for ($index = 0; $index -lt $psBroken.count; $index++) {Remove-PSSession -session $psBroken[$index] } ;
-    } ;
-    if ($psClosed.count -gt 0){
-        for ($index = 0; $index -lt $psClosed.count; $index++) {Remove-PSSession -session $psClosed[$index] } ;
-    } ;
+    $exov2Broken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"} ;
+    $exov2Closed = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Closed*"} ;
+    if ($exov2Broken.count -gt 0){for ($index = 0; $index -lt $exov2Broken.count; $index++) {Remove-PSSession -session $exov2Broken[$index] } } ;
+    if ($exov2Closed.count -gt 0){for ($index = 0; $index -lt $exov2Closed.count; $index++) {Remove-PSSession -session $exov2Closed[$index] } } ;
 }
 
 #*------^ Remove-EXOBrokenClosed.ps1 ^------
@@ -1419,7 +1298,7 @@ function rxoVEN {
 function test-EXOToken {
     <#
     .SYNOPSIS
-    test-EXOToken - Retrieve and summarize EXO Active Token (leverages ExchangeOnlineManagement 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll')
+    test-EXOToken - Retrieve and summarize EXOv2 OAuth Active Token (leverages ExchangeOnlineManagement 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll', OAuth isn't used for EXO legacy basic-auth connections)
     .NOTES
     Version     : 1.0.0.0
     Author      : Todd Kadrie
@@ -1430,11 +1309,16 @@ function test-EXOToken {
     License     : MIT License
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/verb-aad
+    Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS
+    * 12:21 PM 8/11/2020 added dependancy mod try/tach, and a catch on the failure error returned by the underlying test-ActiveToken cmd
     * 11:58 AM 8/9/2020 init
     .DESCRIPTION
-    test-EXOToken - Retrieve and summarize EXO Active Token (leverages ExchangeOnlineManagement 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll')
-    Trying to find a way to verify status of token, wo any interactive material, lifted concept from EXOM UpdateImplicitRemotingHandler() Test-ActiveToken doesn't appear to normally be exposed anywhere but with explicit load of the .dll
+    test-EXOToken - Retrieve and summarize EXOv2 OAuth Active Token (leverages ExchangeOnlineManagement 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll', OAuth isn't used for EXO legacy basic-auth connections)
+    Trying to find a way to verify status of token, wo any interactive EXO traffic. Lifted concept from EXOM UpdateImplicitRemotingHandler().
+    Test-ActiveToken doesn't appear to normally be exposed anywhere but with explicit load of the .dll
+    .OUTPUT
+    System.Boolean
     .EXAMPLE
     $hasActiveToken = test-EXOToken 
     $psss=Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" } ;  
@@ -1450,29 +1334,56 @@ function test-EXOToken {
     #Requires -Modules ExchangeOnlineManagement
     [CmdletBinding()] 
     Param() ;
-    BEGIN {
-      $verbose = ($VerbosePreference -eq "Continue") ;
-      $tmodpath = join-path -path (split-path (get-module exchangeonlinemanagement).path) -ChildPath 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll' ;
-      $error.clear() ;
-      TRY {
-          import-module -name $tmodpath -Cmdlet Test-ActiveToken;
-      } CATCH {
-          Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-          Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
-      } ; 
-      
-    } ;
+    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
-        if(gcm -name Test-ActiveToken){
-            $hasActiveToken = $false ; 
+        $hasActiveToken = $false ; 
+        # Save time and pretest for *any* EXOv2 PSSession, before bothering to test (no session - even closed/broken => no OAuth token)
+        $exov2 = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*"} ; 
+        if($exov2){
+        
+            # ==load dependancy module:
+            # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
+            $modname = 'ExchangeOnlineManagement' ;
+            $minvers = '1.0.1' ; 
+            Try {Get-Module -name $modname -listavailable -ErrorAction Stop | out-null } Catch {
+                $pltInMod=[ordered]@{Name=$modname} ; 
+                if( $env:COMPUTERNAME -match $rgxMyBoxUID ){$pltInMod.add('scope','CurrentUser')} else {$pltInMod.add('scope','AllUsers')} ;
+                write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):Install-Module w scope:$($pltInMod.scope)`n$(($pltInMod|out-string).trim())" ; 
+                Install-Module @pltIMod ; 
+            } ; # IsInstalled
+            $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; } ;
+            if($minvers){$pltIMod.add('MinimumVersion',$minvers) } ; 
+            Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
+                write-verbose "Import-Module w`n$(($pltIMod|out-string).trim())" ; 
+                Import-Module @pltIMod ; 
+            } ; # IsImported
+      
             $error.clear() ;
             TRY {
-                $hasActiveToken = Test-ActiveToken ; 
+                #=load function module (subcomponent of dep module, pathed from same dir)
+                $tmodpath = join-path -path (split-path (get-module $modname -list).path) -ChildPath 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll' ;
+                if(test-path $tmodpath){ import-module -name $tmodpath -Cmdlet Test-ActiveToken }
+                else { throw "Unable to locate:Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll" } ;  
             } CATCH {
                 Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-                Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
-            } ;  
-            } else { 
+                Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+            } ; 
+        
+            if(gcm -name Test-ActiveToken){
+                $error.clear() ;
+                TRY {
+                    $hasActiveToken = Test-ActiveToken ; 
+                } CATCH [System.Management.Automation.RuntimeException] {
+                    # reflects: test-activetoken : Object reference not set to an instance of an object.
+                    write-verbose "Token not present"
+                } CATCH {
+                    Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                    Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                } ;  
+            } else { throw "missing:gcm -name Test-ActiveToken" } 
+
+        } else { 
+            write-verbose "No Token: No existing EXOv2 PSSession (ConfigurationName -like 'Microsoft.Exchange' -AND Name -like 'ExchangeOnlineInternalSession*')" ; 
         } ; 
     } ; 
     END{ $hasActiveToken | write-output } ;
@@ -1488,8 +1399,8 @@ Export-ModuleMember -Function Connect-EXO,Connect-EXO2,cxo2cmw,cxo2TOL,cxo2TOR,c
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUIPGrM6NqcLp+Ffyy1ojJ4VvW
-# TK6gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUSn28stwHsbOyggmN/SI+yOnc
+# 3qugggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -1504,9 +1415,9 @@ Export-ModuleMember -Function Connect-EXO,Connect-EXO2,cxo2cmw,cxo2TOL,cxo2TOR,c
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSpN5k1
-# zS54ubw4L1F4/uWKvM/XeDANBgkqhkiG9w0BAQEFAASBgFunNXTdwUtl+FOD4OWh
-# Zrny3ZVpf+Gv1oCMhNh7pA3EexKDfqwMgFVa9mvL8tqBAIMqEUXhUdh4pjO7EU9+
-# VGaiC6tGTiGQrb4gWZRcf5KiOzo45HG4MutXbkQP7Poufq8qFX4sFlu6M71rr+xy
-# wb6glYjkfKjZq4DFfA8mEPSB
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRHz4fx
+# vV5HtcC1RF0yyN31d+uiejANBgkqhkiG9w0BAQEFAASBgK34lvgG2jwaiKXGVKhj
+# c8TXUYAVnAsij1gVpA9UFZve0Wt7yLLYbYc//6Wfuj2hWXTW8hg31EQduT0IpODx
+# aJAduqY1Hr/AAH0wdq6HVaEXRfxlZvsD5bpSz7iAayzAVwLfV+KpzDJRwkl6vBtP
+# 464+OeIOC2bZQHddL2tY6ijQ
 # SIG # End signature block

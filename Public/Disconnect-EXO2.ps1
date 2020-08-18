@@ -47,4 +47,5 @@ Function Disconnect-EXO2 {
     Disconnect-PssBroken -verbose:$($verbose) ;
     Remove-PSTitlebar 'EXO' ;
 }
+
 #*------^ Disconnect-EXO2.ps1 ^------

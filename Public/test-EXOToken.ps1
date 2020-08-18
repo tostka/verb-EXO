@@ -2,7 +2,7 @@
 function test-EXOToken {
     <#
     .SYNOPSIS
-    test-EXOToken - Retrieve and summarize EXO Active Token (leverages ExchangeOnlineManagement 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll')
+    test-EXOToken - Retrieve and summarize EXOv2 OAuth Active Token (leverages ExchangeOnlineManagement 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll', OAuth isn't used for EXO legacy basic-auth connections)
     .NOTES
     Version     : 1.0.0.0
     Author      : Todd Kadrie
@@ -13,11 +13,16 @@ function test-EXOToken {
     License     : MIT License
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/verb-aad
+    Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS
+    * 12:21 PM 8/11/2020 added dependancy mod try/tach, and a catch on the failure error returned by the underlying test-ActiveToken cmd
     * 11:58 AM 8/9/2020 init
     .DESCRIPTION
-    test-EXOToken - Retrieve and summarize EXO Active Token (leverages ExchangeOnlineManagement 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll')
-    Trying to find a way to verify status of token, wo any interactive material, lifted concept from EXOM UpdateImplicitRemotingHandler() Test-ActiveToken doesn't appear to normally be exposed anywhere but with explicit load of the .dll
+    test-EXOToken - Retrieve and summarize EXOv2 OAuth Active Token (leverages ExchangeOnlineManagement 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll', OAuth isn't used for EXO legacy basic-auth connections)
+    Trying to find a way to verify status of token, wo any interactive EXO traffic. Lifted concept from EXOM UpdateImplicitRemotingHandler().
+    Test-ActiveToken doesn't appear to normally be exposed anywhere but with explicit load of the .dll
+    .OUTPUT
+    System.Boolean
     .EXAMPLE
     $hasActiveToken = test-EXOToken 
     $psss=Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" } ;  
@@ -33,31 +38,59 @@ function test-EXOToken {
     #Requires -Modules ExchangeOnlineManagement
     [CmdletBinding()] 
     Param() ;
-    BEGIN {
-      $verbose = ($VerbosePreference -eq "Continue") ;
-      $tmodpath = join-path -path (split-path (get-module exchangeonlinemanagement).path) -ChildPath 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll' ;
-      $error.clear() ;
-      TRY {
-          import-module -name $tmodpath -Cmdlet Test-ActiveToken;
-      } CATCH {
-          Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-          Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
-      } ; 
-      
-    } ;
+    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
     PROCESS {
-        if(gcm -name Test-ActiveToken){
-            $hasActiveToken = $false ; 
+        $hasActiveToken = $false ; 
+        # Save time and pretest for *any* EXOv2 PSSession, before bothering to test (no session - even closed/broken => no OAuth token)
+        $exov2 = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*"} ; 
+        if($exov2){
+        
+            # ==load dependancy module:
+            # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
+            $modname = 'ExchangeOnlineManagement' ;
+            $minvers = '1.0.1' ; 
+            Try {Get-Module -name $modname -listavailable -ErrorAction Stop | out-null } Catch {
+                $pltInMod=[ordered]@{Name=$modname} ; 
+                if( $env:COMPUTERNAME -match $rgxMyBoxUID ){$pltInMod.add('scope','CurrentUser')} else {$pltInMod.add('scope','AllUsers')} ;
+                write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):Install-Module w scope:$($pltInMod.scope)`n$(($pltInMod|out-string).trim())" ; 
+                Install-Module @pltIMod ; 
+            } ; # IsInstalled
+            $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; } ;
+            if($minvers){$pltIMod.add('MinimumVersion',$minvers) } ; 
+            Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
+                write-verbose "Import-Module w`n$(($pltIMod|out-string).trim())" ; 
+                Import-Module @pltIMod ; 
+            } ; # IsImported
+      
             $error.clear() ;
             TRY {
-                $hasActiveToken = Test-ActiveToken ; 
+                #=load function module (subcomponent of dep module, pathed from same dir)
+                $tmodpath = join-path -path (split-path (get-module $modname -list).path) -ChildPath 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll' ;
+                if(test-path $tmodpath){ import-module -name $tmodpath -Cmdlet Test-ActiveToken }
+                else { throw "Unable to locate:Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll" } ;  
             } CATCH {
                 Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-                Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
-            } ;  
-            } else { 
+                Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+            } ; 
+        
+            if(gcm -name Test-ActiveToken){
+                $error.clear() ;
+                TRY {
+                    $hasActiveToken = Test-ActiveToken ; 
+                } CATCH [System.Management.Automation.RuntimeException] {
+                    # reflects: test-activetoken : Object reference not set to an instance of an object.
+                    write-verbose "Token not present"
+                } CATCH {
+                    Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                    Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                } ;  
+            } else { throw "missing:gcm -name Test-ActiveToken" } 
+
+        } else { 
+            write-verbose "No Token: No existing EXOv2 PSSession (ConfigurationName -like 'Microsoft.Exchange' -AND Name -like 'ExchangeOnlineInternalSession*')" ; 
         } ; 
     } ; 
     END{ $hasActiveToken | write-output } ;
-} ; 
+}
+
 #*------^ test-EXOToken.ps1 ^------

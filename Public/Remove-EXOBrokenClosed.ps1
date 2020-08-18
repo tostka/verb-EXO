@@ -1,4 +1,4 @@
-﻿#*------v Function Remove-EXOBrokenClosed v------
+﻿#*------v Remove-EXOBrokenClosed.ps1 v------
 function Remove-EXOBrokenClosed(){
     <#
     .SYNOPSIS
@@ -44,13 +44,10 @@ function Remove-EXOBrokenClosed(){
     #>
     [CmdletBinding()]
     [Alias('dxob')]
-    $psBroken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"} ;
-    $psClosed = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Closed*"} ;
-    if ($psBroken.count -gt 0){
-        for ($index = 0; $index -lt $psBroken.count; $index++) {Remove-PSSession -session $psBroken[$index] } ;
-    } ;
-    if ($psClosed.count -gt 0){
-        for ($index = 0; $index -lt $psClosed.count; $index++) {Remove-PSSession -session $psClosed[$index] } ;
-    } ;
-} ;
-#*------^ END Function Remove-EXOBrokenClosed ^------
+    $exov2Broken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"} ;
+    $exov2Closed = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Closed*"} ;
+    if ($exov2Broken.count -gt 0){for ($index = 0; $index -lt $exov2Broken.count; $index++) {Remove-PSSession -session $exov2Broken[$index] } } ;
+    if ($exov2Closed.count -gt 0){for ($index = 0; $index -lt $exov2Closed.count; $index++) {Remove-PSSession -session $exov2Closed[$index] } } ;
+}
+
+#*------^ Remove-EXOBrokenClosed.ps1 ^------
