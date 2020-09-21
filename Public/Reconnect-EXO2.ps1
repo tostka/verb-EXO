@@ -10,6 +10,8 @@ Function Reconnect-EXO2 {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 1:30 PM 9/21/2020 added caching of AcceptedDomain, dynamically into XXXMeta - checks for .o365_AcceptedDomains, and pops w (Get-exoAcceptedDomain).domainname when blank. 
+        As it's added to the $global meta, that means it stays cached cross-session, completely eliminates need to dyn query per rxo, after the first one, that stocks the value
     * 1:45 PM 8/11/2020 added trailing test-EXOToken confirm
     * 2:39 PM 8/4/2020 fixed -match "^(Session|WinRM)\d*" rgx (lacked ^, mismatched EXOv2 conns)
     * 3:55 PM 7/30/2020 rewrite/port from reconnect-EXO to replace import-pssession with new connect-ExchangeOnline cmdlet (supports MFA natively) - #127 # *** LEFT OFF HERE 5:01 PM 7/29/2020 *** not sure if it supports allowclobber, if it's actually wrapping pssession, it sure as shit does!
@@ -120,7 +122,19 @@ Function Reconnect-EXO2 {
     END {
         # if ( (get-module -name tmp_* | ForEach-Object { Get-Command -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }) -AND (test-EXOToken) ) {
         if( (Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')}) -AND (test-EXOToken) ){ 
-            if ((Get-xoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
+            # implement caching of accepteddoms into the XXXMeta, in the session (cut back on queries to EXO on acceptedom)
+            $credDom = ($Credential.username.split("@"))[1] ;
+            $Metas=(get-variable *meta|Where-Object{$_.name -match '^\w{3}Meta$'}) ;
+            foreach ($Meta in $Metas){
+                if( ($credDom -eq $Meta.value.legacyDomain) -OR ($credDom -eq $Meta.value.o365_TenantDomain) -OR ($credDom -eq $Meta.value.o365_OPDomain)){
+                    if(!$Meta.value.o365_AcceptedDomains){
+                        set-variable -Name $meta.name -Value ((get-variable -name $meta.name).value  += @{'o365_AcceptedDomains' = (Get-xoAcceptedDomain).domainname} )
+                    } ; 
+                    break ;
+                } ;
+            } ;
+            #if ((Get-xoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
+            if($Meta.value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
                 # validate that the connected EXO is to the $Credential tenant    
                 write-verbose "(EXOv2 Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
                 $bExistingEXOGood = $true ; 

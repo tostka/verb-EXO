@@ -10,6 +10,8 @@ Function Reconnect-EXO {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 1:30 PM 9/21/2020 added caching of AcceptedDomain, dynamically into XXXMeta - checks for .o365_AcceptedDomains, and pops w (Get-exoAcceptedDomain).domainname when blank. 
+        As it's added to the $global meta, that means it stays cached cross-session, completely eliminates need to dyn query per rxo, after the first one, that stocks the value
     * 2:39 PM 8/4/2020 fixed -match "^(Session|WinRM)\d*" rgx (lacked ^, mismatched EXOv2 conns)
     * 10:35 AM 7/28/2020 tweaked retry loop to not retry-sleep 1st attempt
     * 3:24 PM 7/24/2020 updated to support tenant-alignment & sub'd out showdebug for verbose
@@ -69,7 +71,7 @@ Function Reconnect-EXO {
     ) ;
     $verbose = ($VerbosePreference -eq "Continue") ; 
     if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
-    
+
     # if we're using EXOv1-style BasicAuth, clear incompatible existing EXOv2 PSS's
     $exov2Good = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')} ; 
     $exov2Broken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"}
@@ -79,8 +81,8 @@ Function Reconnect-EXO {
         write-verbose "EXOv1:Disconnecting conflicting EXOv2 connection" ; 
         DisConnect-EXO2 ; 
     } ; 
-    if ($exov2Broken.count -gt 0){for ($index = 0 ;$index -lt $exov2Broken.count ;$index++){Remove-PSSession -session $exov2Broken[$index]} };
-    if ($exov2Closed.count -gt 0){for ($index = 0 ;$index -lt $exov2Closed.count ; $index++){Remove-PSSession -session $exov2Closed[$index] } } ; 
+    if ($exov2Broken.count -gt 0){for ($index = 0 ;$index -lt $psBroken.count ;$index++){Remove-PSSession -session $psBroken[$index]} };
+    if ($exov2Closed.count -gt 0){for ($index = 0 ;$index -lt $psClosed.count ; $index++){Remove-PSSession -session $psClosed[$index] } } ; 
     
     # fault tolerant looping exo connect, don't let it exit until a connection is present, and stable, or return error for hard time out
     $tryNo=0 ; $1F=$false ;
@@ -102,7 +104,20 @@ Function Reconnect-EXO {
             } ;
         
         }elseif($legPSSession){
-            if((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
+            # implement caching of accepteddoms into the XXXMeta, in the session (cut back on queries to EXO on acceptedom)
+            $credDom = ($Credential.username.split("@"))[1] ;
+            $Metas=(get-variable *meta|Where-Object{$_.name -match '^\w{3}Meta$'}) ;
+            foreach ($Meta in $Metas){
+                if( ($credDom -eq $Meta.value.legacyDomain) -OR ($credDom -eq $Meta.value.o365_TenantDomain) -OR ($credDom -eq $Meta.value.o365_OPDomain)){
+                    if(!$Meta.value.o365_AcceptedDomains){
+                        set-variable -Name $meta.name -Value ((get-variable -name $meta.name).value  += @{'o365_AcceptedDomains' = (Get-exoAcceptedDomain).domainname} )
+                    } ; 
+                    break ;
+                } ;
+            } ;
+            #if((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
+            # do caching & check cached value, not qry unless unpopulated (first pass in global session)
+            if($Meta.value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
                 # validate that the connected EXO is to the $Credential tenant    
                 write-verbose "(Authenticated to EXO:$($Credential.username.split('@')[1].tostring()))" ; 
             } else { 
