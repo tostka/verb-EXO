@@ -10,6 +10,7 @@ Function Reconnect-EXO {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 8:30 AM 10/22/2020 added $TenOrg, swapped looping meta resolve with 1-liner approach ; added AcceptedDom caching to the middle status test (suppress one more get-exoaccepteddomain call if possible)
     * 1:30 PM 9/21/2020 added caching of AcceptedDomain, dynamically into XXXMeta - checks for .o365_AcceptedDomains, and pops w (Get-exoAcceptedDomain).domainname when blank. 
         As it's added to the $global meta, that means it stays cached cross-session, completely eliminates need to dyn query per rxo, after the first one, that stocks the value
     * 2:39 PM 8/4/2020 fixed -match "^(Session|WinRM)\d*" rgx (lacked ^, mismatched EXOv2 conns)
@@ -72,6 +73,8 @@ Function Reconnect-EXO {
     $verbose = ($VerbosePreference -eq "Continue") ; 
     if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
 
+    $TenOrg = get-TenantTag -Credential $Credential ;
+    
     # if we're using EXOv1-style BasicAuth, clear incompatible existing EXOv2 PSS's
     $exov2Good = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')} ; 
     $exov2Broken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"}
@@ -105,6 +108,13 @@ Function Reconnect-EXO {
         
         }elseif($legPSSession){
             # implement caching of accepteddoms into the XXXMeta, in the session (cut back on queries to EXO on acceptedom)
+            #$TenOrg = get-TenantTag -Credential $Credential ;
+            if( get-command Get-exoAcceptedDomain -ea 0) {
+                if(!(Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains){
+                    set-Variable  -name "$($TenOrg)Meta" -value ( (Get-Variable  -name "$($TenOrg)Meta").value += @{'o365_AcceptedDomains' = (Get-exoAcceptedDomain).domainname} )
+                } ;
+            } ; 
+            <#
             $credDom = ($Credential.username.split("@"))[1] ;
             $Metas=(get-variable *meta|Where-Object{$_.name -match '^\w{3}Meta$'}) ;
             foreach ($Meta in $Metas){
@@ -115,9 +125,11 @@ Function Reconnect-EXO {
                     break ;
                 } ;
             } ;
-            #if((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
+            #>
+                #if((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
             # do caching & check cached value, not qry unless unpopulated (first pass in global session)
-            if($Meta.value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
+            #if($Meta.value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
+            if((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
                 # validate that the connected EXO is to the $Credential tenant    
                 write-verbose "(Authenticated to EXO:$($Credential.username.split('@')[1].tostring()))" ; 
             } else { 

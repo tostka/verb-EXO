@@ -21,6 +21,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 8:30 AM 10/22/2020 ren'd $TentantTag -> $TenOrg, swapped looping meta resolve with 1-liner approach ; added AcceptedDom caching to the middle status test (suppress one more get-exoaccepteddomain call if possible)
     * 3:45 PM 10/8/2020 added AcceptedDomain caching to connect-exo as well
     * 1:18 PM 8/11/2020 fixed typo in *broken *closed varis in use; updated ExoV1 conn filter, to specificly target v1 (old matched v1 & v2) ; trimmed entire rem'd MFA block 
     * 4:52 PM 8/4/2020 fixed regex for id'ing legacy pss's
@@ -95,10 +96,10 @@ Function Connect-EXO {
         } ;
 
         $sTitleBarTag = "EXO" ;
-        $TentantTag=get-TenantTag -Credential $Credential ; 
-        if($TentantTag -ne 'TOR'){
+        $TenOrg=get-TenantTag -Credential $Credential ; 
+        if($TenOrg -ne 'TOR'){
             # explicitly leave this tenant (default) untagged
-            $sTitleBarTag += $TentantTag ;
+            $sTitleBarTag += $TenOrg ;
         } ; 
     } ;  # BEG-E
     PROCESS{
@@ -120,8 +121,15 @@ Function Connect-EXO {
         #if( Get-PSSession|Where-Object{($_.ComputerName -match $rgxExoPsHostName) -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}){
         # EXOv1 & v2 both use ComputerName -match $rgxExoPsHostName, need to use the distinctive differentiators instead
         if(Get-PSSession | where-object { $_.ConfigurationName -like "Microsoft.Exchange" -AND $_.Name -match "^(Session|WinRM)\d*" -AND $_.State -eq 'Opened' -AND $_.Availability -eq 'Available' }){
-            if( get-command Get-exoAcceptedDomain) {
-                if ((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
+            if( get-command Get-exoAcceptedDomain -ea 0) {
+                #if ((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
+                #-=-=-=-=-=-=-=-=
+                #$TenOrg = get-TenantTag -Credential $Credential ;
+                if(!(Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains){
+                    set-Variable  -name "$($TenOrg)Meta" -value ( (Get-Variable  -name "$($TenOrg)Meta").value += @{'o365_AcceptedDomains' = (Get-exoAcceptedDomain).domainname} )
+                } ;
+                if((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
+
                     # validate that the connected EXO is to the $Credential tenant    
                     write-verbose "(Existing EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
                     $bExistingEXOGood = $true ; 
@@ -267,6 +275,7 @@ Function Connect-EXO {
     END {
         if($bExistingEXOGood -eq $false){ 
             # implement caching of accepteddoms into the XXXMeta, in the session (cut back on queries to EXO on acceptedom)
+            <#
             $credDom = ($Credential.username.split("@"))[1] ;
             $Metas=(get-variable *meta|Where-Object{$_.name -match '^\w{3}Meta$'}) ;
             foreach ($Meta in $Metas){
@@ -277,9 +286,19 @@ Function Connect-EXO {
                     break ;
                 } ;
             } ;
+            #>
+            # simpler non-looping version of testing for meta value, and adding/caching where absent
+            #$TenOrg = get-TenantTag -Credential $Credential ;
+            if( get-command Get-exoAcceptedDomain -ea 0) {
+                if(!(Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains){
+                    
+                    set-Variable  -name "$($TenOrg)Meta" -value ( (Get-Variable  -name "$($TenOrg)Meta").value += @{'o365_AcceptedDomains' = (Get-exoAcceptedDomain).domainname} )
+                } ; 
+            } ; 
             #if ((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
             # do caching & check cached value, not qry unless unpopulated (first pass in global session)
-            if($Meta.value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
+            #if($Meta.value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
+            if((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
                 # validate that the connected EXO is to the $Credential tenant    
                 write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
                 $bExistingEXOGood = $true ; 
