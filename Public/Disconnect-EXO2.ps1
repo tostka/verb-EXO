@@ -43,7 +43,11 @@ Function Disconnect-EXO2 {
     #Try {Get-Module $modname -listavailable -ErrorAction Stop | out-null } Catch {Install-Module $modname -scope CurrentUser ; } ;                 # installed
     Try {Get-Module $modname -ErrorAction Stop | out-null } Catch {Import-Module -Name $modname -MinimumVersion '1.0.1' -ErrorAction Stop  } ; # imported
     # just alias disconnect-ExchangeOnline, it retires token etc as well as closing PSS, but biggest reason is it's got a confirm, hard-coded, needs a function to override
-    Disconnect-ExchangeOnline -confirm:$false ; 
+    
+    #Disconnect-ExchangeOnline -confirm:$false ; 
+    # just use the updated RemoveExistingEXOPSSession
+    RemoveExistingEXOPSSession
+    
     Disconnect-PssBroken -verbose:$($verbose) ;
     Remove-PSTitlebar 'EXO' ;
 }
