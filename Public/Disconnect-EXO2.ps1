@@ -15,6 +15,7 @@ Function Disconnect-EXO2 {
     Github      : https://github.com/tostka
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 1:14 PM 3/1/2021 added color reset
     * 9:55 AM 7/30/2020 EXO v2 version, adapted from Disconnect-EXO, + some content from RemoveExistingPSSession
     .DESCRIPTION
     Disconnect-EXO2 - Remove all the existing exchange online PSSessions
@@ -50,6 +51,7 @@ Function Disconnect-EXO2 {
     
     Disconnect-PssBroken -verbose:$($verbose) ;
     Remove-PSTitlebar 'EXO' ;
+    [console]::ResetColor()  # reset console colorscheme
 }
 
 #*------^ Disconnect-EXO2.ps1 ^------

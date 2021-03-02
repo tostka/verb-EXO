@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.44.0
+  Version     : 1.0.43.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -977,7 +977,7 @@ Function Connect-EXO {
                 # splice in console color scheming
                 if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
                     $Host.UI.RawUI.BackgroundColor = $PSBgColor
-                    $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
+                    $Host.UI.RawUI.ForegroundColor = $PSForegrnd ; 
                 } ;
             } ;
         } ; 
@@ -1456,7 +1456,7 @@ Function Connect-EXO2 {
         # splice in console color scheming
         if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
             $Host.UI.RawUI.BackgroundColor = $PSBgColor
-            $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
+            $Host.UI.RawUI.ForegroundColor = $PSForegrnd ; 
         } ;
     }  # END-E
 }
@@ -3848,8 +3848,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUfRmgBJUCoxdC7Wul8ABEKIgA
-# KUCgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQULlQ87mhDWd38xZRS0QqbH1Jr
+# EpmgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -3864,9 +3864,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQ/jXr6
-# rqMDh/QNRU2V8IZ4TQzoDzANBgkqhkiG9w0BAQEFAASBgLVKeY9qTJkIX0w3dI5J
-# VgHCIQfroJEWr6kHQbS4oQPP18OxrlmvjJof1uiB9MEljUYunK2af7+qwqt/lOTb
-# Gw3orMSm7zYdImkteq1eRrEQ/rgWCzcfbQRO4/TS12GQee6ycrEdnCUqvoTkCELO
-# 7oek3F30VbI7vCEbMXtHlQXF
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQWA8W9
+# WB2DTXqoweE5XyvegzAXJzANBgkqhkiG9w0BAQEFAASBgAYwYTjYYEMPgNWYuJ0N
+# x2qeCgOLsndHt+Wvu8rY8fT4J2v0ivJeisj6IpZF5giHrgkdPSI7nmOmVBWtvZIO
+# 5pT/JHg9VunI/aJHaKVigEzxojIuygr7GwrU5Nc/I0CZiBXtRYgaSpC+JkaNyVF3
+# uMXwWXGH4T7ef/3bMKzatyiY
 # SIG # End signature block

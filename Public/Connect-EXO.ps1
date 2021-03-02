@@ -21,6 +21,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 1:15 PM 3/1/2021 added org-level color-coded console
     * 8:30 AM 10/22/2020 ren'd $TentantTag -> $TenOrg, swapped looping meta resolve with 1-liner approach ; added AcceptedDom caching to the middle status test (suppress one more get-exoaccepteddomain call if possible)
     * 3:45 PM 10/8/2020 added AcceptedDomain caching to connect-exo as well
     * 1:18 PM 8/11/2020 fixed typo in *broken *closed varis in use; updated ExoV1 conn filter, to specificly target v1 (old matched v1 & v2) ; trimmed entire rem'd MFA block 
@@ -306,6 +307,11 @@ Function Connect-EXO {
                 write-error "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ; 
                 Disconnect-exo ; 
                 $bExistingEXOGood = $false ; 
+                # splice in console color scheming
+                if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
+                    $Host.UI.RawUI.BackgroundColor = $PSBgColor
+                    $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
+                } ;
             } ;
         } ; 
     }  # END-E 

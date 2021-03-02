@@ -18,6 +18,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 1:14 PM 3/1/2021 added color reset
     * 3:24 PM 7/24/2020 updated to support tenant-alignment & sub'd out showdebug for verbose
     * 11:50 AM 5/27/2020 added alias:dxo win func
     * 2:34 PM 4/20/2020 added local $rgxExoPsHostName
@@ -53,6 +54,7 @@ Function Disconnect-EXO {
     Disconnect-PssBroken -verbose:$($verbose) ;
     Remove-PSTitlebar 'EXO' ;
     
+    [console]::ResetColor()  # reset console colorscheme
     <#
     $existingPSSession = Get-PSSession | Where-Object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*"} ;
     if ($existingPSSession.count -gt 0){
