@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.46.0
+  Version     : 1.0.45.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -979,13 +979,12 @@ Function Connect-EXO {
                 Disconnect-exo ; 
                 $bExistingEXOGood = $false ; 
                 # splice in console color scheming
-                <# borked by psreadline v1/v2 breaking changes
                 if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
                     write-verbose "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
                     $Host.UI.RawUI.BackgroundColor = $PSBgColor
                     $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
                 } ;
-                #>
+
             } ;
         } ; 
     }  # END-E 
@@ -1465,13 +1464,11 @@ Function Connect-EXO2 {
         } ;
         $bExistingEXOGood | write-output ;
         # splice in console color scheming
-        <# borked by psreadline v1/v2 breaking changes
         if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
             write-verbose "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
             $Host.UI.RawUI.BackgroundColor = $PSBgColor
             $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
         } ;
-        #>
     }  # END-E
 }
 
@@ -3862,8 +3859,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUYCwZ2C1DXwePJhNsSUfBt+Zk
-# cF+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUR5qXHnpAFJrSvlDUmBVIpEOF
+# cNWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -3878,9 +3875,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTWIRU5
-# WyBIz11/RIsPbOK8JTG90jANBgkqhkiG9w0BAQEFAASBgLF+C4P5TdPNKXdffZ9V
-# 3uLs03O7iYBC2kxDN7/h9Y+4kvCaYMHL3La5kmI8fn+rIS8C2mp/R7tD2wxdBgCo
-# K/5Z6FojopBcVA1rxgeMjcP3P14vcleArf7WF8YH1fpocyk8hdlz/1e+LqSDot/j
-# nde/hB2t81nWkItdckXyu5vm
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQU00kE
+# 2PZziXrxqLTTbqIYkehsmDANBgkqhkiG9w0BAQEFAASBgH5+2+xQa5thNga/ZX2t
+# 2a+NkyxgPEJxjMLAfqUyFVX//uK6e6PBh2I4ir/dC4KvAe9XvrfQVzlkcdKUcfbh
+# hDDZltWLbIVSUq8zbNrapN8pu5KHB4TqoNWlWCRVdprSJ7Lb/UUfMKcxrpNPlzMn
+# 8xzcRBEZddZ8H1MjpTGSctfd
 # SIG # End signature block

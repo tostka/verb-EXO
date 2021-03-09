@@ -21,6 +21,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 1:15 PM 3/1/2021 added org-level color-coded console
     * 8:30 AM 10/22/2020 ren'd $TentantTag -> $TenOrg, swapped looping meta resolve with 1-liner approach ; added AcceptedDom caching to the middle status test (suppress one more get-exoaccepteddomain call if possible)
     * 3:45 PM 10/8/2020 added AcceptedDomain caching to connect-exo as well
@@ -93,7 +94,7 @@ Function Connect-EXO {
         # disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
         if (!$CommandPrefix) {
             $CommandPrefix = 'exo' ;
-            write-verbose -verbose:$true  "(asserting Prefix:$($CommandPrefix)" ;
+            write-host -foregroundcolor white  "(asserting Prefix:$($CommandPrefix)" ;
         } ;
 
         $sTitleBarTag = "EXO" ;
@@ -168,7 +169,10 @@ Function Connect-EXO {
                     Authentication    = "Basic" ;
                     AllowRedirection  = $true;
                 } ;
-                $EXOsplat.Add("Credential", $Credential); # just use the passed $Credential vari
+                if ($Credential) {
+                    $EXOsplat.Add("Credential", $Credential); # just use the passed $Credential vari
+                    write-verbose "(using cred:$($credential.username))" ; 
+                } ;
 
                 $cMsg = "Connecting to Exchange Online ($($credential.username.split('@')[1]))"; 
                 If ($ProxyEnabled) {
@@ -233,7 +237,7 @@ Function Connect-EXO {
                     #>
                     $EXOsplat.ConnectionUri = 'https://outlook.office365.com/powershell-liveid?SerializationLevel=Full' ;
                     write-warning -verbose:$true "$((get-date).ToString('HH:mm:ss')):'Get-FormatData command is not in the expected format' EXO bug: Retrying with '&SerializationLevel=Full'ConnectionUri`n(details at https://answers.microsoft.com/en-us/msoffice/forum/all/cannot-connect-to-exchange-online-via-powershell/)" ;
-                    write-verbose -verbose:$true "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
+                    write-host -foregroundcolor white "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
                     TRY{
                         $global:EOLSession | Remove-PSSession; ; 
                         $global:EOLSession = New-PSSession @EXOsplat ;
@@ -249,7 +253,7 @@ Function Connect-EXO {
                         AllowClobber        = $true ;
                         ErrorAction         = 'Stop' ;
                     } ;
-                    write-verbose -verbose:$true "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltPSS|out-string).trim())" ;
+                    write-host -foregroundcolor white "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltPSS|out-string).trim())" ;
                     TRY{
                         $Global:EOLModule = Import-Module (Import-PSSession @pltPSS) -Global -Prefix $CommandPrefix -PassThru -DisableNameChecking   ;
                     } CATCH {
@@ -308,10 +312,13 @@ Function Connect-EXO {
                 Disconnect-exo ; 
                 $bExistingEXOGood = $false ; 
                 # splice in console color scheming
+                <# borked by psreadline v1/v2 breaking changes
                 if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
+                    write-verbose "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
                     $Host.UI.RawUI.BackgroundColor = $PSBgColor
                     $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
                 } ;
+                #>
             } ;
         } ; 
     }  # END-E 

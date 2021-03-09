@@ -21,6 +21,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 1:15 PM 3/1/2021 added org-level color-coded console
     * 8:55 AM 11/11/2020 added fake -Username block, to make -Credential, *also* auto-renew sessions! (above from: https://ingogegenwarth.wordpress.com/2018/02/02/exo-ps-mfa/)
     * 2:01 PM 11/10/2020 swap connect-exo2 to connect-exo2old (uses connect-ExchangeOnline), and ren this "Connect-EXO2A" to connect-exo2 ; fixed get-module tests (sub'd off the .dll from the modname)
@@ -317,14 +318,17 @@ Function Connect-EXO2 {
                 # -UserPrincipalName
                 #$pltCXO.Add("UserPrincipalName", [string]$Credential.username);
                 if ($UserPrincipalName) {
-                        $pltNEXOS.Add("UserPrincipalName", [string]$UserPrincipalName);
+                    $pltNEXOS.Add("UserPrincipalName", [string]$UserPrincipalName);
+                    write-verbose "(using cred:$([string]$UserPrincipalName))" ; 
                 } elseif ($Credential -AND !$UserPrincipalName){
                     $pltNEXOS.Add("UserPrincipalName", [string]$Credential.username);
+                    write-verbose "(using cred:$($credential.username))" ; 
                 };
             } else {
                 # just use the passed $Credential vari
                 #$pltCXO.Add("Credential", [System.Management.Automation.PSCredential]$Credential);
                 $pltNEXOS.Add("Credential", [System.Management.Automation.PSCredential]$Credential);
+                write-verbose "(using cred:$($credential.username))" ; 
             } ;
 
             if ($AzureADAuthorizationEndpointUri) { $pltNEXOS.Add("AzureADAuthorizationEndpointUri", [string]$AzureADAuthorizationEndpointUri) } ;
@@ -456,7 +460,7 @@ Function Connect-EXO2 {
 
             if((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
                 # validate that the connected EXO is to the $Credential tenant
-                write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ;
+                write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring())),($($Credential.username))" ;
                 $bExistingEXOGood = $true ;
             } else {
                 write-error "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ;
@@ -466,10 +470,13 @@ Function Connect-EXO2 {
         } ;
         $bExistingEXOGood | write-output ;
         # splice in console color scheming
+        <# borked by psreadline v1/v2 breaking changes
         if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
+            write-verbose "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
             $Host.UI.RawUI.BackgroundColor = $PSBgColor
             $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
         } ;
+        #>
     }  # END-E
 }
 

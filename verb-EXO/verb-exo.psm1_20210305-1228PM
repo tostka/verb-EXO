@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.46.0
+  Version     : 1.0.44.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -688,7 +688,6 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
-    * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 1:15 PM 3/1/2021 added org-level color-coded console
     * 8:30 AM 10/22/2020 ren'd $TentantTag -> $TenOrg, swapped looping meta resolve with 1-liner approach ; added AcceptedDom caching to the middle status test (suppress one more get-exoaccepteddomain call if possible)
     * 3:45 PM 10/8/2020 added AcceptedDomain caching to connect-exo as well
@@ -761,7 +760,7 @@ Function Connect-EXO {
         # disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
         if (!$CommandPrefix) {
             $CommandPrefix = 'exo' ;
-            write-host -foregroundcolor white  "(asserting Prefix:$($CommandPrefix)" ;
+            write-verbose -verbose:$true  "(asserting Prefix:$($CommandPrefix)" ;
         } ;
 
         $sTitleBarTag = "EXO" ;
@@ -836,10 +835,7 @@ Function Connect-EXO {
                     Authentication    = "Basic" ;
                     AllowRedirection  = $true;
                 } ;
-                if ($Credential) {
-                    $EXOsplat.Add("Credential", $Credential); # just use the passed $Credential vari
-                    write-verbose "(using cred:$($credential.username))" ; 
-                } ;
+                $EXOsplat.Add("Credential", $Credential); # just use the passed $Credential vari
 
                 $cMsg = "Connecting to Exchange Online ($($credential.username.split('@')[1]))"; 
                 If ($ProxyEnabled) {
@@ -904,7 +900,7 @@ Function Connect-EXO {
                     #>
                     $EXOsplat.ConnectionUri = 'https://outlook.office365.com/powershell-liveid?SerializationLevel=Full' ;
                     write-warning -verbose:$true "$((get-date).ToString('HH:mm:ss')):'Get-FormatData command is not in the expected format' EXO bug: Retrying with '&SerializationLevel=Full'ConnectionUri`n(details at https://answers.microsoft.com/en-us/msoffice/forum/all/cannot-connect-to-exchange-online-via-powershell/)" ;
-                    write-host -foregroundcolor white "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
+                    write-verbose -verbose:$true "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
                     TRY{
                         $global:EOLSession | Remove-PSSession; ; 
                         $global:EOLSession = New-PSSession @EXOsplat ;
@@ -920,7 +916,7 @@ Function Connect-EXO {
                         AllowClobber        = $true ;
                         ErrorAction         = 'Stop' ;
                     } ;
-                    write-host -foregroundcolor white "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltPSS|out-string).trim())" ;
+                    write-verbose -verbose:$true "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltPSS|out-string).trim())" ;
                     TRY{
                         $Global:EOLModule = Import-Module (Import-PSSession @pltPSS) -Global -Prefix $CommandPrefix -PassThru -DisableNameChecking   ;
                     } CATCH {
@@ -979,13 +975,10 @@ Function Connect-EXO {
                 Disconnect-exo ; 
                 $bExistingEXOGood = $false ; 
                 # splice in console color scheming
-                <# borked by psreadline v1/v2 breaking changes
                 if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
-                    write-verbose "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
                     $Host.UI.RawUI.BackgroundColor = $PSBgColor
                     $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
                 } ;
-                #>
             } ;
         } ; 
     }  # END-E 
@@ -1016,7 +1009,6 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
-    * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 1:15 PM 3/1/2021 added org-level color-coded console
     * 8:55 AM 11/11/2020 added fake -Username block, to make -Credential, *also* auto-renew sessions! (above from: https://ingogegenwarth.wordpress.com/2018/02/02/exo-ps-mfa/)
     * 2:01 PM 11/10/2020 swap connect-exo2 to connect-exo2old (uses connect-ExchangeOnline), and ren this "Connect-EXO2A" to connect-exo2 ; fixed get-module tests (sub'd off the .dll from the modname)
@@ -1313,17 +1305,14 @@ Function Connect-EXO2 {
                 # -UserPrincipalName
                 #$pltCXO.Add("UserPrincipalName", [string]$Credential.username);
                 if ($UserPrincipalName) {
-                    $pltNEXOS.Add("UserPrincipalName", [string]$UserPrincipalName);
-                    write-verbose "(using cred:$([string]$UserPrincipalName))" ; 
+                        $pltNEXOS.Add("UserPrincipalName", [string]$UserPrincipalName);
                 } elseif ($Credential -AND !$UserPrincipalName){
                     $pltNEXOS.Add("UserPrincipalName", [string]$Credential.username);
-                    write-verbose "(using cred:$($credential.username))" ; 
                 };
             } else {
                 # just use the passed $Credential vari
                 #$pltCXO.Add("Credential", [System.Management.Automation.PSCredential]$Credential);
                 $pltNEXOS.Add("Credential", [System.Management.Automation.PSCredential]$Credential);
-                write-verbose "(using cred:$($credential.username))" ; 
             } ;
 
             if ($AzureADAuthorizationEndpointUri) { $pltNEXOS.Add("AzureADAuthorizationEndpointUri", [string]$AzureADAuthorizationEndpointUri) } ;
@@ -1455,7 +1444,7 @@ Function Connect-EXO2 {
 
             if((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
                 # validate that the connected EXO is to the $Credential tenant
-                write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring())),($($Credential.username))" ;
+                write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ;
                 $bExistingEXOGood = $true ;
             } else {
                 write-error "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ;
@@ -1465,13 +1454,10 @@ Function Connect-EXO2 {
         } ;
         $bExistingEXOGood | write-output ;
         # splice in console color scheming
-        <# borked by psreadline v1/v2 breaking changes
         if(($PSFgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSFgColor) -AND ($PSBgColor = (Get-Variable  -name "$($TenOrg)Meta").value.PSBgColor)){
-            write-verbose "(setting console colors:$($TenOrg)Meta.PSFgColor:$($PSFgColor),PSBgColor:$($PSBgColor))" ; 
             $Host.UI.RawUI.BackgroundColor = $PSBgColor
             $Host.UI.RawUI.ForegroundColor = $PSFgColor ; 
         } ;
-        #>
     }  # END-E
 }
 
@@ -3862,8 +3848,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUYCwZ2C1DXwePJhNsSUfBt+Zk
-# cF+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUfRmgBJUCoxdC7Wul8ABEKIgA
+# KUCgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -3878,9 +3864,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTWIRU5
-# WyBIz11/RIsPbOK8JTG90jANBgkqhkiG9w0BAQEFAASBgLF+C4P5TdPNKXdffZ9V
-# 3uLs03O7iYBC2kxDN7/h9Y+4kvCaYMHL3La5kmI8fn+rIS8C2mp/R7tD2wxdBgCo
-# K/5Z6FojopBcVA1rxgeMjcP3P14vcleArf7WF8YH1fpocyk8hdlz/1e+LqSDot/j
-# nde/hB2t81nWkItdckXyu5vm
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQ/jXr6
+# rqMDh/QNRU2V8IZ4TQzoDzANBgkqhkiG9w0BAQEFAASBgLVKeY9qTJkIX0w3dI5J
+# VgHCIQfroJEWr6kHQbS4oQPP18OxrlmvjJof1uiB9MEljUYunK2af7+qwqt/lOTb
+# Gw3orMSm7zYdImkteq1eRrEQ/rgWCzcfbQRO4/TS12GQee6ycrEdnCUqvoTkCELO
+# 7oek3F30VbI7vCEbMXtHlQXF
 # SIG # End signature block
