@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.49.0
+  Version     : 1.0.47.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -2669,13 +2669,12 @@ function get-MailboxFolderStats {
     FileName    : get-MailboxFolderStats
     License     : MIT License
     Copyright   : (c) 2020 Todd Kadrie
-    Github      : https://github.com/tostka/verb-exo
+    Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
-    * 1:12 PM 3/15/2021 init work was done 3/12, removed recursive-err generating #Require on the hosting verb-EXO module
     .DESCRIPTION
     get-MailboxFolderStats.ps1 - Perform smart get-mailboxfolderstatistics command, as appropriate to target location -Mailbox, on either Exchange on-premesis or Exchange Online.
-    Dependancy on my verb-ex2010 Exchange onprem (and is within verb-exo EXO mod, which adds dependant EXO connection support).
+    Dependancy my verb-ex2010 & verb-exo Exchange onprem & Exchange Online, connection maintence modules. 
     .PARAMETER  Mailbox
     Mailbox identifier [samaccountname,name,emailaddr,alias]
     .PARAMETER Ticket
@@ -2699,13 +2698,14 @@ function get-MailboxFolderStats {
     .EXAMPLE
     get-MailboxFolderStats -Mailbox quotes@domain.com -Ticket 347298 -includeage -includesize ;
     Perform a mailbox stats, and include size per folder (in KB) in output report
+
     .LINK
     https://github.com/tostka/verb-exo
     .LINK
     https://github.com/tostka/verb-ex2010
     #>
     #Requires -Version 3
-    #Requires -Modules verb-ex2010
+    #Requires -Modules verb-EXO,verb-ex2010
     [CmdletBinding()]
     Param(
         [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Mailbox identifier [samaccountname,name,emailaddr,alias]")]
@@ -3987,8 +3987,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQULr9BUEOJE48pPZssx9VPqoLJ
-# hzKgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUkGhv6e9jGiJ1QvRrpiiYOXCp
+# 4t2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -4003,9 +4003,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSV6TR0
-# YphqneG9IG/5dVQecHOcIzANBgkqhkiG9w0BAQEFAASBgDNrs2U1SEp7aUheWCSP
-# ZZIsNRMVPVqLJTrUgVCOM8MDt8fkQUulInwjx0jW79R6s95H/EOIK/k/c/fMZIJa
-# rtLat1L9c2SDjM8NEMc/2SH8JANWH7KNIMnGbZ7TJsQpQL97RmwELvdvtoUseA14
-# 0DMWMIRh4cvweTuzapY0A43Z
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRdwP4P
+# xbZ3UPq9sZDn2s+nb8Z5gjANBgkqhkiG9w0BAQEFAASBgA1p4XuMr8DCitFEgPdP
+# p+ZWMtzZWt4rj4+3MGiLsL8Z2T1kMa7InvghjLw3cMNSoxEjM8WtT9lOc9mRFpQc
+# AJztqRSjd2ZYZAfa2RpFOhDXkjQN7nBUXokVdbZHgU/UrQhxUHp/oNJuhC8vxsqJ
+# O/fqR6CKBA9F6RYf1tL1uxkE
 # SIG # End signature block
