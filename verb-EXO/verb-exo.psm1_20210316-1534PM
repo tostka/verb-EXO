@@ -1,11 +1,11 @@
-# verb-exo.psm1
+﻿# verb-exo.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.51.0
+  Version     : 1.0.50.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -2672,13 +2672,10 @@ function get-MailboxFolderStats {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
-    * 3:28 PM 3/16/2021 added multi-tenant support
     * 1:12 PM 3/15/2021 init work was done 3/12, removed recursive-err generating #Require on the hosting verb-EXO module
     .DESCRIPTION
     get-MailboxFolderStats.ps1 - Perform smart get-mailboxfolderstatistics command, as appropriate to target location -Mailbox, on either Exchange on-premesis or Exchange Online.
     Dependancy on my verb-ex2010 Exchange onprem (and is within verb-exo EXO mod, which adds dependant EXO connection support).
-    .PARAMETER TenOrg
-    TenantTag values, indicating Tenant to Create DDG WITHIN[-TenOrg 'TOL']    
     .PARAMETER  Mailbox
     Mailbox identifier [samaccountname,name,emailaddr,alias]
     .PARAMETER Ticket
@@ -2711,9 +2708,6 @@ function get-MailboxFolderStats {
     #Requires -Modules verb-ex2010
     [CmdletBinding()]
     Param(
-        [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag values, indicating Tenant to Create DDG WITHIN[-TenOrg 'TOL']")]
-        [ValidateNotNullOrEmpty()]
-        [string]$TenOrg = ('TOR'),
         [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Mailbox identifier [samaccountname,name,emailaddr,alias]")]
         [ValidateNotNullOrEmpty()][string]$Mailbox,    
         [Parameter(Mandatory=$false,HelpMessage="Ticket # [-Ticket nnnnn]")]
@@ -2728,22 +2722,203 @@ function get-MailboxFolderStats {
         [Parameter(HelpMessage="Switch to return raw object rather than formated console report(defaults `$true)[-NonEmptyOnly]")]
         [switch] $asObject
     ) ;
+    $Verbose=($VerbosePreference -eq 'Continue') ;  
+    $pltGMFS=@{identity= $Mailbox ;} ; 
+    $propsFldr = @{Name='Folder';Expression={$_.Identity.tostring()}},@{Name="Items";Expression={$_.ItemsInFolder}} ;
+    $rgxSysFldrs = '.*\\(Versions|SubstrateHolds|DiscoveryHolds|Yammer.*|Social\sActivity\sNotifications|Suggested\sContacts|Recipient\sCache|PersonMetadata|Audits|Calendar\sLogging|Purges)$' ; 
+    if($IncludeAge){ 
+        $pltGMFS.add('IncludeOldestAndNewestItems',$true) ; 
+        #$propsFldr += @{Name="OldestItem";Expression={get-date $_.OldestDeletedItemReceivedDate -f "yyyyMMdd"}},@{Name="NewestItem";Expression={$_.NewestItemReceivedDate -f "yyyyMMdd"}} ; 
+        $propsFldr += @{Name="OldestItem";Expression={get-date $_.OldestItemReceivedDate}},@{Name="NewestItem";Expression={$_.NewestItemReceivedDate}} ; 
+    } ;
+    # # -IncludeAnalysis
+    if($IncludeSize){ 
+        $pltGMFS.add('IncludeAnalysis',$true) ; 
+        #$propsFldr += @{Name="SizeMB";Expression={$_.FolderSize.ToMB()}} ; 
+        # w dehydrated, raw parsing is: $mbxstats.TotalItemSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB ;
+        $propsFldr += @{Name="SizeMB";Expression={[math]::round($_.FolderSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}} ; 
+    } ;
+    $ofile=".\$($ticket)-$($Mailbox)-folder-sizes-$(get-date -format 'yyyyMMdd-HHmmtt').csv" ;
+    $error.clear() ;
+    TRY {
+        if(!(gcm get-recipient -ea 0)){rx10} ;
+        $OpRcp=get-recipient $Mailbox ;
+        switch ($OpRcp.recipienttype){
+            "MailUser" {
+                write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($tmbx) IS AN EXO MBOX" ;
+                reconnect-exo ;
+                set-alias ps1GetMbxFldrStat Get-exoMailboxFolderStatistics ; 
+            } ;
+            "UserMailbox" {
+                write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($tmbx) IS AN EX2010 MBOX" ;
+                reconnect-ex2010 ;
+                set-alias ps1GetMbxFldrStat Get-MailboxFolderStatistics ; 
+            } ;
+            default {
+                throw "UNRECOGNIZED ONPREM RECIPIENTTYPE:$($OpRcp.recipienttype)" ; exit ; 
+            } ; 
+        } ;
+        write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$((get-alias ps1GetMbxFldrStat).definition) w`n$(($pltGMFS|out-string).trim())" ; 
+        $fldrs = ps1GetMbxFldrStat @pltGMFS ;
+        if($NonEmptyOnly){
+            write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):(REPORTING NON-ZERO FOLDERS ONLY)" ; $fldrs = $fldrs | ?{$_.ItemsInFolder -gt 0}
+        } ; 
+        $fldrs | ?{$_.identity -notmatch $rgxSysFldrs } | select $propsFldr | export-csv  -path $ofile -notype ;
+        if(!$asObject){
+            import-csv $ofile | ft -auto | out-default ; 
+        } else { 
+            write-verbose "-asObject specified, returning object to pipeline (rather than console dump)" ; 
+            import-csv $ofile | write-output ; 
+        } ; 
+        write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):`n===>`$ofile:$($ofile)`n" ;
+    } CATCH {
+        Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+        Exit ;
+    } ; 
+    remove-alias ps1GetMbxFldrStat ;
+}
+
+#*------^ get-MailboxFolderStats.ps1 ^------
+
+#*------v get-MsgTrace.ps1 v------
+function get-MsgTrace {
+    <#
+    .SYNOPSIS
+    get-MsgTrace.ps1 - Perform smart get-exoMessageTrace/MessageTrackingLog command, as appropriate to target location -Mailbox, on either Exchange on-premesis or Exchange Online.
+    .NOTES
+    Version     : 1.0.0.
+    Author      : Todd Kadrie
+    Website     : http://www.toddomation.com
+    Twitter     : @tostka / http://twitter.com/tostka
+    CreatedDate : 2021-03-12
+    FileName    : get-MsgTrace.ps1
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka/verb-exo
+    Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
+    REVISIONS
+    * 2:23 PM 3/16/2021 debugged both exOP & exo, added -ReportFail & -ReportRowsLimit params. At this point Exclusive params are only partially configured
+    * 1:12 PM 3/15/2021 init work was done 3/12, removed recursive-err generating #Require on the hosting verb-EXO module
+    .DESCRIPTION
+    get-MsgTrace - Perform smart get-exoMessageTrace/MessageTrackingLog command, as appropriate to target location -Mailbox, on either Exchange on-premesis or Exchange Online.
+    Dependancy on my verb-ex2010 Exchange onprem (and is within verb-exo EXO mod, which adds dependant EXO connection support).
+    .PARAMETER TenOrg
+    TenantTag values, indicating Tenant to Create DDG WITHIN[-TenOrg 'TOL']    
+    .PARAMETER Recipient
+    Recipient email address identifier [-Recipient xxx@domain.com]
+    .PARAMETER Sender
+    Sender email address identifier [-Sender xxx@domain.com]
+    .PARAMETER Subject
+    "Message Subject string to be matched (post-filtered from broad query)[-Subject 'subject phrase']
+    .PARAMETER Logon
+    User Logon tag to be applied to output file[-Logon samaccountname]
+    .PARAMETER Status
+    Transport Status (EventID on-Prem)(RECEIVE|DELIVER|FAIL|SEND|RESOLVE|EXPAND|TRANSFER|DEFER) [-EventID SEND
+    .PARAMETER Connectorid
+    Connector identifier[-Connectorid SendConnX]
+    .PARAMETER Source
+    Source keyword to be used for filtering (STOREDRIVER|SMTP|DNS|ROUTING)[-Source SMTP]
+    .PARAMETER MessageId
+    "Target MessageId for search[-MessageId xxxxxxx]
+    .PARAMETER MessageTraceId
+    Target MessageId for search[-MessageTraceId xxxxxxx]
+    .PARAMETER StartDate
+    Start of time span to be searched[-StartDate 1/1/2021]
+    .PARAMETER EndDate
+    End of time span to be searched[-EndDate 1/7/2021]
+    .PARAMETER Ticket
+    Ticket # [-Ticket nnnnn]
+    .PARAMETER useEXOP
+    Switch to specify ONPREM Exch get-MessageTrackingLog trace (defaults `$false == EXO Message Search)[-useEXOP]
+    .PARAMETER ReportRowsLimit
+    Max number of rows to output to console when a -ReportXXX param is specified (defaults 100)[-ReportRowsLimit]
+    .PARAMETER asObject
+    Switch to return raw object rather than formated console report(defaults `$true)[-NonEmptyOnly]
+    .INPUTS
+    Accepts piped input.
+    .OUTPUTS
+    Outputs csv & console summary of mailbox folders content
+    .EXAMPLE
+    get-MsgTrace -Sender SENDER@DOMAIN.com -Ticket 99999 -days 7 -verbose ;
+    Perform a default EXO trace last 7 days of traffic on specified sender, use specified Ticket number in csv file name, with verbose output
+    .EXAMPLE
+    $msgs = get-MsgTrace -Sender quotes@bossplow.com -Ticket 347298 -days 7 -asobject -verbose ;
+    Above EXO MessageTrace returning an object for further postfiltering.
+    .EXAMPLE
+    get-msgtrace -sender monitoring@toro.com -useEXOP -ticket 99999 -d 1 -verbose ; 
+    Run an ONPREM get-MessageTrackingLog search
+    .EXAMPLE 
+    $msgs = get-msgtrace -sender monitoring@toro.com -useEXOP -ticket 99999 -start (get-date).addhours(-1) -verbose -ReportFail; 
+    Run an ONPREM get-MessageTrackingLog search, with specific -Start time (End will be asserted), with detailed dump of (first 100) EventID 'Fail' items
+    .LINK
+    https://github.com/tostka/verb-exo
+    .LINK
+    https://github.com/tostka/verb-ex2010
+    #>
+    #Requires -Version 3
+    #Requires -Modules verb-ex2010
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    [CmdletBinding(DefaultParameterSetName='SendRec')]
+    <# $isplt=@{  ticket="347298" ;  uid="wilinaj";  days=7 ;  Sender="quotes@bossplow.com" ;  Recipients="" ;  MessageSubject="" ;  EventID='' ;  Connectorid="" ;  Source="" ;} ; 
+    #>
+    Param(
+        [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag values, indicating Tenant to Create DDG WITHIN[-TenOrg 'TOL']")]
+        [ValidateNotNullOrEmpty()]
+        [string]$TenOrg = ('TOR'),
+        [Parameter(ParameterSetName='SendRec',HelpMessage="Recipient email address identifier [-Recipient xxx@domain.com]")]
+        [string]$Recipient,    
+        [Parameter(ParameterSetName='SendRec',HelpMessage="Sender email address identifier [-Sender xxx@domain.com]")]
+        [string]$Sender, 
+        [Parameter(HelpMessage="Message Subject string to be matched (post-filtered from broad query)[-Subject 'subject phrase']")]
+        [string]$Subject,
+        [Parameter(HelpMessage="User Logon tag to be applied to output file[-Logon samaccountname]")]
+        [string]$Logon,
+        [Parameter(HelpMessage="Transport Status (EventID on-Prem)(RECEIVE|DELIVER|FAIL|SEND|RESOLVE|EXPAND|TRANSFER|DEFER) [-EventID SEND")]
+        [ValidateSet("RECEIVE","DELIVER","FAIL","SEND","RESOLVE","EXPAND","TRANSFER","DEFER")]
+        [string]$Status,
+        [Parameter(HelpMessage="Connector identifier[-Connectorid SendConnX]")]
+        [string]$Connectorid,
+        [Parameter(HelpMessage="Source keyword to be used for filtering (STOREDRIVER|SMTP|DNS|ROUTING)[-Source SMTP]")]
+        [ValidateSet("STOREDRIVER","SMTP","DNS","ROUTING")]
+        [string]$Source,
+        [Parameter(ParameterSetName='MsgID',HelpMessage="Target MessageId for search[-MessageId xxxxxxx]")]
+        [string]$MessageId, 
+        [Parameter(ParameterSetName='MsgTrcID',HelpMessage="Target MessageId for search[-MessageTraceId xxxxxxx]")]
+        [string]$MessageTraceId,
+        [Parameter(HelpMessage="Start of time span to be searched[-StartDate 1/1/2021]")]
+        [string]$StartDate,
+        [Parameter(HelpMessage="End of time span to be searched[-EndDate 1/7/2021]")]
+        [string]$EndDate,
+        [Parameter(HelpMessage="Days back to search[-Days 7]")]
+        [int]$Days,
+        [Parameter(Mandatory=$false,HelpMessage="Ticket # [-Ticket nnnnn]")]
+        #[ValidateLength(5)] # non-mandatory
+        [int]$Ticket,
+        [Parameter(HelpMessage="Switch to specify ONPREM Exch get-MessageTrackingLog trace (defaults `$false == EXO Message Search)[-useEXOP]")]
+        [switch] $useEXOP=$false,
+        [Parameter(HelpMessage="Switch to return raw object rather than formated console report(defaults `$true)[-NonEmptyOnly]")]
+        [switch] $asObject,
+        [Parameter(HelpMessage="Switch to return detailed analysis of FAIL items[-ReportFail]")]
+        [switch] $ReportFail,
+        [Parameter(HelpMessage="Max number of rows to output to console when a -ReportXXX param is specified (defaults 100)[-ReportRowsLimit]")]
+        [int]$ReportRowsLimit = 100  
+    ) ;
     BEGIN {
         $Verbose=($VerbosePreference -eq 'Continue') ;  
         # Get parameters this function was invoked with
-        $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;  
-        $pltGMFS=@{identity= $Mailbox ;} ; 
+        $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+        $pltGMT=[ordered]@{} ; 
         $propsFldr = @{Name='Folder';Expression={$_.Identity.tostring()}},@{Name="Items";Expression={$_.ItemsInFolder}} ;
-        $rgxSysFldrs = '.*\\(Versions|SubstrateHolds|DiscoveryHolds|Yammer.*|Social\sActivity\sNotifications|Suggested\sContacts|Recipient\sCache|PersonMetadata|Audits|Calendar\sLogging|Purges)$' ; 
-        if($IncludeAge){ 
-            $pltGMFS.add('IncludeOldestAndNewestItems',$true) ; 
-            $propsFldr += @{Name="OldestItem";Expression={get-date $_.OldestItemReceivedDate}},@{Name="NewestItem";Expression={$_.NewestItemReceivedDate}} ; 
-        } ;
-        if($IncludeSize){ 
-            $pltGMFS.add('IncludeAnalysis',$true) ; 
-            # w dehydrated, raw parsing is: $mbxstats.TotalItemSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB ;
-            $propsFldr += @{Name="SizeMB";Expression={[math]::round($_.FolderSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}} ; 
-        } ;
+        $propsMsgEx10 = 'Timestamp',@{N='TimestampLocal';E={$_.Timestamp.ToLocalTime()}},'Source','EventId','RelatedRecipientAddress','Sender',@{N='Recipients';E={$_.Recipients}},"RecipientCount",@{N='RecipientStatus';E={$_.RecipientStatus}},"MessageSubject","TotalBytes",@{N='Reference';E={$_.Reference}},'MessageLatency','MessageLatencyType','InternalMessageId','MessageId','ReturnPath','ClientIp','ClientHostname','ServerIp','ServerHostname','ConnectorId','SourceContext','MessageInfo',@{N='EventData';E={$_.EventData}} ;
+        $propsMsgEXO = @{N='ReceivedLocal';E={$_.Received.ToLocalTime()}},'SenderAddress','RecipientAddress','Subject','Status','ToIP','FromIP','Size','MessageId','MessageTraceId','Index' ;
+        
+        # pull settings per Tenant fr Meta
+        $Meta = gv -name "$($TenOrg)Meta" ; 
+        <# pull value fr meta
+        if($Meta -is [system.array]){ throw "Unable to resolve unique `$xxxMeta! from `$TenOrg:$($TenOrg)" ; break} ; 
+        if(!$Meta.value.DefaultObjectOwner){throw "Unable to resolve $($Meta.Name).value.DefaultObjectOwner from `$TenOrg:$($TenOrg)" ; break} 
+        else { $ManagedBy=$Meta.value.DefaultObjectOwner} ;  ;
+        #>
 
         $Retries = 4 ;
         $RetrySleep = 5 ;
@@ -2836,322 +3011,6 @@ function get-MailboxFolderStats {
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
         } ; 
-
-    } ;  # BEGIN-E
-    PROCESS {
-        $ofile=".\$($ticket)-$($Mailbox)-folder-sizes-$(get-date -format 'yyyyMMdd-HHmmtt').csv" ;
-        $error.clear() ;
-        TRY {
-            if(!(gcm get-recipient -ea 0)){rx10} ;
-            $OpRcp=get-recipient $Mailbox ;
-            switch ($OpRcp.recipienttype){
-                "MailUser" {
-                    write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($tmbx) IS AN EXO MBOX" ;
-                    
-                    if($VerbosePreference = "Continue"){
-                        $VerbosePrefPrior = $VerbosePreference ;
-                        $VerbosePreference = "SilentlyContinue" ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    disconnect-exo ; # pre-disconnect    
-                    $pltRXO = @{
-                        Credential = (Get-Variable -name cred$($tenorg) ).value ;
-                        verbose = $($verbose) ; }
-                    if ($script:useEXOv2) { reconnect-eXO2 @pltRXO }
-                    else { reconnect-EXO @pltRXO } ;
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ;
-
-                    set-alias ps1GetMbxFldrStat Get-exoMailboxFolderStatistics ; 
-                } ;
-                "UserMailbox" {
-                    write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($tmbx) IS AN EX2010 MBOX" ;
-                    
-                    if($VerbosePreference = "Continue"){
-                        $VerbosePrefPrior = $VerbosePreference ;
-                        $VerbosePreference = "SilentlyContinue" ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    # connect OP
-                    $pltRX10 = @{
-                        Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
-                        verbose = $($verbose) ; } ;     
-                    if($pltRX10){
-                        Connect-Ex2010 @pltRX10 ;
-                    } else { connect-Ex2010 ; } ;
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ;
-
-                    set-alias ps1GetMbxFldrStat Get-MailboxFolderStatistics ; 
-                } ;
-                default {
-                    throw "UNRECOGNIZED ONPREM RECIPIENTTYPE:$($OpRcp.recipienttype)" ; exit ; 
-                } ; 
-            } ;
-            write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$((get-alias ps1GetMbxFldrStat).definition) w`n$(($pltGMFS|out-string).trim())" ; 
-            $fldrs = ps1GetMbxFldrStat @pltGMFS ;
-            if($NonEmptyOnly){
-                write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):(REPORTING NON-ZERO FOLDERS ONLY)" ; $fldrs = $fldrs | ?{$_.ItemsInFolder -gt 0}
-            } ; 
-            $fldrs | ?{$_.identity -notmatch $rgxSysFldrs } | select $propsFldr | export-csv  -path $ofile -notype ;
-            if(!$asObject){
-                import-csv $ofile | ft -auto | out-default ; 
-            } else { 
-                write-verbose "-asObject specified, returning object to pipeline (rather than console dump)" ; 
-                import-csv $ofile | write-output ; 
-            } ; 
-            write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):`n===>`$ofile:$($ofile)`n" ;
-        } CATCH {
-            Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-            Exit ;
-        } ; 
-    } ;  # PROC-E
-    END {
-        remove-alias ps1GetMbxFldrStat ;
-    } ; 
-    
-}
-
-#*------^ get-MailboxFolderStats.ps1 ^------
-
-#*------v get-MsgTrace.ps1 v------
-function get-MsgTrace {
-    <#
-    .SYNOPSIS
-    get-MsgTrace.ps1 - Perform smart get-exoMessageTrace/MessageTrackingLog command, as appropriate to target location -Mailbox, on either Exchange on-premesis or Exchange Online.
-    .NOTES
-    Version     : 1.0.0.
-    Author      : Todd Kadrie
-    Website     : http://www.toddomation.com
-    Twitter     : @tostka / http://twitter.com/tostka
-    CreatedDate : 2021-03-12
-    FileName    : get-MsgTrace.ps1
-    License     : MIT License
-    Copyright   : (c) 2020 Todd Kadrie
-    Github      : https://github.com/tostka/verb-exo
-    Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
-    REVISIONS
-    * 2:23 PM 3/16/2021 added multi-tenant support ; debugged both exOP & exo, added -ReportFail & -ReportRowsLimit params. At this point Exclusive params are only partially configured
-    * 1:12 PM 3/15/2021 init work was done 3/12, removed recursive-err generating #Require on the hosting verb-EXO module
-    .DESCRIPTION
-    get-MsgTrace - Perform smart get-exoMessageTrace/MessageTrackingLog command, as appropriate to target location -Mailbox, on either Exchange on-premesis or Exchange Online.
-    Dependancy on my verb-ex2010 Exchange onprem (and is within verb-exo EXO mod, which adds dependant EXO connection support).
-    .PARAMETER TenOrg
-    TenantTag values, indicating Tenant to Create DDG WITHIN[-TenOrg 'TOL']    
-    .PARAMETER Recipients
-    Recipient email addresses identifiers (comma-delimited)[-Recipients xxx@domain.com]
-    .PARAMETER Sender
-    Sender email address identifiers (EXO supports comma-delimited) [-Sender xxx@domain.com]
-    .PARAMETER Subject
-    "Message Subject string to be matched (post-filtered from broad query)[-Subject 'subject phrase']
-    .PARAMETER Logon
-    User Logon tag to be applied to output file[-Logon samaccountname]
-    .PARAMETER Status
-    Transport Status (EventID on-Prem)(RECEIVE|DELIVER|FAIL|SEND|RESOLVE|EXPAND|TRANSFER|DEFER) [-EventID SEND
-    .PARAMETER Connectorid
-    Connector identifier[-Connectorid SendConnX]
-    .PARAMETER Source
-    Source keyword to be used for filtering (STOREDRIVER|SMTP|DNS|ROUTING)[-Source SMTP]
-    .PARAMETER MessageId
-    "Target MessageId for search[-MessageId xxxxxxx]
-    .PARAMETER MessageTraceId
-    Target MessageId for search[-MessageTraceId xxxxxxx]
-    .PARAMETER StartDate
-    Start of time span to be searched[-StartDate 1/1/2021]
-    .PARAMETER EndDate
-    End of time span to be searched[-EndDate 1/7/2021]
-    .PARAMETER Ticket
-    Ticket # [-Ticket nnnnn]
-    .PARAMETER useEXOP
-    Switch to specify ONPREM Exch get-MessageTrackingLog trace (defaults `$false == EXO Message Search)[-useEXOP]
-    .PARAMETER ReportRowsLimit
-    Max number of rows to output to console when a -ReportXXX param is specified (defaults 100)[-ReportRowsLimit]
-    .PARAMETER asObject
-    Switch to return raw object rather than formated console report(defaults `$true)[-NonEmptyOnly]
-    .INPUTS
-    Accepts piped input.
-    .OUTPUTS
-    Outputs csv & console summary of mailbox folders content
-    .EXAMPLE
-    get-MsgTrace -Sender SENDER@DOMAIN.com -Ticket 99999 -days 7 -verbose ;
-    Perform a default EXO trace last 7 days of traffic on specified sender, use specified Ticket number in csv file name, with verbose output
-    .EXAMPLE
-    $msgs = get-MsgTrace -Sender quotes@bossplow.com -Ticket 347298 -days 7 -asobject -verbose ;
-    Above EXO MessageTrace returning an object for further postfiltering.
-    .EXAMPLE
-    get-msgtrace -sender monitoring@toro.com -useEXOP -ticket 99999 -d 1 -verbose ; 
-    Run an ONPREM get-MessageTrackingLog search
-    .EXAMPLE 
-    $msgs = get-msgtrace -sender monitoring@toro.com -useEXOP -ticket 99999 -start (get-date).addhours(-1) -verbose -ReportFail; 
-    Run an ONPREM get-MessageTrackingLog search, with specific -Start time (End will be asserted), with detailed dump of (first 100) EventID 'Fail' items
-    .LINK
-    https://github.com/tostka/verb-exo
-    .LINK
-    https://github.com/tostka/verb-ex2010
-    #>
-    #Requires -Version 3
-    #Requires -Modules verb-ex2010
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
-    [CmdletBinding(DefaultParameterSetName='SendRec')]
-    <# $isplt=@{  ticket="347298" ;  uid="wilinaj";  days=7 ;  Sender="quotes@bossplow.com" ;  Recipients="" ;  MessageSubject="" ;  EventID='' ;  Connectorid="" ;  Source="" ;} ; 
-    #>
-    Param(
-        [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag values, indicating Tenant to Create DDG WITHIN[-TenOrg 'TOL']")]
-        [ValidateNotNullOrEmpty()]
-        [string]$TenOrg = ('TOR'),
-        [Parameter(ParameterSetName='SendRec',HelpMessage="Recipient email addresses identifiers (comma-delimited)[-Recipients xxx@domain.com]")]
-        [string]$Recipients,    
-        [Parameter(ParameterSetName='SendRec',HelpMessage="Sender email address identifier (EXO supports comma-delimited)")]
-        [string]$Sender, 
-        [Parameter(HelpMessage="Message Subject string to be matched (post-filtered from broad query)[-Subject 'subject phrase']")]
-        [string]$Subject,
-        [Parameter(HelpMessage="User Logon tag to be applied to output file[-Logon samaccountname]")]
-        [string]$Logon,
-        [Parameter(HelpMessage="Transport Status (EventID on-Prem)(RECEIVE|DELIVER|FAIL|SEND|RESOLVE|EXPAND|TRANSFER|DEFER) [-EventID SEND")]
-        [ValidateSet("RECEIVE","DELIVER","FAIL","SEND","RESOLVE","EXPAND","TRANSFER","DEFER")]
-        [string]$Status,
-        [Parameter(HelpMessage="Connector identifier[-Connectorid SendConnX]")]
-        [string]$Connectorid,
-        [Parameter(HelpMessage="Source keyword to be used for filtering (STOREDRIVER|SMTP|DNS|ROUTING)[-Source SMTP]")]
-        [ValidateSet("STOREDRIVER","SMTP","DNS","ROUTING")]
-        [string]$Source,
-        [Parameter(ParameterSetName='MsgID',HelpMessage="Target MessageId for search[-MessageId xxxxxxx]")]
-        [string]$MessageId, 
-        [Parameter(ParameterSetName='MsgTrcID',HelpMessage="Target MessageId for search[-MessageTraceId xxxxxxx]")]
-        [string]$MessageTraceId,
-        [Parameter(HelpMessage="Start of time span to be searched[-StartDate 1/1/2021]")]
-        [string]$StartDate,
-        [Parameter(HelpMessage="End of time span to be searched[-EndDate 1/7/2021]")]
-        [string]$EndDate,
-        [Parameter(HelpMessage="Days back to search[-Days 7]")]
-        [int]$Days,
-        [Parameter(Mandatory=$false,HelpMessage="Ticket # [-Ticket nnnnn]")]
-        #[ValidateLength(5)] # non-mandatory
-        [int]$Ticket,
-        [Parameter(HelpMessage="Switch to specify ONPREM Exch get-MessageTrackingLog trace (defaults `$false == EXO Message Search)[-useEXOP]")]
-        [switch] $useEXOP=$false,
-        [Parameter(HelpMessage="Switch to return raw object rather than formated console report(defaults `$true)[-NonEmptyOnly]")]
-        [switch] $asObject,
-        [Parameter(HelpMessage="Switch to return detailed analysis of FAIL items[-ReportFail]")]
-        [switch] $ReportFail,
-        [Parameter(HelpMessage="Max number of rows to output to console when a -ReportXXX param is specified (defaults 100)[-ReportRowsLimit]")]
-        [int]$ReportRowsLimit = 100  
-    ) ;
-    BEGIN {
-        $Verbose=($VerbosePreference -eq 'Continue') ;  
-        # Get parameters this function was invoked with
-        $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
-        $propsFldr = @{Name='Folder';Expression={$_.Identity.tostring()}},@{Name="Items";Expression={$_.ItemsInFolder}} ;
-        $propsMsgEx10 = 'Timestamp',@{N='TimestampLocal';E={$_.Timestamp.ToLocalTime()}},'Source','EventId','RelatedRecipientAddress','Sender',@{N='Recipients';E={$_.Recipients}},"RecipientCount",@{N='RecipientStatus';E={$_.RecipientStatus}},"MessageSubject","TotalBytes",@{N='Reference';E={$_.Reference}},'MessageLatency','MessageLatencyType','InternalMessageId','MessageId','ReturnPath','ClientIp','ClientHostname','ServerIp','ServerHostname','ConnectorId','SourceContext','MessageInfo',@{N='EventData';E={$_.EventData}} ;
-        $propsMsgEXO = @{N='ReceivedLocal';E={$_.Received.ToLocalTime()}},'SenderAddress','RecipientAddress','Subject','Status','ToIP','FromIP','Size','MessageId','MessageTraceId','Index' ;
-        
-        # pull settings per Tenant fr Meta
-        $Meta = gv -name "$($TenOrg)Meta" ; 
-        <# pull value fr meta
-        if($Meta -is [system.array]){ throw "Unable to resolve unique `$xxxMeta! from `$TenOrg:$($TenOrg)" ; break} ; 
-        if(!$Meta.value.DefaultObjectOwner){throw "Unable to resolve $($Meta.Name).value.DefaultObjectOwner from `$TenOrg:$($TenOrg)" ; break} 
-        else { $ManagedBy=$Meta.value.DefaultObjectOwner} ;  ;
-        #>
-
-        $Retries = 4 ;
-        $RetrySleep = 5 ;
-        if(!$ThrottleMs){$ThrottleMs = 50 ;}
-        $CredRole = 'CSVC' ; # role of svc to be dyn pulled from metaXXX if no -Credential spec'd, 
-        if(!$rgxDriveBanChars){$rgxDriveBanChars = '[;~/\\\.:]' ; } ; # ;~/\.:, 
-        
-        if($useEXOP){
-            $UseOP=$false ; 
-            if((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro -AND (Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server){
-                $UseOP = $true ; 
-                $smsg = "$($TenOrg):Meta.ExOPAccessFromToro($((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro)) -AND/OR Meta.Ex10Server($((Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server)),`ENABLING use of OnPrem Ex system this pass." ; 
-                if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            } else { 
-                $UseOP = $false ; 
-                $smsg = "$($TenOrg):Meta.ExOPAccessFromToro($((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro)) -AND/OR Meta.Ex10Server($((Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server)),`nDISABLING use of OnPrem Ex system this pass." ; 
-                if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            } ; 
-        } else { 
-            # o365/EXO creds
-            $o365Cred=$null ;
-            <# Usage: Type defaults to SID, if not spec'd - Note: there must be a *logged in & configured *profile* 
-            $o365Cred=get-TenantCredentials -TenOrg $TenOrg -verbose -userrole SID ;
-            Returns a credential set for the $TenOrg Hybrid OnPrem Exchange Org
-            .EXAMPLE
-            $o365Cred=get-TenantCredentials -TenOrg $TenOrg -verbose -userrole CSVC ;
-            Returns the CSVC Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
-            .EXAMPLE
-            $o365Cred=get-TenantCredentials -TenOrg $TenOrg -verbose -userrole B2BI ;
-            Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
-            #>
-            #if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -verbose:$($verbose))){
-            # force it to use the csvc mapping from $xxxmeta.o365_CSvcUpn, failthrough to SID spec 
-            if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
-                # make it script scope, so we don't have to predetect & purge before using new-variable
-                New-Variable -Name cred$($tenorg) -scope Script -Value $o365Cred.cred ;
-                $smsg = "Resolved $($Tenorg) `$o365cred:$($o365Cred.cred.username) (assigned to `$cred$($tenorg))" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            } else {
-                #-=-record a STATUS=-=-=-=-=-=-=
-                $statusdelta = ";ERROR";
-                $script:PassStatus += $statusdelta ;
-                set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
-                #-=-=-=-=-=-=-=-=
-                $smsg = "Unable to resolve $($tenorg) `$o365Cred value!"
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                throw "Unable to resolve $($tenorg) `$o365Cred value!`nEXIT!"
-                exit ;
-            } ;
-            <# CALLS ARE IN FORM: (cred$($tenorg))
-            $pltRXO = @{Credential = $Credential ; verbose = $($verbose) ; }
-            $pltRXO = @{
-                Credential = (Get-Variable -name cred$($tenorg) ).value ;
-                verbose = $($verbose) ; } ; 
-            if ($script:useEXOv2) { reconnect-eXO2 @pltRXO }
-            else { reconnect-EXO @pltRXO } ;
-            # or with Tenant-specific cred($Tenorg) lookup
-            #>
-        } ; 
-
-        if($UseOP){
-            # do the OP creds too
-            $OPCred=$null ;
-            # default to the onprem svc acct
-            $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC' ;verbose=$($verbose)} ;
-            if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
-                # make it script scope, so we don't have to predetect & purge before using new-variable
-                New-Variable -Name "cred$($tenorg)OP" -scope Script -Value $OPCred ;
-                $smsg = "Resolved $($Tenorg) `$OPCred:$($OPCred.username) (assigned to `$cred$($tenorg)OP)" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            } else {
-                #-=-record a STATUS=-=-=-=-=-=-=
-                $statusdelta = ";ERROR";
-                $script:PassStatus += $statusdelta ;
-                set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
-                #-=-=-=-=-=-=-=-=
-                $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                throw "Unable to resolve $($tenorg) `$OPCred value!`nEXIT!"
-                exit ;
-            } ;
-
-            # === Exchange LEMS/REMS detect & connect code
-
-            $smsg= "Using EXOP cred:`$cred$($tenorg)OP:$((Get-Variable -name "cred$($tenorg)OP" ).value.username)" ;  
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-        } ; 
-        
     } ;  # BEGIN-E
     PROCESS {
         #$ofile=".\$($ticket)-$($Mailbox)-folder-sizes-$(get-date -format 'yyyyMMdd-HHmmtt').csv" ;
@@ -3202,7 +3061,45 @@ function get-MsgTrace {
     (StartDate w *NO* Enddate, asserting currenttime)" ;
                     $msgtrk.EndDate=(get-date) ;
                 } ;
-                
+                <#
+                TRY{
+                    gcm Get-AzureADDomain -ea 0 | out-null ; 
+                } CATCH {
+                    connect-aad ; 
+                    #raad ; 
+                } ; 
+                raad ; 
+                #>
+                <#
+                $error.clear() ;
+                TRY {
+                    Connect-AAD ;
+                    $tendoms=Get-AzureADDomain ;
+                } CATCH [System.Management.Automation.ParameterBindingException]{
+                    $ErrTrapt=$Error[0] ; 
+                    Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapt.ItemName). `nError Message: $($ErrTrapt.Message)`nError Details: $($ErrTrapt)" ;
+                    $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapt.Exception.GetType().FullName)]{" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                } CATCH [Microsoft.Open.Azure.AD.CommonLibrary.AadNeedAuthenticationException]{
+                    $ErrTrapt=$Error[0] ; 
+                    # now throwing: Error Message: You must call the Connect-AzureAD cmdlet before calling any other cmdlets.
+                    $smsg = "Expired AAD Token, resetting" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Disconnect-AzureAD ; 
+                    Disconnect-AAD ;
+                    Connect-AAD ;
+                } CATCH {
+                    $ErrTrapt=$Error[0] ; 
+                    Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapt.ItemName). `nError Message: $($ErrTrapt.Message)`nError Details: $($ErrTrapt)" ;
+                    $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapt.Exception.GetType().FullName)]{" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                } ; 
+                #>
                 $error.clear() ;
                 TRY {
                     #Connect-AAD ;
@@ -4659,3 +4556,29 @@ function Test-Uri{
 
 Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,Invoke-ExoOnlineConnection,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-EXOToken,Test-Uri -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU74H0JUcfwBz1Ogezn1wY03a7
+# /o6gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRWRTVW
+# xxI8SAxDWILtwtsTAtQZJzANBgkqhkiG9w0BAQEFAASBgBfYlySWptaOc1Pprr5c
+# eVyxiTnexwAMzeLNfCTM3qBWsXnlTsVXpWrB2D+V+ovRe0L/apNvwQeMEZ9pmEK1
+# 76BBw4rwbPuFufZNbzJTCIe5qhmJ+CeCF1paG+tmt2M0H/vid9Wl9ONWiYNoC3MZ
+# mlO6OD4XE2uy7AlwBaucKPXy
+# SIG # End signature block
