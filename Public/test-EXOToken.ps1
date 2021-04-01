@@ -15,6 +15,7 @@ function test-EXOToken {
     Github      : https://github.com/tostka/verb-aad
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS
+    # 8:34 AM 3/31/2021 added verbose suppress to all import-mods
     * 12:21 PM 8/11/2020 added dependancy mod try/tach, and a catch on the failure error returned by the underlying test-ActiveToken cmd
     * 11:58 AM 8/9/2020 init
     .DESCRIPTION
@@ -25,7 +26,7 @@ function test-EXOToken {
     System.Boolean
     .EXAMPLE
     $hasActiveToken = test-EXOToken 
-    $psss=Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" } ;  
+    $psss=Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -AND $_.Name -like "ExchangeOnlineInternalSession*" } ;  
     $sessionIsOpened = $psss.Runspace.RunspaceStateInfo.State -eq 'Opened'
     if (($hasActiveToken -eq $false) -or ($sessionIsOpened -ne $true)){
         #If there is no active user token or opened session then ensure that we remove the old session
@@ -42,7 +43,7 @@ function test-EXOToken {
     PROCESS {
         $hasActiveToken = $false ; 
         # Save time and pretest for *any* EXOv2 PSSession, before bothering to test (no session - even closed/broken => no OAuth token)
-        $exov2 = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*"} ; 
+        $exov2 = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -AND $_.Name -like "ExchangeOnlineInternalSession*"} ; 
         if($exov2){
         
             # ==load dependancy module:
@@ -55,7 +56,7 @@ function test-EXOToken {
                 write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):Install-Module w scope:$($pltInMod.scope)`n$(($pltInMod|out-string).trim())" ; 
                 Install-Module @pltIMod ; 
             } ; # IsInstalled
-            $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; } ;
+            $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$false } ;
             if($minvers){$pltIMod.add('MinimumVersion',$minvers) } ; 
             Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
                 write-verbose "Import-Module w`n$(($pltIMod|out-string).trim())" ; 
@@ -66,7 +67,7 @@ function test-EXOToken {
             TRY {
                 #=load function module (subcomponent of dep module, pathed from same dir)
                 $tmodpath = join-path -path (split-path (get-module $modname -list).path) -ChildPath 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll' ;
-                if(test-path $tmodpath){ import-module -name $tmodpath -Cmdlet Test-ActiveToken }
+                if(test-path $tmodpath){ import-module -name $tmodpath -Cmdlet Test-ActiveToken -verbose:$false }
                 else { throw "Unable to locate:Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll" } ;  
             } CATCH {
                 Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;

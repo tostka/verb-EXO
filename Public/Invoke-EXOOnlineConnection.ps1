@@ -1,4 +1,4 @@
-﻿#*------v Function Invoke-ExoOnlineConnection v------
+﻿#*------v Invoke-EXOOnlineConnection.ps1 v------
 function Invoke-ExoOnlineConnection{
     <#
     .SYNOPSIS
@@ -61,7 +61,7 @@ function Invoke-ExoOnlineConnection{
         if(!$PSExoPowershellModuleRoot){$PSExoPowershellModuleRoot = (Get-ChildItem -Path $($env:LOCALAPPDATA+"\Apps\2.0\") -Filter CreateExoPSSession.ps1 -Recurse -ErrorAction SilentlyContinue -Force | Select -Last 1).DirectoryName } ; 
         if(!$ExoPowershellModule){$ExoPowershellModule = "Microsoft.Exchange.Management.ExoPowershellModule.dll"} ; 
         if(!$ExoPowershellModulePath){$ExoPowershellModulePath = [System.IO.Path]::Combine($PSExoPowershellModuleRoot, $ExoPowershellModule)} ; 
-        if(!(get-module $ExoPowershellModule.replace('.dll','') )){Import-Module $ExoPowershellModulePath} ; 
+        if(!(get-module $ExoPowershellModule.replace('.dll','') )){Import-Module $ExoPowershellModulePath -verbose:$false } ; 
     }
     PROCESS{
         #determine if  PsSession is loaded in memory
@@ -127,6 +127,6 @@ function Invoke-ExoOnlineConnection{
         } ;
     } ;
     END{} ;
-} ; 
-#*------^ END Function Invoke-ExoOnlineConnection ^------
+}
 
+#*------^ Invoke-EXOOnlineConnection.ps1 ^------

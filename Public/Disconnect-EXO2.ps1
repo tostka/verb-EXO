@@ -15,6 +15,7 @@ Function Disconnect-EXO2 {
     Github      : https://github.com/tostka
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 11:55 AM 3/31/2021 suppress verbose on module/session cmdlets
     * 1:14 PM 3/1/2021 added color reset
     * 9:55 AM 7/30/2020 EXO v2 version, adapted from Disconnect-EXO, + some content from RemoveExistingPSSession
     .DESCRIPTION
@@ -42,14 +43,14 @@ Function Disconnect-EXO2 {
     # confirm module present
     $modname = 'ExchangeOnlineManagement' ; 
     #Try {Get-Module $modname -listavailable -ErrorAction Stop | out-null } Catch {Install-Module $modname -scope CurrentUser ; } ;                 # installed
-    Try {Get-Module $modname -ErrorAction Stop | out-null } Catch {Import-Module -Name $modname -MinimumVersion '1.0.1' -ErrorAction Stop  } ; # imported
+    Try {Get-Module $modname -ErrorAction Stop | out-null } Catch {Import-Module -Name $modname -MinimumVersion '1.0.1' -ErrorAction Stop -verbose:$false; } ; # imported
     # just alias disconnect-ExchangeOnline, it retires token etc as well as closing PSS, but biggest reason is it's got a confirm, hard-coded, needs a function to override
     
     #Disconnect-ExchangeOnline -confirm:$false ; 
     # just use the updated RemoveExistingEXOPSSession
-    RemoveExistingEXOPSSession
+    RemoveExistingEXOPSSession -Verbose:$false ;
     
-    Disconnect-PssBroken -verbose:$($verbose) ;
+    Disconnect-PssBroken -verbose:$false ;
     Remove-PSTitlebar 'EXO' ;
     [console]::ResetColor()  # reset console colorscheme
 }

@@ -1,4 +1,4 @@
-﻿#*------v Function Connect-EXOPSSession v------
+﻿#*------v Connect-EXOPSSession.ps1 v------
 function Connect-EXOPSSession {
     <#
     .SYNOPSIS
@@ -98,7 +98,7 @@ function Connect-EXOPSSession {
         $global:_EXO_PSSessionOption = $PSSessionOption;
         $global:_EXO_Credential = $Credential;
 
-        Import-Module $ExoPowershellModulePath;
+        Import-Module $ExoPowershellModulePath -verbose:$false;
         $PSSession = New-ExoPSSession -UserPrincipalName $UserPrincipalName -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri -PSSessionOption $PSSessionOption -Credential $Credential
     
         if ($PSSession -ne $null)
@@ -109,5 +109,6 @@ function Connect-EXOPSSession {
     }catch{
         throw $_
     }
-} ; 
-#*------^ END Function Connect-EXOPSSession ^------
+}
+
+#*------^ Connect-EXOPSSession.ps1 ^------

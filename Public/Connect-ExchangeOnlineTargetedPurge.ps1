@@ -17,6 +17,7 @@ Tags        : Powershell
 AddedCredit : Microsoft (edited version of published commands in the module)
 AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
 REVISIONS
+# 8:34 AM 3/31/2021 added verbose suppress to all import-mods
 * 8:34 AM 11/9/2020 init
 .DESCRIPTION
 Connect-ExchangeOnlineTargetedPurge.ps1 - Tweaked version of the Exchangeonline module:connect-ExchangeOnline(), uses variant RemoveExistingPSSession() to avoid purging CCMW sessions on connect. Intent is to permit *concurrent* EXO & CCMS sessions.
@@ -175,7 +176,7 @@ https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-
         } ;
         # paths to proper Module path: Name lists as: Microsoft.Exchange.Management.RestApiClient
         if(-not(get-module Microsoft.Exchange.Management.RestApiClient)){
-            Import-Module $RestModulePath
+            Import-Module $RestModulePath -Verbose:$false ;
         } ;
 
         if(!$ExoPowershellModule){$ExoPowershellModule = "Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll"} ;
@@ -185,7 +186,7 @@ https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-
         # full path: C:\Users\kadritss\Documents\WindowsPowerShell\Modules\ExchangeOnlineManagement\1.0.1\Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll
         # Name: Microsoft.Exchange.Management.ExoPowershellGalleryModule
         if(-not(get-module Microsoft.Exchange.Management.ExoPowershellGalleryModule)){
-            Import-Module $ExoPowershellModulePath
+            Import-Module $ExoPowershellModulePath -verbose:$false ;
         } ; 
     } 
     process {
@@ -252,7 +253,7 @@ https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-
                 $global:_EXO_Device = $Device.Value;
             }
 
-            Import-Module $ModulePath;
+            Import-Module $ModulePath -Verbose:$false ;
 
             $global:_EXO_ModulePath = $ModulePath;
 
@@ -271,7 +272,7 @@ https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-
 
                 # Import the above module globally. This is needed as with using psm1 files, 
                 # any module which is dynamically loaded in the nested module does not reflect globally.
-                Import-Module $PSSessionModuleInfo.Path -Global -DisableNameChecking -Prefix $Prefix
+                Import-Module $PSSessionModuleInfo.Path -Global -DisableNameChecking -Prefix $Prefix -Verbose:$false ;
 
                 UpdateImplicitRemotingHandler
 
@@ -280,14 +281,14 @@ https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-
                 #$RestModulePath = [System.IO.Path]::Combine($PSScriptRoot, $RestPowershellModule);
                 $RestModulePath = [System.IO.Path]::Combine($EOMgmtModulePath, $RestPowershellModule);
 
-                Import-Module $RestModulePath -Cmdlet Set-ExoAppSettings;
+                Import-Module $RestModulePath -Cmdlet Set-ExoAppSettings -Verbose:$false ;
 
                 # If we are configured to collect telemetry, add telemetry wrappers. 
                 if ($EnableErrorReporting.Value -eq $true)
                 {
                     $FilePath = Add-EXOClientTelemetryWrapper -Organization (Get-OrgNameFromUPN -UPN $UserPrincipalName.Value) -PSSessionModuleName $PSSessionModuleInfo.Name -LogDirectoryPath $LogDirectoryPath.Value
                     $global:_EXO_TelemetryFilePath = $FilePath[0]
-                    Import-Module $FilePath[1] -DisableNameChecking
+                    Import-Module $FilePath[1] -DisableNameChecking -Verbose:$false
 
                     Push-EXOTelemetryRecord -TelemetryFilePath $global:_EXO_TelemetryFilePath -CommandName Connect-ExchangeOnlineTargetedPurge -CommandParams $PSCmdlet.MyInvocation.BoundParameters -OrganizationName  $global:_EXO_ExPSTelemetryOrganization -ScriptName $global:_EXO_ExPSTelemetryScriptName  -ScriptExecutionGuid $global:_EXO_ExPSTelemetryScriptExecutionGuid
 
@@ -316,7 +317,7 @@ https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-
                     $RestPowershellModule = "Microsoft.Exchange.Management.RestApiClient.dll";
                     #$RestModulePath = [System.IO.Path]::Combine($PSScriptRoot, $RestPowershellModule);
                     $RestModulePath = [System.IO.Path]::Combine($EOMgmtModulePath, $RestPowershellModule);
-                    Import-Module $RestModulePath -Cmdlet Set-ExoAppSettings;
+                    Import-Module $RestModulePath -Cmdlet Set-ExoAppSettings -Verbose:$false;
 
                     # Set the AppSettings
                     Set-ExoAppSettings -ShowProgress $ShowProgress.Value -PageSize $PageSize.Value -UseMultithreading $UseMultithreading.Value -TrackPerformance $TrackPerformance.Value -ExchangeEnvironmentName $ExchangeEnvironmentName -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri -EnableErrorReporting $true -LogDirectoryPath $LogDirectoryPath.Value -LogLevel $LogLevel.Value

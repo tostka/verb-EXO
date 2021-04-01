@@ -15,6 +15,7 @@ Function check-EXOLegalHold {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,Legal
     REVISIONS   :
+    # 11:21 AM 3/31/2021 added TenDom test, after AccDom test ;  added verbose suppress to all import-mods
     * 12:37 PM 11/6/2020 init version 
     .DESCRIPTION
     check-EXOLegalHold - check passed in EXO mailbox object for Legal Hold status
@@ -100,10 +101,15 @@ Function check-EXOLegalHold {
                     set-Variable  -name "$($TenOrg)Meta" -value ( (Get-Variable  -name "$($TenOrg)Meta").value += @{'o365_AcceptedDomains' = (Get-exoAcceptedDomain).domainname} )
                 } ;
                 if((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
-
                     # validate that the connected EXO is to the $Credential tenant    
-                    write-verbose "(Existing EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
+                    $smsg = "(EXO Authenticated & Functional(AccDom):$($Credential.username.split('@')[1].tostring()))" ; 
                     $bExistingEXOGood = $true ; 
+                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+                }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
+                    $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $bExistingEXOGood = $true ;
                 } else { 
                     write-verbose "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ; 
                     Discheck-EXOLegalHold ; 
@@ -164,14 +170,13 @@ Function check-EXOLegalHold {
                     throw "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
                     Break ;
                 } ; 
-                $pltPSS = [ordered]@{
-                    Session             = $global:EOLSession ;
-                    Prefix              = $CommandPrefix ;
-                    DisableNameChecking = $true  ;
-                    AllowClobber        = $true ;
-                    ErrorAction         = 'Stop' ;
+                $pltiSess = [ordered]@{Session = $global:EOLSession ; DisableNameChecking = $true  ; AllowClobber = $true ; ErrorAction  = 'Stop' ;} ;
+                $pltIMod=@{Global=$true;PassThru=$true;DisableNameChecking=$true ; verbose=$false} ; # force verbose off, suppress spam in console
+                if($CommandPrefix){
+                    $pltIMod.add('Prefix',$CommandPrefix) ;
+                    $pltISess.add('Prefix',$CommandPrefix) ;
                 } ;
-                write-verbose "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltPSS|out-string).trim())" ;
+                write-verbose "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltiSess|out-string).trim())" ;
                 Try {
                     # Verbose:Continue is VERY noisey for module loads. Bracketed suppress:
                     if($VerbosePreference = "Continue"){
@@ -179,7 +184,7 @@ Function check-EXOLegalHold {
                         $VerbosePreference = "SilentlyContinue" ;
                         $verbose = ($VerbosePreference -eq "Continue") ;
                     } ; 
-                    $Global:EOLModule = Import-Module (Import-PSSession @pltPSS) -Global -Prefix $CommandPrefix -PassThru -DisableNameChecking   ;
+                    $Global:EOLModule = Import-Module (Import-PSSession @pltiSess) @pltIMod ;
                     # reenable VerbosePreference:Continue, if set, during mod loads 
                     if($VerbosePrefPrior -eq "Continue"){
                         $VerbosePreference = $VerbosePrefPrior ;
@@ -192,7 +197,7 @@ Function check-EXOLegalHold {
                         Error message:
                         Import-PSSession : Data returned by the remote Get-FormatData command is not in the expected format.
                         At C:\Program Files\WindowsPowerShell\Modules\verb-exo\1.0.14\verb-EXO.psm1:370 char:52
-                        + ...   $Global:EOLModule = Import-Module (Import-PSSession @pltPSS) -Globa ...
+                        + ...   $Global:EOLModule = Import-Module (Import-PSSession @pltiSess) -Globa ...
                         +                                          ~~~~~~~~~~~~~~~~~~~~~~~~
                             + CategoryInfo          : InvalidResult: (:) [Import-PSSession], ArgumentException
                             + FullyQualifiedErrorId : ErrorMalformedDataFromRemoteCommand,Microsoft.PowerShell.Commands.ImportPSSessionCommand
@@ -212,16 +217,15 @@ Function check-EXOLegalHold {
                         Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
                         Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
                     } ; 
-                    $pltPSS = [ordered]@{
-                        Session             = $global:EOLSession ;
-                        Prefix              = $CommandPrefix ;
-                        DisableNameChecking = $true  ;
-                        AllowClobber        = $true ;
-                        ErrorAction         = 'Stop' ;
+                    $pltiSess = [ordered]@{Session = $global:EOLSession ; DisableNameChecking = $true  ; AllowClobber = $true ; ErrorAction = 'Stop' ;} ;
+                    $pltIMod=@{Global=$true;PassThru=$true;DisableNameChecking=$true ; verbose=$false} ; # force verbose off, suppress spam in console
+                    if($CommandPrefix){
+                        $pltIMod.add('Prefix',$CommandPrefix) ;
+                        $pltISess.add('Prefix',$CommandPrefix) ;
                     } ;
-                    write-verbose -verbose:$true "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltPSS|out-string).trim())" ;
+                    write-verbose -verbose:$true "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltiSess|out-string).trim())" ;
                     TRY{
-                        $Global:EOLModule = Import-Module (Import-PSSession @pltPSS) -Global -Prefix $CommandPrefix -PassThru -DisableNameChecking   ;
+                        $Global:EOLModule = Import-Module (Import-PSSession @pltiSess) @pltIMod   ;
                     } CATCH {
                         $ErrTrapd = $_ ; 
                         Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
@@ -273,6 +277,12 @@ Function check-EXOLegalHold {
                 # validate that the connected EXO is to the $Credential tenant    
                 write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
                 $bExistingEXOGood = $true ; 
+            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+            }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
+                $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $bExistingEXOGood = $true ;
             } else { 
                 write-error "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ; 
                 Discheck-EXOLegalHold ; 

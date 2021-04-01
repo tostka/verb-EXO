@@ -17,6 +17,7 @@ function connect-EXOv2RAW {
     AddedCredit : Microsoft (edited version of published commands in the module)
     AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
     REVISIONS
+    # 8:34 AM 3/31/2021 added verbose suppress to all import-mods
     * 3:36 PM 11/9/2020 init debugged to basic function
     .DESCRIPTION
     Connect-ExchangeOnlineTargetedPurge.ps1 - Stripped to basics version of the Exchangeonlinemanagement module:connect-ExchangeOnline(), uses RemoveExistingEXOPSSession (vs RemoveExistingPSSession) to leave CCMS sessions intact, and permit run of concurrent EXO & CCMS sessions
@@ -121,7 +122,7 @@ function connect-EXOv2RAW {
         } ;
         # paths to proper Module path: Name lists as: Microsoft.Exchange.Management.RestApiClient
         if (-not(get-module Microsoft.Exchange.Management.RestApiClient)) {
-            Import-Module $RestModulePath
+            Import-Module $RestModulePath -verbose:$false ;
         } ;
 
         if (!$ExoPowershellModule) { $ExoPowershellModule = "Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll" } ;
@@ -131,7 +132,7 @@ function connect-EXOv2RAW {
         # full path: C:\Users\kadritss\Documents\WindowsPowerShell\Modules\ExchangeOnlineManagement\1.0.1\Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll
         # Name: Microsoft.Exchange.Management.ExoPowershellGalleryModule
         if (-not(get-module Microsoft.Exchange.Management.ExoPowershellGalleryModule)) {
-            Import-Module $ExoPowershellModulePath
+            Import-Module $ExoPowershellModulePath -Verbose:$false ;
         } ;
     }
     PROCESS {
@@ -176,7 +177,7 @@ function connect-EXOv2RAW {
             $global:_EXO_Credential = $Credential;
             $global:_EXO_EnableErrorReporting = $EnableErrorReporting;
             # import the ExoPowershellModule .dll
-            Import-Module $ModulePath;
+            Import-Module $ModulePath -verbose:$false;
             $global:_EXO_ModulePath = $ModulePath;
             # $PSSession = New-ExoPSSession -ExchangeEnvironmentName $ExchangeEnvironmentName -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri -UserPrincipalName $UserPrincipalName.Value -PSSessionOption $PSSessionOption -Credential $Credential.Value -BypassMailboxAnchoring:$BypassMailboxAnchoring -DelegatedOrg $DelegatedOrganization
 
@@ -195,17 +196,20 @@ function connect-EXOv2RAW {
 
             if ($PSSession -ne $null ) {
                 $PSSessionModuleInfo = Import-PSSession $PSSession -AllowClobber -DisableNameChecking
-
+                $pltIMod=@{Global=$true;DisableNameChecking=$true ; verbose=$false} ; # force verbose off, suppress spam in console
+                if($Prefix){
+                    $pltIMod.add('Prefix',$CommandPrefix) ;
+                } ;
                 # Import the above module globally. This is needed as with using psm1 files,
                 # any module which is dynamically loaded in the nested module does not reflect globally.
-                Import-Module $PSSessionModuleInfo.Path -Global -DisableNameChecking -Prefix $Prefix
+                Import-Module $PSSessionModuleInfo.Path @pltIMod ;
                 # haven't checked into what this does
                 UpdateImplicitRemotingHandler ;
 
                 # Import the REST module .dll
                 $RestPowershellModule = "Microsoft.Exchange.Management.RestApiClient.dll";
                 $RestModulePath = [System.IO.Path]::Combine($EOMgmtModulePath, $RestPowershellModule);
-                Import-Module $RestModulePath -Cmdlet Set-ExoAppSettings;
+                Import-Module $RestModulePath -Cmdlet Set-ExoAppSettings -verbose:$false;
 
                 # Set the AppSettings disabling the logging
                 Set-ExoAppSettings -ShowProgress $ShowProgress.Value -PageSize $PageSize.Value -UseMultithreading $UseMultithreading.Value -TrackPerformance $TrackPerformance.Value -ExchangeEnvironmentName $ExchangeEnvironmentName -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri -EnableErrorReporting $false ;
@@ -221,4 +225,4 @@ function connect-EXOv2RAW {
 
 }
 
-#*------^ connect-EXOv2RAW.ps1 ^-----
+#*------^ connect-EXOv2RAW.ps1 ^------

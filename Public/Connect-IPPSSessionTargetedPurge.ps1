@@ -114,7 +114,7 @@ function Connect-IPPSSessionTargetedPurge{
         } ;
         # paths to proper Module path: Name lists as: Microsoft.Exchange.Management.RestApiClient
         if(-not(get-module Microsoft.Exchange.Management.RestApiClient)){
-            Import-Module $RestModulePath
+            Import-Module $RestModulePath -verbose:$false ;
         } ;
 
         if(!$ExoPowershellModule){$ExoPowershellModule = "Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll"} ;
@@ -124,7 +124,7 @@ function Connect-IPPSSessionTargetedPurge{
         # full path: C:\Users\kadritss\Documents\WindowsPowerShell\Modules\ExchangeOnlineManagement\1.0.1\Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll
         # Name: Microsoft.Exchange.Management.ExoPowershellGalleryModule
         if(-not(get-module Microsoft.Exchange.Management.ExoPowershellGalleryModule)){
-            Import-Module $ExoPowershellModulePath
+            Import-Module $ExoPowershellModulePath -verbose:$false ;
         } ; 
     } 
     process 
