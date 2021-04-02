@@ -21,6 +21,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 11:43 AM 4/2/2021 updated added wlt & recstat support, updated catch blocks
     # 2:56 PM 3/31/2021 typo/mispaste fix: had $E10Sess assigning on the import ;  bugfix: @toroco.onmicr...com, isn't in EXO.AccDoms, so added a 2nd test for match to TenDom ; added verbose suppress to all import-mods
     * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 1:15 PM 3/1/2021 added org-level color-coded console
@@ -191,11 +192,22 @@ Function Connect-EXO {
                 } ;
                 Write-Host $cMsg ;
                 write-verbose "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
-                Try { $global:EOLSession = New-PSSession @EXOsplat ;
-                } catch {
-                    Write-Warning -Message "Tried but failed to import the EXO PS module.`n`nError message:" ;
-                    throw $_ ;
-                } ;
+                $error.clear() ;
+                TRY {
+                    $global:EOLSession = New-PSSession @EXOsplat ;
+                } CATCH {
+                    Write-Warning "$(get-date -format 'HH:mm:ss'): New-PSSession: Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                    $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($Error[0].Exception.GetType().FullName)]{" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #-=-record a STATUSERROR=-=-=-=-=-=-=
+                    $statusdelta = ";ERROR"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                    if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
+                    if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                    #-=-=-=-=-=-=-=-=
+                    BREAK #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                } ; 
+                
                 if ($error.count -ne 0) {
                     if ($error[0].FullyQualifiedErrorId -eq '-2144108477,PSSessionOpenFailed') {
                         write-warning "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
@@ -214,21 +226,24 @@ Function Connect-EXO {
                     $pltIMod.add('Prefix',$CommandPrefix) ;
                     $pltISess.add('Prefix',$CommandPrefix) ;
                 } ;
-                write-verbose "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltiSess|out-string).trim())`n$((get-date).ToString('HH:mm:ss')):Import-Module w`n$(($pltIMod|out-string).trim())" ;
+                write-verbose "`n$((get-date).ToString('HH:mm:ss')):-PSSession w`n$(($pltiSess|out-string).trim())`n$((get-date).ToString('HH:mm:ss')):Import-Module w`n$(($pltIMod|out-string).trim())" ;
                 Try {
                     # Verbose:Continue is VERY noisey for module loads. Bracketed suppress:
+                    <#
                     if($VerbosePreference = "Continue"){
                         $VerbosePrefPrior = $VerbosePreference ;
                         $VerbosePreference = "SilentlyContinue" ;
                         $verbose = ($VerbosePreference -eq "Continue") ;
                     } ; 
+                    #>
                     #$Global:EOLModule = Import-Module (Import-PSSession @pltiSess) -Global -Prefix $CommandPrefix -PassThru -DisableNameChecking -Verbose:$false  ;
                     $Global:EOLModule = Import-Module (Import-PSSession @pltiSess) @pltIMod  ;
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
+                    <# reenable VerbosePreference:Continue, if set, during mod loads 
                     if($VerbosePrefPrior -eq "Continue"){
                         $VerbosePreference = $VerbosePrefPrior ;
                         $verbose = ($VerbosePreference -eq "Continue") ;
                     } ; 
+                    #>
                     Add-PSTitleBar $sTitleBarTag ;
                 } catch [System.ArgumentException] {
                     <# 8:45 AM 7/29/2020 VEN tenant now throwing error:
@@ -246,29 +261,59 @@ Function Connect-EXO {
                     2) use ?SerializationLevel=Full with the ConnectionURI: -ConnectionUri "https://outlook.office365.com/powershell-liveid?SerializationLevel=Full"
                     #>
                     $EXOsplat.ConnectionUri = 'https://outlook.office365.com/powershell-liveid?SerializationLevel=Full' ;
-                    write-warning -verbose:$true "$((get-date).ToString('HH:mm:ss')):'Get-FormatData command is not in the expected format' EXO bug: Retrying with '&SerializationLevel=Full'ConnectionUri`n(details at https://answers.microsoft.com/en-us/msoffice/forum/all/cannot-connect-to-exchange-online-via-powershell/)" ;
+                    $smsg = "Get-FormatData command is not in the expected format' EXO bug: Retrying with '&SerializationLevel=Full'ConnectionUri`n(details at https://answers.microsoft.com/en-us/msoffice/forum/all/cannot-connect-to-exchange-online-via-powershell/)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-Warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #-=-record a STATUSWARN=-=-=-=-=-=-=
+                    $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                    if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
+                    if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                    #-=-=-=-=-=-=-=-=
                     write-host -foregroundcolor white "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
-                    TRY{
+                    $error.clear() ;
+                    TRY {
                         $global:EOLSession | Remove-PSSession; ; 
                         $global:EOLSession = New-PSSession @EXOsplat ;
                     } CATCH {
-                        $ErrTrapd = $_ ; 
-                        Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                        Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #-=-record a STATUSWARN=-=-=-=-=-=-=
+                        $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                        if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
+                        if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                        #-=-=-=-=-=-=-=-=
+                        $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
                     } ; 
-                    $pltiSess = [ordered]@{Session = $global:EOLSession ; Prefix = $CommandPrefix ; DisableNameChecking = $true  ; AllowClobber = $true ; ErrorAction = 'Stop' ;} ;
+                    
+                    $pltiSess = [ordered]@{Session = $global:EOLSession ; Prefix = $CommandPrefix ; DisableNameChecking = $true  ; AllowClobber = $true ; ErrorAction = 'Stop' ; verbose=$false ;} ;
                     $pltIMod=@{Global=$true;PassThru=$true;DisableNameChecking=$true ; verbose=$false} ; # force verbose off, suppress spam in console
                     if($CommandPrefix){
                         $pltIMod.add('Prefix',$CommandPrefix) ;
                         $pltISess.add('Prefix',$CommandPrefix) ;
                     } ;
                     write-host -foregroundcolor white "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltiSess|out-string).trim())" ;
-                    TRY{
+                    $error.clear() ;
+                    TRY {
                         $Global:EOLModule = Import-Module (Import-PSSession @pltiSess) @pltIMod   ;
                     } CATCH {
-                        $ErrTrapd = $_ ; 
-                        Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                        Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #-=-record a STATUSWARN=-=-=-=-=-=-=
+                        $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                        if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
+                        if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                        #-=-=-=-=-=-=-=-=
+                        $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
                     } ; 
                     # reenable VerbosePreference:Continue, if set, during mod loads 
                     if($VerbosePrefPrior -eq "Continue"){
@@ -277,10 +322,21 @@ Function Connect-EXO {
                     } ; 
                     Add-PSTitleBar $sTitleBarTag ;
 
-                } catch {
-                    Write-Warning -Message "Tried but failed to import the EXO PS module.`n`nError message:" ;
-                    throw $_ ;
-                } ;
+                } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #-=-record a STATUSWARN=-=-=-=-=-=-=
+                        $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                        if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
+                        if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                        #-=-=-=-=-=-=-=-=
+                        $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                } ; 
             
             } ;
 
