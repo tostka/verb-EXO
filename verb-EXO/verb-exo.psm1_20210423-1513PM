@@ -1,4 +1,4 @@
-# verb-exo.psm1
+﻿# verb-exo.psm1
 
 
   <#
@@ -2512,9 +2512,9 @@ function convert-HistoricalSearchCSV {
     outputs .csv or .xml with variant [originalname]-Expanded.[ext] filename of source .csv file.
     Returns a string filepath to pipeline for each converted file.
     .EXAMPLE
-    convert-HistoricalSearchCSV.ps1 -ToXML -Files "C:\usr\work\incid\123456-fname.lname@domain.com-EXOHistSrch,-60D-History,From-ANY@mssociety.org,20210222-0000AM-20210423-0919AM,run-20210423-1007AM.csv" ; 
+    .\convert-HistoricalSearchCSV.ps1 -ToXML -Files "C:\usr\work\incid\123456-fname.lname@domain.com-EXOHistSrch,-60D-History,From-ANY@mssociety.org,20210222-0000AM-20210423-0919AM,run-20210423-1007AM.csv" ; 
     .EXAMPLE
-    convert-HistoricalSearchCSV.ps1 -ToCSV -Files "C:\usr\work\incid\654321-MTSummary_fname.lname@domain.com-90D-History.csv" ; 
+    .\convert-HistoricalSearchCSV.ps1 -ToCSV -Files "C:\usr\work\incid\654321-MTSummary_fname.lname@domain.com-90D-History.csv" ; 
     .LINK
     https://github.com/tostka/verb-exo
     .LINK
@@ -2530,7 +2530,7 @@ function convert-HistoricalSearchCSV {
         [Parameter(ParameterSetName='XML',HelpMessage="ToXML switch (generates nested summary XML)[-ToXML]")]
         [switch] $ToXML,
         [Parameter(ParameterSetName='CSV',HelpMessage="ToCSV switch (expands transactions into a line per RecipientStatus)[-ToCSV]")]
-        [switch] $ToCSV=$true,
+        [switch] $ToCSV,
         [Parameter(HelpMessage="Use progress dotcrawl over explicit x/y echo switch[-DoDots]")]
         [switch]$DoDots=$true 
     ) ;
@@ -2564,7 +2564,7 @@ function convert-HistoricalSearchCSV {
         For example: 
         ##Receive, Send means the message was received by the service and was sent to the intended destination.
         ##Receive, Fail means the message was received by the service but delivery to the intended destination failed.
-        ##Receive, Deliver means the message was received by the service and was delivered to the recipient?s mailbox.
+        ##Receive, Deliver means the message was received by the service and was delivered to the recipient�s mailbox.
         Multi recipients appear like:
         Fname.Lname@domain.com##Receive, Deliver;Fname.Lname@domain.com##Receive, Deliver;Fname.Lname@domain.com##Receive, Deliver;Fname.Lname@domain.com##Receive, Deliver;Fname.Lname@domain.com##Receive, Deliver;Fname.Lname@domain.com##Receive, Deliver;Fname.Lname@domain.com##Receive, Deliver;Fname.Lname@domain.com##Receive, Deliver
         #>
@@ -5132,3 +5132,29 @@ function Test-Uri{
 
 Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,Invoke-ExoOnlineConnection,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-EXOToken,Test-Uri -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUOwooZpZYMPLVD6E0eZsUW5+S
+# lJ+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSYwYam
+# 91rXsHIjuAKa5EJXuYw2ZjANBgkqhkiG9w0BAQEFAASBgKjqv1qzaZ5LaCcbupnx
+# BcrGW3lufIu6qgEgXzS30l/Hkbie72teLUPCdjkA9uXwnDIeUvt2En1B4dIZShYV
+# HC3C9MxjF4OKLGbIvtzJ75UxMq12QCfO5QbnlXLljeRv0ldG74ViOykOLsGLWBJw
+# 9bZIcp77F3TcUUX9+phm0KoM
+# SIG # End signature block
