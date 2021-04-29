@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.61.0
+  Version     : 1.0.60.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -5165,7 +5165,7 @@ Function test-xoMailbox {
     .LINK
     https://github.com/tostka/verb-EXO
     #>
-    #Requires -Modules ActiveDirectory,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-Network,verb-AAD,verb-ADMS,verb-Ex2010,verb-logging
+    #Requires -Modules ActiveDirectory,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-Network,verb-AAD,verb-ADMS,verb-Ex2010,verb-EXO, verb-logging
     [CmdletBinding()]
     PARAM(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
@@ -6526,8 +6526,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUDiPldneg1OL/AvJp+B6icMqF
-# dkWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjjGdWfLKibGks1Skc/8r9iF4
+# dY+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -6542,9 +6542,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSlI7xI
-# sa1b/5qDrt5fY5h3zCIZ2DANBgkqhkiG9w0BAQEFAASBgJcc0NqV5Nod4zmur03K
-# NtML9BGmJtoJUhNywzIBTfPUkt6kJ0VEV540x7NEsUAL/8HGKMiN1BC+mLfMaiTc
-# o01RnvCp1iwfxB3PFBEbCHVB0Qc/sHDbbf0eEmy3WJirLPUTsbGb+QLYGRkuPBrr
-# C5f3U+maN/tPnU0VlMO8C6J/
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRF9KcV
+# Z28Rr/LiNTQtu6VftHkb/TANBgkqhkiG9w0BAQEFAASBgFeJPyWKPlSlNMfDuhzR
+# JDdS2+jXC31yNlfz4LQ1uiK0+bmZSrRMxisZ6Fjn//Vg4Gbc7DqEOGrxd9KzQmQ2
+# K4LTkyOAwJsATCOyhaJmav/KuzNHk9dj9TSR5iXMYY0Dkr1Wnu1W9kA922XhNVjL
+# 1fxi4JKNI1FlQKX52LUS2kAq
 # SIG # End signature block
