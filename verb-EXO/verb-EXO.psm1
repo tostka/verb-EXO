@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.63.0
+  Version     : 1.0.64.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -5226,6 +5226,7 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
+    # 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
     * 4:20 PM 4/29/2021 debugged, looks functional - could benefit from moving the msgtrk summary down into the output block, but [shrug]
     * 7:56 AM 4/28/2021 init
     .DESCRIPTION
@@ -5668,7 +5669,7 @@ Function test-xoMailbox {
         #if(!$domaincontroller){ if(test-path function:get-gcfast){$domaincontroller=get-gcfast} else { throw "no get-gcfast()!" } ;} else {"(existing `$domaincontroller:$($domaincontroller))"} ;
         # use new get-GCFastXO cross-org dc finde
         # default to Op_ExADRoot forest from $TenOrg Meta
-        $domaincontroller = get-GCFastXO -TenOrg $TenOrg -subdomain ((gv -name "$($TenOrg)Meta").value['OP_ExADRoot']) -verbose:$($verbose) ;
+        $domaincontroller = get-GCFastXO -TenOrg $TenOrg -subdomain ((gv -name "$($TenOrg)Meta").value['OP_ExADRoot']) -verbose:$($verbose) |?{$_.length};
 
 
         <# MSOL CONNECTION
@@ -6607,8 +6608,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU10wZCOQp1HdWbLzwsZ3HbNwx
-# pWWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUp2NKrHVlfasxI14SNBuboArO
+# XcCgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -6623,9 +6624,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQqmUk4
-# Ikh0465kly23jrJl06j84TANBgkqhkiG9w0BAQEFAASBgDLVSCX67A/uCMPFI+n6
-# 4G6vGUTrcJZcASsuaIKgSDGI860fWYvNW2Y8TEjpgEqTcJv2cq65gcC2PpYgj4vt
-# UqlIk2Bs/ALPB028rpS/wqEGsnjuV2LVtEz2+yxg+Y6AfQPJRlaYpCgVPWqSIGDy
-# nFsKryOmmMexXI3SPD8edZtw
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQLuyR2
+# eCMCHpQM9dlMEJL5eOiLZjANBgkqhkiG9w0BAQEFAASBgCke/MFhuf+VcTgPXbxy
+# m9DKFlp5x2lQBJ8LaLyfPiZZk0mM7xPEueGyvWk7yczSrp6cJXkqhk0bt+GNvQnQ
+# YFtC3hYxVJfZOmvUtz52b3QdSu8k+4uufrSQN6d893gxFl1Y+exnBrAcefN6kz0N
+# GR2QWbn/wt2R2zKPE1xQMhP4
 # SIG # End signature block
