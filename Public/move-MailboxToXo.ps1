@@ -1,5 +1,4 @@
-﻿
-# move-MailboxToXo.ps1
+﻿# move-MailboxToXo.ps1
 
 # dbg: cls ; move-MailboxToXo.ps1 -TenOrg TOR -TargetMailboxes lynctest1 -NoTEST -showDebug -whatIf
 # dbg: cls ; .\move-MailboxToXo.ps1 -TargetMailboxes TestNewGenericTodd -showDebug -verbose -whatif:$true ;
@@ -10,6 +9,7 @@
 # test updated against batchfile: C:\usr\work\o365\scripts\rfc60189-OPmbxsToBeForwardedOnEXO-20190118-0343PM.csv
 # dbg: cls ; .\move-MailboxToXo.ps1 -BatchFile C:\usr\work\o365\scripts\rfc60189-OPmbxsToBeForwardedOnEXO-20190118-0343PM.csv -showDebug -whatif ;
 
+#*------v move-MailboxToXo.ps1 v------
 function move-MailboxToXo{
     <#
     .SYNOPSIS
@@ -20,6 +20,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    * 3:55 PM 5/6/2021 update logging, with move to module, it's logging into the ALlusers profile dir
     * 11:05 AM 5/5/2021 refactor into a function, add to verb-exo; ren move-ExoMailboxNow -> move-MailboxToXo
     * 9:54 AM 5/5/2021 removed comment dates; rem'd spurious -domainc param on get-exorecipient
     * 3:15 PM 5/4/2021 v1.1.10 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
@@ -359,22 +360,35 @@ function move-MailboxToXo{
     # remove dupes
     $reqMods=$reqMods| select -Unique ;
 
+    # detect profile installs (installed mod or script), and redir to stock location
     $dPref = 'd','c' ; foreach($budrv in $dpref){ if(test-path -path "$($budrv):\scripts" -ea 0 ){ break ;  } ;  } ;
-    [regex]$rgxScriptsAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\Scripts" ;
+    [regex]$rgxScriptsModsAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)" ;
+    [regex]$rgxScriptsModsCurrUserScope="^$([regex]::escape([environment]::getfolderpath('Mydocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)" ;
+    # -Tag "($TenOrg)-LASTPASS" 
+    $pltSLog = [ordered]@{ NoTimeStamp=$false ; Tag=$lTag  ; showdebug=$($showdebug) ;whatif=$($whatif) ;} ;
     if($PSCommandPath){
-        if($PSCommandPath -match $rgxScriptsAllUsersScope){
-            # AllUsers installed script, divert into [$budrv]:\scripts (don't write logs into allusers context folder)
-            $logspec = start-Log -Path (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
+        if(($PSCommandPath -match $rgxScriptsModsAllUsersScope) -OR ($PSCommandPath -match $rgxScriptsModsCurrUserScope) ){
+            # AllUsers or CU installed script, divert into [$budrv]:\scripts (don't write logs into allusers context folder)
+            if($PSCommandPath -match '\.ps(d|m)1$'){
+                # module function: use the ${CmdletName} for childpath
+                $pltSLog.Path= (join-path -Path "$($budrv):\scripts" -ChildPath "$(${CmdletName}).ps1" )  ;
+            } else { 
+                $pltSLog.Path=(join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) ;
+            } ; 
         }else {
-            $logspec = start-Log -Path $PSCommandPath -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
+            $pltSLog.Path=$PSCommandPath ;
         } ;
     } else {
-        if($MyInvocation.MyCommand.Definition -match $rgxScriptsAllUsersScope){
-            $logspec = start-Log -Path (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
+        if( ($MyInvocation.MyCommand.Definition -match $rgxScriptsModsAllUsersScope) -OR ($MyInvocation.MyCommand.Definition -match $rgxScriptsModsCurrUserScope) ){
+            $pltSLog.Path=(join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) ;
         } else {
-            $logspec = start-Log -Path $MyInvocation.MyCommand.Definition -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
+            $pltSLog.Path=$MyInvocation.MyCommand.Definition ;
         } ;
     } ;
+    $smsg = "start-Log w`n$(($pltSLog|out-string).trim())" ;
+    if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+    $logspec = start-Log @pltSLog ;
 
     # reloc batch calc, to include the substring in the log/transcript
     if(!$BatchName){
@@ -1219,4 +1233,5 @@ function move-MailboxToXo{
     if((get-AdServerSettings).ViewEntireForest){ disable-ForestView } ;
 
     #*------^ END SUB MAIN ^------
-} #*------^ END Function move-MailboxToXo ^------
+}
+#*------^ move-MailboxToXo.ps1 ^------

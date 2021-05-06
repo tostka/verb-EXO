@@ -1,11 +1,11 @@
-# verb-exo.psm1
+﻿# verb-exo.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.69.0
+  Version     : 1.0.68.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -6440,7 +6440,6 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
-    # 12:06 PM 5/6/2021 swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
     # 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
     * 4:20 PM 4/29/2021 debugged, looks functional - could benefit from moving the msgtrk summary down into the output block, but [shrug]
     * 7:56 AM 4/28/2021 init
@@ -6570,7 +6569,7 @@ Function test-xoMailbox {
 
 
         $bMaintainEquipementLists = $false ; 
-        $MsgTraceNonDeliverDetailsLimit = 10 ; # number of non status:Delivered messages to check/dump
+
     
         $ModMsgWindowMins = 5 ;
         if(!$Retries){$Retries = 4 } ;
@@ -6924,11 +6923,32 @@ Function test-xoMailbox {
         } ;
         #
 
+        <# RLMS connection
+        $reqMods+="Get-LyncServerInSite;load-LMS;Disconnect-LMSR".split(";") ;
+        if( !(check-ReqMods $reqMods) ) {write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ;}  ;
+        write-verbose -verbose:$true  "(loading LMS...)" ;
+        Reconnect-L13 ;
+        #>
+
         # 3:00 PM 9/12/2018 shift this to 1x in the script ; - this would need to be customized per tenant, not used (would normally be for forcing UPNs, but CMW uses brand UPN doms)
         #$script:forestdom = ((get-adforest | select -expand upnsuffixes) | ? { $_ -eq 'toro.com' }) ;
 
         # Clear error variable
         $Error.Clear() ;
+        <##-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+        # SCRIPT-CLOSE MATERIAL TO CLEAR THE UNDERLYING $DBGPREF & $EAPREF TO DEFAULTS:
+        if ($ShowDebug -OR ($DebugPreference = "Continue")) {
+                Write-Verbose -Verbose:$true "Resetting `$DebugPreference from 'Continue' back to default 'SilentlyContinue'" ;
+                $showDebug=$false
+                # 8:41 AM 10/13/2015 also need to enable write-debug output (and turn this off at end of script, it's a global, normally SilentlyContinue)
+                $DebugPreference = "SilentlyContinue" ;
+        } # if-E ;
+        if($ErrorActionPreference -eq 'Stop') {$ErrorActionPreference = 'Continue' ; write-debug "(Restoring `$ErrorActionPreference:$ErrorActionPreference;"};
+        #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+        #>
+
+
+    
 
     } ;  # BEGIN-E
     PROCESS {
@@ -7254,65 +7274,47 @@ Function test-xoMailbox {
                             $smsg += "`n#*------^ Status DISTRIB ^------" ;
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                            <# Count Name                      Group
-                            ----- ----                      -----
-                              448 Delivered                 {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<BN8PR12MB33158F1D07B3862078D758E6EB499@BN8PR12MB3315.namprd12.prod.o...
-                                1 Failed                    {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<5bc2055fed4d43d3827cf7f61d37a4c9@CH2PR04MB7062.namprd04.prod.outlook...
-                                1 Quarantined               {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<threatsim-5f0bc0101d-c200b2590d@app.emaildistro.com>; Received=4/28/...
-                                1 FilteredAsSpam            {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<SA0PR01MB61858E3C6111672E081373C1E45F9@SA0PR01MB6185.prod.exchangela...
-                            #>
-                            $nonDelivStats = $msgs | ?{$_.status -ne 'Delivered'} | group status | select-object -expand name ; 
-                            
-                            foreach ($status in $nonDelivStats){
-                                $smsg = "Enumerating Status:$($status) messages" ; 
+
+                            if($FailMsgs = $msgs|?{$_.status -eq 'failed'}){
+                                $fTtl = ($FailMsgs|measure).count ; $fProcd=0 ; 
+                                $smsg = "$($fTtl) Status:'Failed' messages returned. Expanding detailed processing..." ; 
                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                if($StatMsgs  = $msgs|?{$_.status -eq $status}){
-                                    if(($StatMsgs |measure).count -gt 10){
-                                        $smsg = "(over $($MsgTraceNonDeliverDetailsLimit) $($status) msgs: processing a sample of last $($MsgTraceNonDeliverDetailsLimit)...)" ; 
-                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                        $StatMsgs = $StatMsgs | select-object -Last $MsgTraceNonDeliverDetailsLimit ;
-                                    } ; 
-                                    $statTtl = ($StatMsgs |measure).count ; $fProcd=0 ; 
-                                    $smsg = "$($statTtl) Status:'$($status)' messages returned. Expanding detailed processing..." ; 
+                            
+                                foreach($fmsg in $FailMsgs){
+                                    $fProcd++ ; 
+                                    $sBnrS="`n#*------v PROCESSING Fail#$($fProcd)/$($fTtl): v------" ; 
+                                    $smsg= "$($sBnrS)" ;
                                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                        foreach($fmsg in $StatMsgs ){
-                                            $fProcd++ ; 
-                                            $sBnrS="`n#*------v PROCESSING $($status)#$($fProcd)/$($statTtl): v------" ; 
-                                            $smsg= "$($sBnrS)" ;
-                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-                                            $pltGetxMsgTrcDtl = [ordered]@{MessageTraceId=$fmsg.MessageTraceId ;RecipientAddress=$fmsg.RecipientAddress} ; 
-                                            $smsg= "$((get-alias ps1GetxMsgTrcDtl).definition) w`n$(($pltGetxMsgTrcDtl|out-string).trim())" ; 
-                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    $pltGetxMsgTrcDtl = [ordered]@{MessageTraceId=$fmsg.MessageTraceId ;RecipientAddress=$fmsg.RecipientAddress} ; 
+                                    $smsg= "$((get-alias ps1GetxMsgTrcDtl).definition) w`n$(($pltGetxMsgTrcDtl|out-string).trim())" ; 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                                 
-                                            # this is nested in a try already
-                                            $MsgTrkDtl = ps1GetxMsgTrcDtl @pltGetxMsgTrcDtl ; 
+                                    # this is nested in a try already
+                                    $MsgTrkDtl = ps1GetxMsgTrcDtl @pltGetxMsgTrcDtl ; 
 
-                                            if($MsgTrkDtl){
-                                                $smsg = "`n-----`n$(( $MsgTrkDtl | fl $propsMsgTrcDtl|out-string).trim())`n-----`n" ; 
-                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                            } else { 
-                                                $smsg = "(no matching MessageTraceDetail was returned by MS for MsgTrcID:$($pltGetxMsgTrcDtl.MessageTraceId), aged out of availability already)" ; 
-                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                                $smsg = "$($status)#$($fProcd)/$($statTtl):DETAILS`n----`n$(($fmsg|fl | out-string).trim())`n----`n" ; 
-                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                            } ; 
+                                    if($MsgTrkDtl){
+                                        $smsg = "`n-----`n$(( $MsgTrkDtl | fl $propsMsgTrcDtl|out-string).trim())`n-----`n" ; 
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    } else { 
+                                        $smsg = "(no matching MessageTraceDetail was returned by MS for MsgTrcID:$($pltGetxMsgTrcDtl.MessageTraceId), aged out of availability already)" ; 
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                        $smsg = "Fail#$($fProcd)/$($fTtl):DETAILS`n----`n$(($fmsg|fl | out-string).trim())`n----`n" ; 
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    } ; 
 
-                                            $smsg= "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
-                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                        } ; 
-                                
-                                }
-                            } ; #nonDelivStats
+                                    $smsg= "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                } ; 
+                            }
+
                             if(test-path -path $ofile){
                                 $smsg = "(log file confirmed)" ;
                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -7816,3 +7818,29 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
 Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,Test-Uri,test-xoMailbox,Cleanup -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU+LrB80avnf2uAW3od+kCUvFL
+# mcKgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRo2Axj
+# OEo2PvJxgQaljfHRMOM5ijANBgkqhkiG9w0BAQEFAASBgKwvrtRhAN1HHj5QR8sV
+# +Gr+S6U5+QRjH7YZa7sCnuZUdoheFNmH1NxIjuaIUAm4mn2xn+BLpSBFKOKK6uXS
+# V297SGFg6Kn5GdiOsUEHCjN0NsdigUp6rXd3KEAY3siRsJ5M1ET8g90xZSneJFqy
+# vsMOg21EWs6NLvvjkS/EwDPq
+# SIG # End signature block

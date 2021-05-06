@@ -1,4 +1,4 @@
-# verb-exo.psm1
+﻿# verb-exo.psm1
 
 
   <#
@@ -3902,6 +3902,246 @@ function Get-OrgNameFromUPN{
 }
 
 #*------^ Get-OrgNameFromUPN.ps1 ^------
+
+#*------v get-xoMigrationData.ps1 v------
+Function get-xoMigrationData () {
+    <#
+    .SYNOPSIS
+    get-xoMigrationData.ps1 - 1LINEDESC
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2021-05-06
+    FileName    : get-xoMigrationData
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka/verb-XXX
+    Tags        : Powershell
+    AddedCredit : Michael England (EXOTools v1.4.2)
+    AddedWebsite:	https://www.powershellgallery.com/packages/EXOTools/1.4.2/Content/EXOTools.psm1
+    AddedTwitter:	URL
+    REVISIONS
+    9:36 AM 5/6/2021 setup with minor changes to make free standing
+    4/22/2019 v1.4.2 posted rev
+    .DESCRIPTION
+    _AnalyzeMigrationData() from EXOTools 1.4.2, renamed to get-xoMigrationData
+    .PARAMETER FilePath
+    .PARAMETER AnalyzeMoveReport
+    .PARAMETER OutputAcceptedDomains
+    .PARAMETER Live
+    .EXAMPLE
+    PS> get-xoMigrationData
+    .LINK
+    https://github.com/tostka/verb-EXO
+    .LINK
+    https://www.powershellgallery.com/packages/EXOTools/1.4.2/Content/EXOTools.psm1
+    #>
+    Param (
+        [string]$FilePath,
+        [switch]$AnalyzeMoveReport = $false,
+        [switch]$OutputAcceptedDomains = $false,
+        [Switch]$Live=$true ; # rem the xml version out, live only
+    )
+
+    if ($Live) {
+        [System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic') | Out-Null
+        $UPN = [Microsoft.VisualBasic.Interaction]::InputBox("Enter the user's UserPrincipalName in the format user@domain.com", "UPN")
+        $CloudGetMigrationConfig = Get-MigrationConfig
+        $CloudGetMigrationEndpoint = Get-MigrationEndpoint 
+        $CloudGetMigrationBatch = Get-MigrationBatch
+        #$CloudGetMoveRequest = Get-MoveRequest
+        $CloudGetMigrationStatistics = Get-MigrationStatistics
+        #$CloudMigrationBatchReport = Get-MigrationBatch -IncludeReport -Diagnostic
+        $CloudMigrationUsers = Get-MigrationUser
+        $MoveReport = Get-MoveRequestStatistics $UPN -IncludeReport -Diagnostic -DiagnosticArgument verbose
+        $testmigrationendpoint = Get-MigrationEndpoint -Type ExchangeRemoteMove| ForEach-Object {Test-MigrationServerAvailability -Endpoint $_.Identity}
+        $CloudAcceptedDomain = Get-AcceptedDomain
+    }
+    <#
+    else {
+        #Load data from files
+        Open-XMLFiles -FilePath $FilePath
+    }
+    #>
+    $LogFile = Join-Path -Path $FilePath -ChildPath "MigrationAnalysis.txt"
+
+    if ($CloudAcceptedDomain) {
+        $smsg = "Accepted Domains: $($CloudAcceptedDomain.count)" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        if ($OutputAcceptedDomains ) {
+            #$smsg = "" ; 
+            #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            #else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            $smsg = ($CloudAcceptedDomain| Format-Table -a DomainName, DomainType|out-string) ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        }
+    }
+
+    if ($CloudGetMigrationConfig) {
+        $smsg = ($CloudGetMigrationConfig|Select-Object Max*|out-string); 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    }
+
+    $count = @($CloudGetMigrationEndpoint).count
+    $smsg = "Migration Endpoints" ; 
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    for ($i = 0; $i -lt $count; $i++) {
+        $smsg = "$($CloudGetMigrationEndpoint[$i].Identity) - $($CloudGetMigrationEndpoint[$i].RemoteServer)" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $smsg = ($CloudGetMigrationEndpoint[$i]| Format-Table -a EndPointType, UserName, Max*, Active*|out-string) ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        
+        if ($testmigrationendpoint) {
+            $ep = $testmigrationendpoint[$i]
+            [xml]$epxml = $ep.ConnectionSettings
+            if ($EP.Result -eq "Success") {
+                #write-header ("Test-MigrationServerAvailability - EndPoint Successful - $($epxml.ExchangeConnectionSettings.IncomingExchangeServer)")
+                $smsg = ($epxml.ExchangeConnectionSettings| Format-List IncomingRPCPRoxyServer, IncomingExchangeServer, IncomingDomain, IncomingUserName, IncomingAuthentication, HasAdminPrivilege, HasAutoDiscovery, HasMRSProxy|out-string) ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            }
+            else {
+                $smsg = ("Test-MigrationServerAvailability - $($ep.Message)") ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $smsg = ($ep.Errordetail|out-string) ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            }
+        }
+    }
+
+    if ($CloudGetMigrationStatistics) {
+        $smsg = "Migration Statistics" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $smsg = ($CloudGetMigrationStatistics|Select-Object MigrationType, *count|out-string) ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    }
+
+    if ($CloudGetMigrationBatch) {
+        $smsg = "Migration Batches" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $smsg = ($CloudGetMigrationBatch|Select-Object Identity, stat*, SourceEndpoint, MigrationType, BatchDirection, TotalCount, ActiveCount, StoppedCount, SyncedCount| Sort-Object -Object  BatchDirection, Identity | Format-Table -a|out-string); 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    }
+
+    if ($CloudMigrationUsers) {
+        $smsg = "Failed Migration Users" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $smsg = ($CloudMigrationUsers |Where-Object {$_.State -eq "Failed"}| Format-List MailboxGuid, RecipientType, BatchID, ErrorSummary|out-string) ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    }
+
+    #Analyze Move Report
+    if ($MoveReport -and $AnalyzeMoveReport -eq $true) {
+        $stats = $MoveReport
+        $smsg = "Move Request Details" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $smsg = ($Stats | Select-Object ExchangeGuid, Status, statusDetail, WorkLoadType, SourceVersion, SourceServer, RemoteHostName, RemoteCredentialUserName, StartTimeStamp, LastUpdateTimestamp, Failure*, Message|out-string) ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+        Switch ($stats.WorkloadType.value) {
+            "LoadBalancing" {
+                Write-Warning "This is an internal Load Balancing MoveRequest"
+            }
+            default {
+                #Export Failures
+                $smsg = "Failure Types" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $smsg = ($stats.Report.Failures.failureType| Group-Object -NoElement | Sort-Object  Count -Descending| Format-Table -AutoSize |out-string) ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                $smsg = "Exported Failures and Entries to files for review" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $stats.Report.Failures|Select-Object TimeStamp, Message|export-csv (Join-path -Path $filePath -ChildPath "$($stats.ExchangeGuid.Guid)__failures.csv") -NoTypeInformation
+                #Export Entries
+                $stats.Report.Entries|Select-Object LocalizedString|Export-Csv (Join-path -Path $filePath -ChildPath "$($stats.ExchangeGuid.Guid)_entries.txt")  -NoTypeInformation
+                #Export BadItems
+                #$stats.Report.BadItems | export-csv (Join-path -Path $filePath -ChildPath "$($stats.ExchangeGuid.Guid)_baditems.csv") -NoTypeInformation
+
+                #Source Server Information
+                $SourceCon = $stats.Report.Connectivity| Where-Object {$_.ServerKind -match "Source"}
+                $smsg = "Source Server Version" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $smsg = (($SourceCon|Select-Object ServerVersionstr|Get-Unique -AsString).ServerVersionstr|out-string) ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $smsg = "MRS Proxy Server Version" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $smsg = (($SourceCon|Select-Object ProxyVersionstr|Get-Unique -AsString).ProxyVersionstr|out-string) ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Proxy Servers Connections - If multiple servers this is bad
+                $ProxyConn = $stats.Report.Connectivity| Where-Object {$_.ServerKind -match "Source"}| Sort-Object -Object  TimeStamp
+                $sourceMRS = $ProxyConn| Group-Object ProxyName -NoElement
+
+                if (($ProxyConn|Select-Object -First 1).ProxyName -ne ($ProxyConn|Select-Object -Last 1).ProxyName) {
+                    #Write-Warning
+                    Write-Warning ("Original MRS Proxy Server does not match the last attempted MRS Proxy Server")
+                    Write-warning ("Original: {0}" -f (($ProxyConn|Select-Object -First 1).ProxyName))
+                    Write-warning ("Lastest: {0}" -f (($ProxyConn|Select-Object -Last 1).ProxyName))
+                }
+
+
+                if (($sourceMRS).Values.Count -gt 1) {
+                    Write-Warning "Detected Connections to multiple MRS Proxy Servers"
+                    $sourceMRS| Format-Table -a
+                }
+            }  
+        }
+        #Check Bad Items
+        if ($stats.Report.BadItems) {
+            $smsg = "BadItems" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        }
+
+        #Check Large Items
+        if ($stats.Report.MailboxVerification) {
+            $smsg = "Mailbox Verification Errors" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        }
+ 
+        #Mailbox Size
+        $smsg = "Mailbox Size" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $smsg = ($stats.report| Format-List *mailboxSize|out-string) ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+        #Throttles
+        $smsg = "Throttles" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $smsg = ($stats.report| Format-List *throttles|out-string) ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    }
+
+#*------^ get-xoMigrationData.ps1 ^------
 
 #*------v Invoke-EXOOnlineConnection.ps1 v------
 function Invoke-ExoOnlineConnection{
@@ -7814,5 +8054,31 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,Test-Uri,test-xoMailbox,Cleanup -Alias *
+Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoMigrationData,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,Test-Uri,test-xoMailbox,Cleanup -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUXTBTZUNSP833dU4MtEiZY0ux
+# zOCgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQDoR/q
+# DaAcg8vaz07qUBZS+SWo8jANBgkqhkiG9w0BAQEFAASBgA2ntcdwRGOMw33VcV/M
+# voAh6+BZDZ3wXHrwrK9O8iA9ZH/0PqLKOWkEng2Nvyz5QbmadJsx3uNlWWXa/Smy
+# d8CeA0zv6QIAgDAOmnsnCn+HOiGav8xHuPOV7u/hApAw//O6MMaxY9vfH/a+qeEv
+# 4jCLybcemdtF3fEC0qt0D3Py
+# SIG # End signature block
