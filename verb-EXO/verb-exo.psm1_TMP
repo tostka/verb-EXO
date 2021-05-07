@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.69.0
+  Version     : 1.0.70.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -4047,6 +4047,8 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    # 11:11 AM 5/7/2021 replaced verbose & bdebugs ; fixed missing logging function & added trailing echo of path.
+    * 3:55 PM 5/6/2021 update logging, with move to module, it's logging into the ALlusers profile dir
     * 11:05 AM 5/5/2021 refactor into a function, add to verb-exo; ren move-ExoMailboxNow -> move-MailboxToXo
     * 9:54 AM 5/5/2021 removed comment dates; rem'd spurious -domainc param on get-exorecipient
     * 3:15 PM 5/4/2021 v1.1.10 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
@@ -4164,7 +4166,7 @@ function move-MailboxToXo{
     #region INIT; # ------
     #*======v SCRIPT/DOMAIN/MACHINE/INITIALIZATION-DECLARE-BOILERPLATE v======
     # SCRIPT-CONFIG MATERIAL TO SET THE UNDERLYING $DBGPREF:
-    if ($Whatif){Write-Verbose -Verbose:$true "`$Whatif is TRUE (`$whatif:$($whatif))" ; };
+    if ($Whatif) { write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):`$Whatif is TRUE (`$whatif:$($whatif))" ; };
     # If using WMI calls, push any cred into WMI:
     #if ($Credential -ne $Null) {$WmiParameters.Credential = $Credential }  ;
 
@@ -4386,22 +4388,36 @@ function move-MailboxToXo{
     # remove dupes
     $reqMods=$reqMods| select -Unique ;
 
-    $dPref = 'd','c' ; foreach($budrv in $dpref){ if(test-path -path "$($budrv):\scripts" -ea 0 ){ break ;  } ;  } ;
-    [regex]$rgxScriptsAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\Scripts" ;
-    if($PSCommandPath){
-        if($PSCommandPath -match $rgxScriptsAllUsersScope){
-            # AllUsers installed script, divert into [$budrv]:\scripts (don't write logs into allusers context folder)
-            $logspec = start-Log -Path (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
-        }else {
-            $logspec = start-Log -Path $PSCommandPath -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
-        } ;
-    } else {
-        if($MyInvocation.MyCommand.Definition -match $rgxScriptsAllUsersScope){
-            $logspec = start-Log -Path (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
-        } else {
-            $logspec = start-Log -Path $MyInvocation.MyCommand.Definition -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
-        } ;
-    } ;
+    # detect profile installs (installed mod or script), and redir to stock location
+            $dPref = 'd','c' ; foreach($budrv in $dpref){ if(test-path -path "$($budrv):\scripts" -ea 0 ){ break ;  } ;  } ;
+            [regex]$rgxScriptsModsAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)" ;
+            [regex]$rgxScriptsModsCurrUserScope="^$([regex]::escape([environment]::getfolderpath('Mydocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)" ;
+            # -Tag "($TenOrg)-LASTPASS" 
+            # Tag=$lTag 
+            $pltSLog = [ordered]@{ NoTimeStamp=$false ;  showdebug=$($showdebug) ;whatif=$($whatif) ;} ;
+            if($PSCommandPath){
+                if(($PSCommandPath -match $rgxScriptsModsAllUsersScope) -OR ($PSCommandPath -match $rgxScriptsModsCurrUserScope) ){
+                    # AllUsers or CU installed script, divert into [$budrv]:\scripts (don't write logs into allusers context folder)
+                    if($PSCommandPath -match '\.ps(d|m)1$'){
+                        # module function: use the ${CmdletName} for childpath
+                        $pltSLog.Path= (join-path -Path "$($budrv):\scripts" -ChildPath "$(${CmdletName}).ps1" )  ;
+                    } else { 
+                        $pltSLog.Path=(join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) ;
+                    } ; 
+                }else {
+                    $pltSLog.Path=$PSCommandPath ;
+                } ;
+            } else {
+                if( ($MyInvocation.MyCommand.Definition -match $rgxScriptsModsAllUsersScope) -OR ($MyInvocation.MyCommand.Definition -match $rgxScriptsModsCurrUserScope) ){
+                    $pltSLog.Path=(join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) ;
+                } else {
+                    $pltSLog.Path=$MyInvocation.MyCommand.Definition ;
+                } ;
+            } ;
+            $smsg = "start-Log w`n$(($pltSLog|out-string).trim())" ;
+            if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            $logspec = start-Log @pltSLog 
 
     # reloc batch calc, to include the substring in the log/transcript
     if(!$BatchName){
@@ -4807,7 +4823,7 @@ function move-MailboxToXo{
         $smsg= "MISSING `$BATCHFILE, ABORTING!" ;
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        Cleanup
+        _cleanup
     } ;  ;
 
     # moved batchname calc up to logging area (to include in log)
@@ -5229,7 +5245,7 @@ function move-MailboxToXo{
 
         # add an EXO delay to avoid issues
         Start-Sleep -Milliseconds $ThrottleMs ;
-    } ;  # loop-E
+    } ;  # loop-E Mailboxes
 
     if(!$whatif){
         $smsg= "CLOUD MIGRATION STATUS:`n$((ps1GetXMovReq -BatchName $BatchName | ps1GetXMovReqStats | FL DisplayName,status,percentcomplete,itemstransferred,BadItemsEncountered|out-string).trim())`n" ;
@@ -5239,12 +5255,44 @@ function move-MailboxToXo{
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
     } ;
+    
 
     # return the passstatus to the pipeline
     $script:PassStatus | write-output
 
     if((get-AdServerSettings).ViewEntireForest){ disable-ForestView } ;
 
+    if($host.Name -eq "Windows PowerShell ISE Host" -and $host.version.major -lt 5){
+        # 11:51 AM 9/22/2020 isev5 supports transcript, anything prior has to fake it
+        # 8:46 AM 3/11/2015 shift the logfilename gen out here, so that we can arch it
+        #$Logname= (join-path -path (join-path -path $scriptDir -childpath "logs") -childpath ($scriptNameNoExt + "-" + (get-date -uformat "%Y%m%d-%H%M" ) + "-ISEtrans.log")) ;
+        # 2:16 PM 4/27/2015 shift to static timestamp $timeStampNow
+        #$Logname= (join-path -path (join-path -path $scriptDir -childpath "logs") -childpath ($scriptNameNoExt + "-" + $timeStampNow + "-ISEtrans.log")) ;
+        # 2:02 PM 9/21/2018 missing $timestampnow, hardcode
+        #$Logname=(join-path -path (join-path -path $scriptDir -childpath "logs") -childpath ($scriptNameNoExt + "-" + (get-date -format 'yyyyMMdd-HHmmtt') + "-ISEtrans.log")) ;
+        # maintain-ExoUsrMbxFreeBusyDetails-TOR-ForceAll-Transcript-BATCH-EXEC-20200921-1539PM-trans-log.txt
+        $Logname=$transcript.replace('-trans-log.txt','-ISEtrans-log.txt') ;
+        write-host "`$Logname: $Logname";
+        Start-iseTranscript -logname $Logname  -Verbose:($VerbosePreference -eq 'Continue') ;
+        #Archive-Log $Logname ;
+        # 1:23 PM 4/23/2015 standardize processing file so that we can send a link to open the transcript for review
+        $transcript = $Logname ;
+        if($host.version.Major -ge 5){ stop-transcript  -Verbose:($VerbosePreference -eq 'Continue')} # ISE in psV5 actually supports transcription. If you don't stop it, it just keeps rolling
+    } else {
+        write-verbose "$((get-date).ToString('HH:mm:ss')):Stop Transcript" ;
+        Stop-TranscriptLog -Transcript $transcript -verbose:$($VerbosePreference -eq "Continue") ;
+    } # if-E
+    
+    # prod is still showing a running unstopped transcript, kill it again
+    $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+    
+    # also trailing echo the log:
+    $smsg = "`$logging:`$true:written to:`n$($logfile)" ; 
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    $smsg = "$((get-date).ToString('HH:mm:ss')):$($sBnr.replace('=v','=^').replace('v=','^='))" ;
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
     #*------^ END SUB MAIN ^------
 }
 
@@ -6440,7 +6488,8 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
-    # 12:06 PM 5/6/2021 swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
+    # 11:11 AM 5/7/2021 replaced verbose & bdebugs ; ren'd Cleanup() -> _Cleanup() (demarc internal funcs from externals by leading _); fixed missing logging function & added trailing echo of path.
+    # 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
     # 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
     * 4:20 PM 4/29/2021 debugged, looks functional - could benefit from moving the msgtrk summary down into the output block, but [shrug]
     * 7:56 AM 4/28/2021 init
@@ -6484,8 +6533,7 @@ Function test-xoMailbox {
         #*======v SCRIPT/DOMAIN/MACHINE/INITIALIZATION-DECLARE-BOILERPLATE v======
         # SCRIPT-CONFIG MATERIAL TO SET THE UNDERLYING $DBGPREF:
         if ($ShowDebug) { $DebugPreference = "Continue" ; write-debug "(`$showDebug:$showDebug ;`$DebugPreference:$DebugPreference)" ; };
-        if ($Whatif) { Write-Verbose -Verbose:$true "`$Whatif is TRUE (`$whatif:$($whatif))" ; };
-        if ($showDebug) { $ErrorActionPreference = 'Stop' ; write-debug "(Setting `$ErrorActionPreference:$ErrorActionPreference;" };
+        if ($Whatif) { write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):`$Whatif is TRUE (`$whatif:$($whatif))" ; };
         # If using WMI calls, push any cred into WMI:
         #if ($Credential -ne $Null) {$WmiParameters.Credential = $Credential }  ;
 
@@ -6536,9 +6584,6 @@ Function test-xoMailbox {
             write-host -foregroundcolor green "`SHOWDEBUG: `$ScriptDir:$($ScriptDir)`n`$ScriptBaseName:$($ScriptBaseName)`n`$ScriptNameNoExt:$($ScriptNameNoExt)`n`$PSScriptRoot:$($PSScriptRoot)`n`$PSCommandPath:$($PSCommandPath)" ;
         } ;
     
-        if ($Whatif) { Write-Verbose -Verbose:$true "`$Whatif is TRUE (`$whatif:$($whatif))" ; };
-
-
         $ComputerName = $env:COMPUTERNAME ;
         $sQot = [char]34 ; $sQotS = [char]39 ;
         $NoProf = [bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); # if($NoProf){# do this};
@@ -6601,8 +6646,8 @@ Function test-xoMailbox {
     
         #*======v HELPER FUNCTIONS v======
 
-        #-------v Function Cleanup v-------
-        function Cleanup {
+        #-------v Function _cleanup v-------
+        function _cleanup {
             # clear all objects and exit
             # Clear-item doesn't seem to work as a variable release
 
@@ -6612,7 +6657,9 @@ Function test-xoMailbox {
             # # 8:46 AM 3/11/2015 at some time from then to 1:06 PM 3/26/2015 added ISE Transcript
             # 8:39 AM 12/10/2014 shifted to stop-transcriptLog function
             # 7:43 AM 1/24/2014 always stop the running transcript before exiting
-            if ($bdebug) { "CLEANUP" }
+
+            write-verbose "_cleanup" ; 
+            <# transcript/log are handled in the mbx loop
             #stop-transcript
             # 11:16 AM 1/14/2015 aha! does this return a value!??
             if ($host.Name -eq "Windows PowerShell ISE Host") {
@@ -6628,15 +6675,23 @@ Function test-xoMailbox {
                 # 1:23 PM 4/23/2015 standardize processing file so that we can send a link to open the transcript for review
                 $transcript = $Logname
             } else {
-                if ($bdebug) { write-debug "$(get-timestamp):Stop Transcript" };
+                write-verbose "$(get-timestamp):Stop Transcript" ;
                 Stop-TranscriptLog ;
-                if ($bdebug) { write-debug "$(get-timestamp):Archive Transcript" };
+                #write-verbose "$(get-timestamp):Archive Transcript" ;
                 #Archive-Log $transcript ;
             } # if-E
+            
+            # also echo the log:
+            if ($logging) { 
+                # Write-Log -LogContent $smsg -Path $logfile
+                $smsg = "`$logging:`$true:written to:`n$($logfile)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ; 
+            #>
 
-            # 12:09 PM 4/26/2017 need to email transcript before archiving it
-            if($showdebug){ write-host -ForegroundColor Yellow "Mailing Report" };
-
+            # need to email transcript before archiving it
+            
             #$smtpSubj= "Proc Rpt:$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
 
             #Load as an attachment into the body text:
@@ -6660,25 +6715,17 @@ Function test-xoMailbox {
                 write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):No Email Report: `$Passstatus is `$null ; " ;
             } ;
 
-            #11:10 AM 4/2/2015 add an exit comment
-            Write-Verbose "END $BARSD4 $scriptBaseName $BARSD4" -Verbose:$verbose
-            Write-Verbose "$BARSD40" -Verbose:$verbose
-            # finally restore the DebugPref if set
-            if ($ShowDebug -OR ($DebugPreference = "Continue")) {
-                Write-Verbose -Verbose:$true "Resetting `$DebugPreference from 'Continue' back to default 'SilentlyContinue'" ;
-                $bDebug = $false
-                # 8:41 AM 10/13/2015 also need to enable write-debug output (and turn this off at end of script, it's a global, normally SilentlyContinue)
-                $DebugPreference = "SilentlyContinue" ;
-            } # if-E
-
-            $smsg= "#*======^ END PASS:$($ScriptBaseName) ^======" ;
+            
+            #$smsg= "#*======^ END PASS:$($ScriptBaseName) ^======" ;
+            #this is now a function, use: ${CmdletName}
+            $smsg= "#*======^ END PASS:$(${CmdletName}) ^======" ;
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn
 
             Break
-        } #*------^ END Function Cleanup ^------
+        } #*------^ END Function _cleanup ^------
 
 
-        #*======^ END FUNCTIONS ^======
+        #*======^ END HELPER FUNCTIONS ^======
 
         #*======v SUB MAIN v======
 
@@ -6705,13 +6752,16 @@ Function test-xoMailbox {
                 write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
             } else {
                 if(!($cmdlet= Get-Command $cmdletMap.split(';')[1])){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
-                $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
+                $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;                
                 write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
             } ;
         } ;
     
+        # shifting from ps1 to a function: need updates self-name:
+        ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
 
-        $sBnr="#*======v START PASS:$($ScriptBaseName) v======" ; 
+        #$sBnr="#*======v START PASS:$($ScriptBaseName) v======" ; 
+        $sBnr="#*======v START PASS:$(${CmdletName}) v======" ; 
         $smsg= $sBnr ;   
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -6842,7 +6892,9 @@ Function test-xoMailbox {
         $reqMods += "load-ADMS".split(";") ;
         if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
         #>
-        write-verbose -verbose:$true  "(loading ADMS...)" ;
+        write-host -foregroundcolor gray  "(loading ADMS...)" ;
+        #write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MSG" ; 
+
         load-ADMS ;
 
         if($UseOP){
@@ -6890,7 +6942,7 @@ Function test-xoMailbox {
         <# MSOL CONNECTION
         $reqMods += "connect-msol".split(";") ;
         if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
-        write-verbose -verbose:$true  "(loading AAD...)" ;
+        write-host -foregroundcolor gray  "(loading AAD...)" ;
         #connect-msol ;
         connect-msol @pltRXO ; 
         #>
@@ -6898,7 +6950,7 @@ Function test-xoMailbox {
         # AZUREAD CONNECTION
         $reqMods += "Connect-AAD".split(";") ;
         if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
-        write-verbose -verbose:$true  "(loading AAD...)" ;
+        write-host -foregroundcolor gray  "(loading AAD...)" ;
         #connect-msol ;
         Connect-AAD @pltRXO ; 
         #
@@ -6924,11 +6976,13 @@ Function test-xoMailbox {
         } ;
         #
 
+        
         # 3:00 PM 9/12/2018 shift this to 1x in the script ; - this would need to be customized per tenant, not used (would normally be for forcing UPNs, but CMW uses brand UPN doms)
         #$script:forestdom = ((get-adforest | select -expand upnsuffixes) | ? { $_ -eq 'toro.com' }) ;
 
         # Clear error variable
         $Error.Clear() ;
+        
 
     } ;  # BEGIN-E
     PROCESS {
@@ -6961,18 +7015,52 @@ Function test-xoMailbox {
                 $lTag = "$($Mailbox)-" ; 
             } ;
 
-        
-            if($PSCommandPath){   $logspec = start-Log -Path $PSCommandPath  -showdebug:$($showdebug) -whatif:$($whatif) -Tag $lTag ; 
-            } else {    $logspec = start-Log -Path ($MyInvocation.MyCommand.Definition) -showdebug:$($showdebug) -whatif:$($whatif) -Tag $lTag ; } ; 
-            if($logspec){
-            $logging=$logspec.logging ;
-            $logfile=$logspec.logfile ;
-            $transcript=$logspec.transcript ;
-            $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
-            #Configure default logging from parent script name
-            start-transcript -Path $transcript ; 
-            } else {throw "Unable to configure logging!" } ;
+            # detect profile installs (installed mod or script), and redir to stock location
+            $dPref = 'd','c' ; foreach($budrv in $dpref){ if(test-path -path "$($budrv):\scripts" -ea 0 ){ break ;  } ;  } ;
+            [regex]$rgxScriptsModsAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)" ;
+            [regex]$rgxScriptsModsCurrUserScope="^$([regex]::escape([environment]::getfolderpath('Mydocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)" ;
+            # -Tag "($TenOrg)-LASTPASS" 
+            $pltSLog = [ordered]@{ NoTimeStamp=$false ; Tag=$lTag  ; showdebug=$($showdebug) ;whatif=$($whatif) ;} ;
+            if($PSCommandPath){
+                if(($PSCommandPath -match $rgxScriptsModsAllUsersScope) -OR ($PSCommandPath -match $rgxScriptsModsCurrUserScope) ){
+                    # AllUsers or CU installed script, divert into [$budrv]:\scripts (don't write logs into allusers context folder)
+                    if($PSCommandPath -match '\.ps(d|m)1$'){
+                        # module function: use the ${CmdletName} for childpath
+                        $pltSLog.Path= (join-path -Path "$($budrv):\scripts" -ChildPath "$(${CmdletName}).ps1" )  ;
+                    } else { 
+                        $pltSLog.Path=(join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) ;
+                    } ; 
+                }else {
+                    $pltSLog.Path=$PSCommandPath ;
+                } ;
+            } else {
+                if( ($MyInvocation.MyCommand.Definition -match $rgxScriptsModsAllUsersScope) -OR ($MyInvocation.MyCommand.Definition -match $rgxScriptsModsCurrUserScope) ){
+                    $pltSLog.Path=(join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) ;
+                } else {
+                    $pltSLog.Path=$MyInvocation.MyCommand.Definition ;
+                } ;
+            } ;
+            $smsg = "start-Log w`n$(($pltSLog|out-string).trim())" ;
+            if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            $logspec = start-Log @pltSLog ;
 
+            if($logspec){
+                $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+                $logging=$logspec.logging ;
+                $logfile=$logspec.logfile ;
+                $transcript=$logspec.transcript ;
+                #Configure default logging from parent script name
+                # logfile                        C:\usr\work\o365\scripts\logs\move-MailboxToXo-(TOR)-LASTPASS-LOG-BATCH-WHATIF-log.txt
+                # transcript                     C:\usr\work\o365\scripts\logs\move-MailboxToXo-(TOR)-LASTPASS-Transcript-BATCH-WHATIF-trans-log.txt
+                #$logfile = $logfile.replace('-LASTPASS','').replace('BATCH',(Remove-InvalidFileNameChars -name $BatchName )) ;
+                $logfile = $logfile.replace('-LASTPASS','').replace('BATCH','') ;
+                #$transcript = $transcript.replace('-LASTPASS','').replace('BATCH',(Remove-InvalidFileNameChars -name $BatchName )) ;
+                $transcript = $transcript.replace('-LASTPASS','').replace('BATCH','') ;
+                if(Test-TranscriptionSupported){start-transcript -Path $transcript }
+                else { write-warning "$($host.name) v$($host.version.major) does *not* support Transcription!" } ;
+            } else {throw "Unable to configure logging!" } ;
+    
             $smsg = "$($sBnr)" ;
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -7005,17 +7093,6 @@ Function test-xoMailbox {
                 #ReConnect-Ex2010XO @pltRX10 ;
                 ReConnect-Ex2010 @pltRX10 ;
             } else { Reconnect-Ex2010 ; } ; 
-
-            # stock EXO/EXOP-spanning aliases:[array]$cmdletMaps = 'ps1GetRcp;get-exorecipient;','ps1GetMbx;get-exomailbox;','ps1SetMbx;Set-exoMailbox;','ps1GetUser;get-exoUser;',
-            'ps1SetCalProc;set-exoCalendarprocessing;','ps1GetCalProc;get-exoCalendarprocessing;','ps1GetMbxFldrPerm;get-exoMailboxfolderpermission;',
-            'ps1GetAccDom;Get-exoAcceptedDomain;','ps1GGetRetPol;Get-exoRetentionPolicy','ps1GetDistGrp;get-exoDistributionGroup;;',
-            'ps1GetDistGrpMbr;get-exoDistributionGroupmember;','ps1GetMsgTrc;get-exoMessageTrace;','ps1GetMsgTrcDtl;get-exoMessageTraceDetail;','ps1GetMbxFldrStats;get-exoMailboxfolderStatistics' ;
-
-            # EXO-tagged aliases: [array]$cmdletMaps = 'ps1GetxRcp;get-exorecipient;','ps1GetxMbx;get-exomailbox;','ps1SetxMbx;Set-exoMailbox;','ps1GetxUser;get-exoUser;',
-            'ps1SetxCalProc;set-exoCalendarprocessing;','ps1GetxCalProc;get-exoCalendarprocessing;','ps1GetxMbxFldrPerm;get-exoMailboxfolderpermission;',
-            'ps1GetxAccDom;Get-exoAcceptedDomain;','ps1GGetxRetPol;Get-exoRetentionPolicy','ps1GetxDistGrp;get-exoDistributionGroup;',
-            'ps1GetxDistGrpMbr;get-exoDistributionGroupmember;','ps1GetxMsgTrc;get-exoMessageTrace;','ps1GetxMsgTrcDtl;get-exoMessageTraceDetail;',
-            'ps1GetxMbxFldrStats;get-exoMailboxfolderStatistics' ;
 
             $Exit = 0 ; $error.clear() ;
             Do {
@@ -7057,8 +7134,8 @@ Function test-xoMailbox {
                     $pltgxrcp=[ordered]@{identity=$Mailbox ; erroraction='stop'; } ; 
 
                     $smsg= "$((get-alias ps1GetxRcp).definition) w`n$(($pltgxrcp|out-string).trim())" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
                     $exorcp = ps1GetxRcp @pltgxrcp ;
                 
@@ -7099,8 +7176,9 @@ Function test-xoMailbox {
                 Try {
                     $pltgxmbx=[ordered]@{identity=$Mailbox ; erroraction='stop'; } ; 
                     $smsg= "$((get-alias ps1GetxMbx).definition) w`n$(($pltgxmbx|out-string).trim())" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+
                 
                     $exombx = ps1GetxMbx @pltgxmbx ; 
 
@@ -7113,8 +7191,8 @@ Function test-xoMailbox {
                         $pltGetxMbxFldrStats=[ordered]@{Identity=$exombx.identity ;IncludeOldestAndNewestItems=$true; erroraction='stop'; } ; 
                         #$smsg= "(collecting get-exomailboxfolderstatistics...)" ;
                         $smsg= "$((get-alias ps1GetxMbxFldrStats).definition) w`n$(($pltGetxMbxFldrStats|out-string).trim())" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         $exofldrs = ps1GetxMbxFldrStats @pltGetxMbxFldrStats | 
                             ?{($_.ItemsInFolder -gt 0 ) -AND ($_.identity -notmatch $rgxExoSysFolders)} ;
                         #$fldrs = get-exomailboxfolderstatistics -id KADRITS -IncludeOldestAndNewestItems ;
@@ -7726,10 +7804,7 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
             } ; 
 
-            $smsg = "$((get-date).ToString('HH:mm:ss')):$($sBnr.replace('=v','=^').replace('v=','^='))" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
+            
             if($host.Name -eq "Windows PowerShell ISE Host" -and $host.version.major -lt 5){
                 # 11:51 AM 9/22/2020 isev5 supports transcript, anything prior has to fake it
                 # 8:46 AM 3/11/2015 shift the logfilename gen out here, so that we can arch it
@@ -7747,10 +7822,19 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
                 $transcript = $Logname ;
                 if($host.version.Major -ge 5){ stop-transcript  -Verbose:($VerbosePreference -eq 'Continue')} # ISE in psV5 actually supports transcription. If you don't stop it, it just keeps rolling
             } else {
-                if($showdebug -OR $verbose){ write-verbose -verbose:$true  "$((get-date).ToString('HH:mm:ss')):Stop Transcript" };
+                write-verbose "$((get-date).ToString('HH:mm:ss')):Stop Transcript" ;
                 Stop-TranscriptLog -Transcript $transcript -verbose:$($VerbosePreference -eq "Continue") ;
-                if($logging -eq $true){$logging = $false} ;
             } # if-E
+            
+            # also trailing echo the log:
+            $smsg = "`$logging:`$true:written to:`n$($logfile)" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            $smsg = "$((get-date).ToString('HH:mm:ss')):$($sBnr.replace('=v','=^').replace('v=','^='))" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            
+            $logging = $false ;  # reset logging for next pass
 
         } ; # loop-E $mailboxes
     } ;  # PROC-E
@@ -7783,11 +7867,11 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
             whatif=$($whatif) ;
             Verbose = ($VerbosePreference -eq 'Continue') ;
         } ;
-        $smsg = "Cleanup():w`n$(($pltCleanup|out-string).trim())" ;
+        $smsg = "_cleanup():w`n$(($pltCleanup|out-string).trim())" ;
         if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
-        #Cleanup -LogPath $tmpcopy ;
-        Cleanup @pltCleanup ;
+        #_cleanup -LogPath $tmpcopy ;
+        _cleanup @pltCleanup ;
         # prod is still showing a running unstopped transcript, kill it again
         $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
 
@@ -7795,11 +7879,6 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-
-
-        # echo Get-ExoMessageTrace| Get-ExoMessageTraceDetai searches run ps1GetMsgTrc ps1GetMsgTrcDtl
-        #$msg = "Number of recursive Searches ($((get-alias ps1GetMsgTrc).definition)|$((get-alias ps1GetMsgTrcDtl).definition)) performed under ticket:$($Ticket): *$($SearchesRun)*" ;
-        #write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($msg)" ;
         # clear the script aliases
         write-verbose "clearing ps1* aliases in Script scope" ; 
         get-alias -scope Script |Where-Object{$_.name -match '^ps1.*'} | ForEach-Object{Remove-Alias -alias $_.name} ;
@@ -7814,5 +7893,5 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,Test-Uri,test-xoMailbox,Cleanup -Alias *
+Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,Test-Uri,test-xoMailbox,_cleanup -Alias *
 

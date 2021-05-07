@@ -15,6 +15,7 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
+    # 11:11 AM 5/7/2021 replaced verbose & bdebugs ; ren'd Cleanup() -> _Cleanup() (demarc internal funcs from externals by leading _); fixed missing logging function & added trailing echo of path.
     # 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
     # 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
     * 4:20 PM 4/29/2021 debugged, looks functional - could benefit from moving the msgtrk summary down into the output block, but [shrug]
@@ -59,8 +60,7 @@ Function test-xoMailbox {
         #*======v SCRIPT/DOMAIN/MACHINE/INITIALIZATION-DECLARE-BOILERPLATE v======
         # SCRIPT-CONFIG MATERIAL TO SET THE UNDERLYING $DBGPREF:
         if ($ShowDebug) { $DebugPreference = "Continue" ; write-debug "(`$showDebug:$showDebug ;`$DebugPreference:$DebugPreference)" ; };
-        if ($Whatif) { Write-Verbose -Verbose:$true "`$Whatif is TRUE (`$whatif:$($whatif))" ; };
-        if ($showDebug) { $ErrorActionPreference = 'Stop' ; write-debug "(Setting `$ErrorActionPreference:$ErrorActionPreference;" };
+        if ($Whatif) { write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):`$Whatif is TRUE (`$whatif:$($whatif))" ; };
         # If using WMI calls, push any cred into WMI:
         #if ($Credential -ne $Null) {$WmiParameters.Credential = $Credential }  ;
 
@@ -111,9 +111,6 @@ Function test-xoMailbox {
             write-host -foregroundcolor green "`SHOWDEBUG: `$ScriptDir:$($ScriptDir)`n`$ScriptBaseName:$($ScriptBaseName)`n`$ScriptNameNoExt:$($ScriptNameNoExt)`n`$PSScriptRoot:$($PSScriptRoot)`n`$PSCommandPath:$($PSCommandPath)" ;
         } ;
     
-        if ($Whatif) { Write-Verbose -Verbose:$true "`$Whatif is TRUE (`$whatif:$($whatif))" ; };
-
-
         $ComputerName = $env:COMPUTERNAME ;
         $sQot = [char]34 ; $sQotS = [char]39 ;
         $NoProf = [bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); # if($NoProf){# do this};
@@ -176,8 +173,8 @@ Function test-xoMailbox {
     
         #*======v HELPER FUNCTIONS v======
 
-        #-------v Function Cleanup v-------
-        function Cleanup {
+        #-------v Function _cleanup v-------
+        function _cleanup {
             # clear all objects and exit
             # Clear-item doesn't seem to work as a variable release
 
@@ -187,7 +184,9 @@ Function test-xoMailbox {
             # # 8:46 AM 3/11/2015 at some time from then to 1:06 PM 3/26/2015 added ISE Transcript
             # 8:39 AM 12/10/2014 shifted to stop-transcriptLog function
             # 7:43 AM 1/24/2014 always stop the running transcript before exiting
-            if ($bdebug) { "CLEANUP" }
+
+            write-verbose "_cleanup" ; 
+            <# transcript/log are handled in the mbx loop
             #stop-transcript
             # 11:16 AM 1/14/2015 aha! does this return a value!??
             if ($host.Name -eq "Windows PowerShell ISE Host") {
@@ -203,15 +202,23 @@ Function test-xoMailbox {
                 # 1:23 PM 4/23/2015 standardize processing file so that we can send a link to open the transcript for review
                 $transcript = $Logname
             } else {
-                if ($bdebug) { write-debug "$(get-timestamp):Stop Transcript" };
+                write-verbose "$(get-timestamp):Stop Transcript" ;
                 Stop-TranscriptLog ;
-                if ($bdebug) { write-debug "$(get-timestamp):Archive Transcript" };
+                #write-verbose "$(get-timestamp):Archive Transcript" ;
                 #Archive-Log $transcript ;
             } # if-E
+            
+            # also echo the log:
+            if ($logging) { 
+                # Write-Log -LogContent $smsg -Path $logfile
+                $smsg = "`$logging:`$true:written to:`n$($logfile)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ; 
+            #>
 
-            # 12:09 PM 4/26/2017 need to email transcript before archiving it
-            if($showdebug){ write-host -ForegroundColor Yellow "Mailing Report" };
-
+            # need to email transcript before archiving it
+            
             #$smtpSubj= "Proc Rpt:$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
 
             #Load as an attachment into the body text:
@@ -235,27 +242,17 @@ Function test-xoMailbox {
                 write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):No Email Report: `$Passstatus is `$null ; " ;
             } ;
 
-            #11:10 AM 4/2/2015 add an exit comment
-            Write-Verbose "END $BARSD4 $scriptBaseName $BARSD4" -Verbose:$verbose
-            Write-Verbose "$BARSD40" -Verbose:$verbose
-            # finally restore the DebugPref if set
-            if ($ShowDebug -OR ($DebugPreference = "Continue")) {
-                Write-Verbose -Verbose:$true "Resetting `$DebugPreference from 'Continue' back to default 'SilentlyContinue'" ;
-                $bDebug = $false
-                # 8:41 AM 10/13/2015 also need to enable write-debug output (and turn this off at end of script, it's a global, normally SilentlyContinue)
-                $DebugPreference = "SilentlyContinue" ;
-            } # if-E
-
+            
             #$smsg= "#*======^ END PASS:$($ScriptBaseName) ^======" ;
             #this is now a function, use: ${CmdletName}
             $smsg= "#*======^ END PASS:$(${CmdletName}) ^======" ;
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } ; #Error|Warn
 
             Break
-        } #*------^ END Function Cleanup ^------
+        } #*------^ END Function _cleanup ^------
 
 
-        #*======^ END FUNCTIONS ^======
+        #*======^ END HELPER FUNCTIONS ^======
 
         #*======v SUB MAIN v======
 
@@ -422,7 +419,9 @@ Function test-xoMailbox {
         $reqMods += "load-ADMS".split(";") ;
         if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
         #>
-        write-verbose -verbose:$true  "(loading ADMS...)" ;
+        write-host -foregroundcolor gray  "(loading ADMS...)" ;
+        #write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MSG" ; 
+
         load-ADMS ;
 
         if($UseOP){
@@ -470,7 +469,7 @@ Function test-xoMailbox {
         <# MSOL CONNECTION
         $reqMods += "connect-msol".split(";") ;
         if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
-        write-verbose -verbose:$true  "(loading AAD...)" ;
+        write-host -foregroundcolor gray  "(loading AAD...)" ;
         #connect-msol ;
         connect-msol @pltRXO ; 
         #>
@@ -478,7 +477,7 @@ Function test-xoMailbox {
         # AZUREAD CONNECTION
         $reqMods += "Connect-AAD".split(";") ;
         if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
-        write-verbose -verbose:$true  "(loading AAD...)" ;
+        write-host -foregroundcolor gray  "(loading AAD...)" ;
         #connect-msol ;
         Connect-AAD @pltRXO ; 
         #
@@ -573,6 +572,22 @@ Function test-xoMailbox {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             $logspec = start-Log @pltSLog ;
 
+            if($logspec){
+                $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+                $logging=$logspec.logging ;
+                $logfile=$logspec.logfile ;
+                $transcript=$logspec.transcript ;
+                #Configure default logging from parent script name
+                # logfile                        C:\usr\work\o365\scripts\logs\move-MailboxToXo-(TOR)-LASTPASS-LOG-BATCH-WHATIF-log.txt
+                # transcript                     C:\usr\work\o365\scripts\logs\move-MailboxToXo-(TOR)-LASTPASS-Transcript-BATCH-WHATIF-trans-log.txt
+                #$logfile = $logfile.replace('-LASTPASS','').replace('BATCH',(Remove-InvalidFileNameChars -name $BatchName )) ;
+                $logfile = $logfile.replace('-LASTPASS','').replace('BATCH','') ;
+                #$transcript = $transcript.replace('-LASTPASS','').replace('BATCH',(Remove-InvalidFileNameChars -name $BatchName )) ;
+                $transcript = $transcript.replace('-LASTPASS','').replace('BATCH','') ;
+                if(Test-TranscriptionSupported){start-transcript -Path $transcript }
+                else { write-warning "$($host.name) v$($host.version.major) does *not* support Transcription!" } ;
+            } else {throw "Unable to configure logging!" } ;
+    
             $smsg = "$($sBnr)" ;
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -1316,10 +1331,7 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
             } ; 
 
-            $smsg = "$((get-date).ToString('HH:mm:ss')):$($sBnr.replace('=v','=^').replace('v=','^='))" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
+            
             if($host.Name -eq "Windows PowerShell ISE Host" -and $host.version.major -lt 5){
                 # 11:51 AM 9/22/2020 isev5 supports transcript, anything prior has to fake it
                 # 8:46 AM 3/11/2015 shift the logfilename gen out here, so that we can arch it
@@ -1337,10 +1349,19 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
                 $transcript = $Logname ;
                 if($host.version.Major -ge 5){ stop-transcript  -Verbose:($VerbosePreference -eq 'Continue')} # ISE in psV5 actually supports transcription. If you don't stop it, it just keeps rolling
             } else {
-                if($showdebug -OR $verbose){ write-verbose -verbose:$true  "$((get-date).ToString('HH:mm:ss')):Stop Transcript" };
+                write-verbose "$((get-date).ToString('HH:mm:ss')):Stop Transcript" ;
                 Stop-TranscriptLog -Transcript $transcript -verbose:$($VerbosePreference -eq "Continue") ;
-                if($logging -eq $true){$logging = $false} ;
             } # if-E
+            
+            # also trailing echo the log:
+            $smsg = "`$logging:`$true:written to:`n$($logfile)" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            $smsg = "$((get-date).ToString('HH:mm:ss')):$($sBnr.replace('=v','=^').replace('v=','^='))" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            
+            $logging = $false ;  # reset logging for next pass
 
         } ; # loop-E $mailboxes
     } ;  # PROC-E
@@ -1373,11 +1394,11 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
             whatif=$($whatif) ;
             Verbose = ($VerbosePreference -eq 'Continue') ;
         } ;
-        $smsg = "Cleanup():w`n$(($pltCleanup|out-string).trim())" ;
+        $smsg = "_cleanup():w`n$(($pltCleanup|out-string).trim())" ;
         if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
-        #Cleanup -LogPath $tmpcopy ;
-        Cleanup @pltCleanup ;
+        #_cleanup -LogPath $tmpcopy ;
+        _cleanup @pltCleanup ;
         # prod is still showing a running unstopped transcript, kill it again
         $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
 
