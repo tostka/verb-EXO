@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.73.0
+  Version     : 1.0.72.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -6488,9 +6488,9 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
-    * 10:19 AM 5/10/2021 added explcit echo on test-mapi & results, to underscore accessibility (added splat test as well). 
-    * 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
-    * 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
+    # 11:11 AM 5/7/2021 replaced verbose & bdebugs ; ren'd Cleanup() -> _Cleanup() (demarc internal funcs from externals by leading _); fixed missing logging function & added trailing echo of path.
+    # 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
+    # 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
     * 4:20 PM 4/29/2021 debugged, looks functional - could benefit from moving the msgtrk summary down into the output block, but [shrug]
     * 7:56 AM 4/28/2021 init
     .DESCRIPTION
@@ -6742,10 +6742,9 @@ Function test-xoMailbox {
         # in this case, we need an alias for EXO, and non-alias for EXOP
         [array]$cmdletMaps = 'ps1GetxRcp;get-exorecipient;','ps1GetxMbx;get-exomailbox;','ps1SetxMbx;Set-exoMailbox;','ps1GetxUser;get-exoUser;',
             'ps1SetxCalProc;set-exoCalendarprocessing;','ps1GetxCalProc;get-exoCalendarprocessing;','ps1GetxMbxFldrPerm;get-exoMailboxfolderpermission;',
-            'ps1GetxAccDom;Get-exoAcceptedDomain;','ps1GetXRetPol;Get-exoRetentionPolicy','ps1GetxDistGrp;get-exoDistributionGroup;',
+            'ps1GetxAccDom;Get-exoAcceptedDomain;','ps1GGetxRetPol;Get-exoRetentionPolicy','ps1GetxDistGrp;get-exoDistributionGroup;',
             'ps1GetxDistGrpMbr;get-exoDistributionGroupmember;','ps1GetxMsgTrc;get-exoMessageTrace;','ps1GetxMsgTrcDtl;get-exoMessageTraceDetail;',
-            'ps1GetxMbxFldrStats;get-exoMailboxfolderStatistics','ps1GetxMContact;Get-exomailcontact;','ps1SetxMContact;Set-exomailcontact;',
-            'ps1NewxMContact;New-exomailcontact;' ,'ps1TestxMapi;Test-exoMAPIConnectivity' ;
+            'ps1GetxMbxFldrStats;get-exoMailboxfolderStatistics' ;
         foreach($cmdletMap in $cmdletMaps){
             if($script:useEXOv2){
                 if(!($cmdlet= Get-Command $cmdletMap.split(';')[1].replace('-exo','-xo') )){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
@@ -7709,34 +7708,7 @@ B. Process & Profile the output .json file from the above:
              }
             elseif (($rcp.RecipientTypeDetails -eq 'UserMailbox') -AND ($exorcp.RecipientTypeDetails -eq 'MailUser') ) {
                 # ON PREM MAILBOX
-                #$mapiTest = Test-MAPIConnectivity -id $Mailbox ;
-                $pltTMapi=[ordered]@{identity=$Mailbox;domaincontroller=$domaincontroller  ;erroraction='SilentlyContinue'; } ; 
-                $smsg = "Test-MAPIConnectivity w`n$(($pltTMapi|out-string).trim())" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
-                Try {
-                    $mapiTest = Test-MAPIConnectivity @pltTMapi  ; 
-                    if ($mapiTest.Result -eq 'Success') {
-                        $smsg= "(successful Outlook Mbx MAPI validate: Test-MAPIConnectivity -id $($Mailbox) }" ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    } ;
-                    $Exit = $Retries ;
-                } Catch {
-                    $errTrpd=$_ ;
-                    $smsg = "Failed processing $($errTrpd.Exception.ItemName). `nError Message: $($errTrpd.Exception.Message)`nError Details: $($errTrpd)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } #Error|Warn|Debug
-                    else { write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    Start-Sleep -Seconds $RetrySleep ;
-                    $Exit ++ ;
-                    $smsg = "Failed to exec cmd because: $($Error[0])`nTry #: $($Exit)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } #Error|Warn|Debug
-                    else { write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    If ($Exit -eq $Retries) { Write-Warning "Unable to exec cmd!" } ;
-                }  ;
-
-
+                $mapiTest = Test-MAPIConnectivity -id $Mailbox ;
                 $FixText = @"
 ========================================
 Problem User:`t "$($adu.UserPrincipalName)"
@@ -7745,12 +7717,10 @@ Has an *ONPREM* mailbox:$($opmbx.database)
                 if ($mapiTest.Result -eq 'Success') {
                     $FixText2 = @"
 *with *NO* detected issues*
-Mailbox Outlook connectivity tested and validated functional...
 "@ ;
                 } else {
                     $FixText2 = @"
 *FAILED Test-MAPIConnectivity*
-Mailbox Outlook connectivity test failed to connect!...
 "@ ;
                 }
 
@@ -7779,27 +7749,9 @@ EXO WhenMailboxCreated:`t "$($exombx.WhenMailboxCreated)"
 
             }elseif (($rcp.RecipientTypeDetails -eq 'RemoteUserMailbox') -AND ($exorcp.RecipientTypeDetails -eq 'UserMailbox') ) {
                 # EXO MAILBOX
-                $pltTxmc=@{identity=$Mailbox ;erroraction='SilentlyContinue'; } ;
-                Try {
-                    $mapiTest = ps1TestXMapi @pltTxmc ; 
-                    if ($mapiTest.Result -eq 'Success') {
-                        $smsg= "(successful Outlook Mbx MAPI validate: Test-MAPIConnectivity -id $($Mailbox) }" ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    } ;
-                    $Exit = $Retries ;
-                } Catch {
-                    $errTrpd=$_ ;
-                    $smsg = "Failed processing $($errTrpd.Exception.ItemName). `nError Message: $($errTrpd.Exception.Message)`nError Details: $($errTrpd)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } #Error|Warn|Debug
-                    else { write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    Start-Sleep -Seconds $RetrySleep ;
-                    $Exit ++ ;
-                    $smsg = "Failed to exec cmd because: $($Error[0])`nTry #: $($Exit)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } #Error|Warn|Debug
-                    else { write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    If ($Exit -eq $Retries) { Write-Warning "Unable to exec cmd!" } ;
-                }  ;
+                $pltTxmc=@{identity=$Mailbox ; } ;
+                if($script:useEXOv2){$mapiTest = Test-xoMAPIConnectivity @pltTxmc ; }
+                else { $mapiTest = Test-exoMAPIConnectivity @pltTxmc ;} ;
                 $FixText = @"
 ========================================
 User:`t "$($adu.UserPrincipalName)"
@@ -7808,12 +7760,10 @@ Has an *EXO* mailbox:$($exombx.database)
                 if ($mapiTest.Result -eq 'Success') {
                 $FixText2 = @"
 *with *NO* detected issues*
-Mailbox Outlook connectivity tested and validated functional...
 "@ ;
                 } else {
                     $FixText2 = @"
 *FAILED Test-exoMAPIConnectivity*
-Mailbox Outlook connectivity test failed to connect!...
 "@ ;
                 } ; 
 
@@ -7949,8 +7899,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKUAepv03R5r6f0U0g8wdnu0X
-# OumgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUEajuzmLsGHGb/lonhY+VXhoi
+# aSegggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -7965,9 +7915,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQH3Hhy
-# SXgFlx/HmNYNb+mrg7IUIjANBgkqhkiG9w0BAQEFAASBgCUYq3eWX/kKdx2g+Z0E
-# 3UnaOTu8ZLTXFhIKdFUY5bEKZDKTdGq+O8c6WSkppIcXSpdpNpCy0dMNSGl+2eDc
-# kIKd4A4KYyv65SVNCRIteOqEUj4e+U57mh8fot3PXD0ys0Tw1YErQ2oCDnIYBKNX
-# LJ+c/2ehE9PAmP1VZim3Y6ne
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSROCeg
+# UbitYsoW2BYF8kJVUfrtoTANBgkqhkiG9w0BAQEFAASBgB2PSYtUYyViNQr4plU2
+# f/zGfLongUXYj7ybtcNd1bxatQNnvhOmWYoloNkmXxwnMVKdbtUn7AX0BFAiCUNX
+# sA68jxD8nQz6p02HkGpmjM3bTtkIxBvpQht05qw3x3ScgfG+qiT0r4suhmvPty9L
+# D9qUciZlvklhstzOcj7MrXTo
 # SIG # End signature block
