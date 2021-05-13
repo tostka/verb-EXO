@@ -15,9 +15,9 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
-    * 10:19 AM 5/10/2021 added explcit echo on test-mapi & results, to underscore accessibility (added splat test as well). 
-    * 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
-    * 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
+    # 12:27 PM 5/11/2021 updated to cover Room|Shared|Equipment mbx types, along with UserMailbox
+    # 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
+    # 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
     * 4:20 PM 4/29/2021 debugged, looks functional - could benefit from moving the msgtrk summary down into the output block, but [shrug]
     * 7:56 AM 4/28/2021 init
     .DESCRIPTION
@@ -1234,7 +1234,7 @@ B. Process & Profile the output .json file from the above:
                 else { write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
              }
-            elseif (($rcp.RecipientTypeDetails -eq 'UserMailbox') -AND ($exorcp.RecipientTypeDetails -eq 'MailUser') ) {
+            elseif ( ($rcp.RecipientTypeDetails -match '(User|Shared|Room|Equipment)Mailbox') -AND ($exorcp.RecipientTypeDetails -eq 'MailUser') ) {
                 # ON PREM MAILBOX
                 #$mapiTest = Test-MAPIConnectivity -id $Mailbox ;
                 $pltTMapi=[ordered]@{identity=$Mailbox;domaincontroller=$domaincontroller  ;erroraction='SilentlyContinue'; } ; 
@@ -1267,7 +1267,7 @@ B. Process & Profile the output .json file from the above:
                 $FixText = @"
 ========================================
 Problem User:`t "$($adu.UserPrincipalName)"
-Has an *ONPREM* mailbox:$($opmbx.database)
+Has an *ONPREM* mailbox:Type:$($exombx.recipienttypedetails) hosted in $($opmbx.database)
 "@ ;
                 if ($mapiTest.Result -eq 'Success') {
                     $FixText2 = @"
@@ -1304,7 +1304,7 @@ EXO WhenMailboxCreated:`t "$($exombx.WhenMailboxCreated)"
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                 else { write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-            }elseif (($rcp.RecipientTypeDetails -eq 'RemoteUserMailbox') -AND ($exorcp.RecipientTypeDetails -eq 'UserMailbox') ) {
+            }elseif ( ($rcp.RecipientTypeDetails -match 'Remote(User|Shared|Room|Equipment)Mailbox' ) -AND ($exorcp.RecipientTypeDetails -match '(User|Shared|Room|Equipment)Mailbox') ) {
                 # EXO MAILBOX
                 $pltTxmc=@{identity=$Mailbox ;erroraction='SilentlyContinue'; } ;
                 Try {
@@ -1330,7 +1330,7 @@ EXO WhenMailboxCreated:`t "$($exombx.WhenMailboxCreated)"
                 $FixText = @"
 ========================================
 User:`t "$($adu.UserPrincipalName)"
-Has an *EXO* mailbox:$($exombx.database)
+Has an *EXO* mailbox:Type:$($exombx.recipienttypedetails) in db:$($exombx.database)
 "@ ;
                 if ($mapiTest.Result -eq 'Success') {
                 $FixText2 = @"
@@ -1351,6 +1351,9 @@ $(($mapiTest|out-string).trim())
 The user's o365 LICENSESKUs:                     "$($exolicdetails.LicAccountSkuID)"
 With DisplayNames:                               "$($exolicdetails.LicenseFriendlyName)"
 The user's o365 Licensing group appears to be:  "$($grantgroup)"
+$(if($rcp.recipienttypedetails -ne 'RemoteUserMailbox'){
+    '(non-usermailbox, *non*-licensed is typical status)'
+})
 
 OnPrem RecipientTypeDetails:`t "$($rcp.RecipientTypeDetails)"
 OnPrem WhenCreated:`t "$($rcp.WhenCreated)"

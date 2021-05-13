@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.73.0
+  Version     : 1.0.74.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -6488,9 +6488,9 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
-    * 10:19 AM 5/10/2021 added explcit echo on test-mapi & results, to underscore accessibility (added splat test as well). 
-    * 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
-    * 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
+    # 12:27 PM 5/11/2021 updated to cover Room|Shared|Equipment mbx types, along with UserMailbox
+    # 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
+    # 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
     * 4:20 PM 4/29/2021 debugged, looks functional - could benefit from moving the msgtrk summary down into the output block, but [shrug]
     * 7:56 AM 4/28/2021 init
     .DESCRIPTION
@@ -7707,7 +7707,7 @@ B. Process & Profile the output .json file from the above:
                 else { write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
              }
-            elseif (($rcp.RecipientTypeDetails -eq 'UserMailbox') -AND ($exorcp.RecipientTypeDetails -eq 'MailUser') ) {
+            elseif ( ($rcp.RecipientTypeDetails -match '(User|Shared|Room|Equipment)Mailbox') -AND ($exorcp.RecipientTypeDetails -eq 'MailUser') ) {
                 # ON PREM MAILBOX
                 #$mapiTest = Test-MAPIConnectivity -id $Mailbox ;
                 $pltTMapi=[ordered]@{identity=$Mailbox;domaincontroller=$domaincontroller  ;erroraction='SilentlyContinue'; } ; 
@@ -7740,7 +7740,7 @@ B. Process & Profile the output .json file from the above:
                 $FixText = @"
 ========================================
 Problem User:`t "$($adu.UserPrincipalName)"
-Has an *ONPREM* mailbox:$($opmbx.database)
+Has an *ONPREM* mailbox:Type:$($exombx.recipienttypedetails) hosted in $($opmbx.database)
 "@ ;
                 if ($mapiTest.Result -eq 'Success') {
                     $FixText2 = @"
@@ -7777,7 +7777,7 @@ EXO WhenMailboxCreated:`t "$($exombx.WhenMailboxCreated)"
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                 else { write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-            }elseif (($rcp.RecipientTypeDetails -eq 'RemoteUserMailbox') -AND ($exorcp.RecipientTypeDetails -eq 'UserMailbox') ) {
+            }elseif ( ($rcp.RecipientTypeDetails -match 'Remote(User|Shared|Room|Equipment)Mailbox' ) -AND ($exorcp.RecipientTypeDetails -match '(User|Shared|Room|Equipment)Mailbox') ) {
                 # EXO MAILBOX
                 $pltTxmc=@{identity=$Mailbox ;erroraction='SilentlyContinue'; } ;
                 Try {
@@ -7803,7 +7803,7 @@ EXO WhenMailboxCreated:`t "$($exombx.WhenMailboxCreated)"
                 $FixText = @"
 ========================================
 User:`t "$($adu.UserPrincipalName)"
-Has an *EXO* mailbox:$($exombx.database)
+Has an *EXO* mailbox:Type:$($exombx.recipienttypedetails) in db:$($exombx.database)
 "@ ;
                 if ($mapiTest.Result -eq 'Success') {
                 $FixText2 = @"
@@ -7824,6 +7824,9 @@ $(($mapiTest|out-string).trim())
 The user's o365 LICENSESKUs:                     "$($exolicdetails.LicAccountSkuID)"
 With DisplayNames:                               "$($exolicdetails.LicenseFriendlyName)"
 The user's o365 Licensing group appears to be:  "$($grantgroup)"
+$(if($rcp.recipienttypedetails -ne 'RemoteUserMailbox'){
+    '(non-usermailbox, *non*-licensed is typical status)'
+})
 
 OnPrem RecipientTypeDetails:`t "$($rcp.RecipientTypeDetails)"
 OnPrem WhenCreated:`t "$($rcp.WhenCreated)"
@@ -7949,8 +7952,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKUAepv03R5r6f0U0g8wdnu0X
-# OumgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5lVsXsqzj8yWFYzSGAjXCOup
+# XvygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -7965,9 +7968,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQH3Hhy
-# SXgFlx/HmNYNb+mrg7IUIjANBgkqhkiG9w0BAQEFAASBgCUYq3eWX/kKdx2g+Z0E
-# 3UnaOTu8ZLTXFhIKdFUY5bEKZDKTdGq+O8c6WSkppIcXSpdpNpCy0dMNSGl+2eDc
-# kIKd4A4KYyv65SVNCRIteOqEUj4e+U57mh8fot3PXD0ys0Tw1YErQ2oCDnIYBKNX
-# LJ+c/2ehE9PAmP1VZim3Y6ne
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT2Aqhe
+# UUqMh2RGoFDsU4hL6z/XdDANBgkqhkiG9w0BAQEFAASBgKaxnTSfvkNCSQhtEXSJ
+# a2ITklpQ4+FAGfY+a7x0tG3yF7l8FaI1tR/Ephol5FZmb1iGZJMYuWwUMFDYqel4
+# dXbNBReCZwysgcVVxXwL4Rxs9s5Py4qYFv6YdexicMlrWvoG3WzEryXKD/x0oYMD
+# 2vvERs+ztU6qBVSESwNmSllf
 # SIG # End signature block

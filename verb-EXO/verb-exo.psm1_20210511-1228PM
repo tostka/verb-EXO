@@ -1,4 +1,4 @@
-# verb-exo.psm1
+﻿# verb-exo.psm1
 
 
   <#
@@ -6488,9 +6488,9 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
-    # 12:27 PM 5/11/2021 updated to cover Room|Shared|Equipment mbx types, along with UserMailbox
-    # 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
-    # 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
+    * 10:19 AM 5/10/2021 added explcit echo on test-mapi & results, to underscore accessibility (added splat test as well). 
+    * 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
+    * 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
     * 4:20 PM 4/29/2021 debugged, looks functional - could benefit from moving the msgtrk summary down into the output block, but [shrug]
     * 7:56 AM 4/28/2021 init
     .DESCRIPTION
@@ -7707,7 +7707,7 @@ B. Process & Profile the output .json file from the above:
                 else { write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
              }
-            elseif ( ($rcp.RecipientTypeDetails -match '(User|Shared|Room|Equipment)Mailbox') -AND ($exorcp.RecipientTypeDetails -eq 'MailUser') ) {
+            elseif (($rcp.RecipientTypeDetails -eq 'UserMailbox') -AND ($exorcp.RecipientTypeDetails -eq 'MailUser') ) {
                 # ON PREM MAILBOX
                 #$mapiTest = Test-MAPIConnectivity -id $Mailbox ;
                 $pltTMapi=[ordered]@{identity=$Mailbox;domaincontroller=$domaincontroller  ;erroraction='SilentlyContinue'; } ; 
@@ -7740,7 +7740,7 @@ B. Process & Profile the output .json file from the above:
                 $FixText = @"
 ========================================
 Problem User:`t "$($adu.UserPrincipalName)"
-Has an *ONPREM* mailbox:Type:$($exombx.recipienttypedetails) hosted in $($opmbx.database)
+Has an *ONPREM* mailbox:$($opmbx.database)
 "@ ;
                 if ($mapiTest.Result -eq 'Success') {
                     $FixText2 = @"
@@ -7777,7 +7777,7 @@ EXO WhenMailboxCreated:`t "$($exombx.WhenMailboxCreated)"
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                 else { write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-            }elseif ( ($rcp.RecipientTypeDetails -match 'Remote(User|Shared|Room|Equipment)Mailbox' ) -AND ($exorcp.RecipientTypeDetails -match '(User|Shared|Room|Equipment)Mailbox') ) {
+            }elseif (($rcp.RecipientTypeDetails -eq 'RemoteUserMailbox') -AND ($exorcp.RecipientTypeDetails -eq 'UserMailbox') ) {
                 # EXO MAILBOX
                 $pltTxmc=@{identity=$Mailbox ;erroraction='SilentlyContinue'; } ;
                 Try {
@@ -7803,7 +7803,7 @@ EXO WhenMailboxCreated:`t "$($exombx.WhenMailboxCreated)"
                 $FixText = @"
 ========================================
 User:`t "$($adu.UserPrincipalName)"
-Has an *EXO* mailbox:Type:$($exombx.recipienttypedetails) in db:$($exombx.database)
+Has an *EXO* mailbox:$($exombx.database)
 "@ ;
                 if ($mapiTest.Result -eq 'Success') {
                 $FixText2 = @"
@@ -7824,9 +7824,6 @@ $(($mapiTest|out-string).trim())
 The user's o365 LICENSESKUs:                     "$($exolicdetails.LicAccountSkuID)"
 With DisplayNames:                               "$($exolicdetails.LicenseFriendlyName)"
 The user's o365 Licensing group appears to be:  "$($grantgroup)"
-$(if($rcp.recipienttypedetails -ne 'RemoteUserMailbox'){
-    '(non-usermailbox, *non*-licensed is typical status)'
-})
 
 OnPrem RecipientTypeDetails:`t "$($rcp.RecipientTypeDetails)"
 OnPrem WhenCreated:`t "$($rcp.WhenCreated)"
@@ -7948,3 +7945,29 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
 Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,Test-Uri,test-xoMailbox,_cleanup -Alias *
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKUAepv03R5r6f0U0g8wdnu0X
+# OumgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQH3Hhy
+# SXgFlx/HmNYNb+mrg7IUIjANBgkqhkiG9w0BAQEFAASBgCUYq3eWX/kKdx2g+Z0E
+# 3UnaOTu8ZLTXFhIKdFUY5bEKZDKTdGq+O8c6WSkppIcXSpdpNpCy0dMNSGl+2eDc
+# kIKd4A4KYyv65SVNCRIteOqEUj4e+U57mh8fot3PXD0ys0Tw1YErQ2oCDnIYBKNX
+# LJ+c/2ehE9PAmP1VZim3Y6ne
+# SIG # End signature block
