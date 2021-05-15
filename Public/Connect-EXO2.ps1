@@ -397,8 +397,8 @@ Function Connect-EXO2 {
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     #-=-record a STATUSWARN=-=-=-=-=-=-=
                     $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
-                    if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
-                    if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                    if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                    if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
                     #-=-=-=-=-=-=-=-=
                     $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
@@ -423,8 +423,8 @@ Function Connect-EXO2 {
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     #-=-record a STATUSWARN=-=-=-=-=-=-=
                     $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
-                    if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
-                    if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                    if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                    if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
                     #-=-=-=-=-=-=-=-=
                     $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
@@ -438,8 +438,8 @@ Function Connect-EXO2 {
                 else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #-=-record a STATUSWARN=-=-=-=-=-=-=
                 $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
-                if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
-                if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
                 #-=-=-=-=-=-=-=-=
                 $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
@@ -453,8 +453,8 @@ Function Connect-EXO2 {
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     #-=-record a STATUSWARN=-=-=-=-=-=-=
                     $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
-                    if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
-                    if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                    if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                    if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
                     #-=-=-=-=-=-=-=-=
                     Break ;
                 } ;

@@ -9,6 +9,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     # 11:11 AM 5/7/2021 replaced verbose & bdebugs ; fixed missing logging function & added trailing echo of path.
     * 3:55 PM 5/6/2021 update logging, with move to module, it's logging into the ALlusers profile dir
     * 11:05 AM 5/5/2021 refactor into a function, add to verb-exo; ren move-ExoMailboxNow -> move-MailboxToXo
@@ -335,7 +336,7 @@ function move-MailboxToXo{
 
     # check for $TenOrg & credential alignment
     # with credential un-defaulted, no need to compare $TenOrg & credential
-    $tvari = "PassStatus_$($tenorg)" ; if(get-Variable -Name $tvari -scope Script){Remove-Variable -Name $tvari -scope Script}
+    $tvari = "PassStatus_$($tenorg)" ; if(get-Variable -Name $tvari -scope Script -ea 0){Remove-Variable -Name $tvari -scope Script}
     New-Variable -Name PassStatus_$($tenorg) -scope Script -Value $null ;
 
     $reqMods+="Add-PSTitleBar;Remove-PSTitleBar".split(";") ;
@@ -1256,6 +1257,6 @@ function move-MailboxToXo{
     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
     #*------^ END SUB MAIN ^------
-} ; 
+}
 
 #*------^ move-MailboxToXo.ps1 ^------

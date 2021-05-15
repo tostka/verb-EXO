@@ -15,6 +15,7 @@ Function test-ExoPSession {
     Github      : https://github.com/tostka
     Tags        : Powershell,Exchange,Exchange-2013,Exchange-2016
     REVISIONS   :
+    * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     * 10:38 AM 5/3/2021 init vers
     .DESCRIPTION
     test-ExoPSession - Does a *simple* - NO-ORG REVIEW - validation of functional EXO PSSession with: ConfigurationName:'Microsoft.Exchange' -AND Name match (ExchangeOnlineInternalSession| "^(Session|WinRM)\d*) -AND State:'Opened' -AND Availability:'Available' -AND can gcm -name 'Add-*ATPEvaluation'.
@@ -76,4 +77,5 @@ Function test-ExoPSession {
     } ;  # PROC-E
     END {}
 }
+
 #*------^ test-ExoPSession.ps1 ^------

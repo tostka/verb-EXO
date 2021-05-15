@@ -1,4 +1,4 @@
-﻿#*----------v Function get-MsgTrace() v----------
+﻿#*------v get-MsgTrace.ps1 v------
 function get-MsgTrace {
     <#
     .SYNOPSIS
@@ -15,6 +15,7 @@ function get-MsgTrace {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
+     * 12:17 PM 5/14/2021 updated passstatus code to curr, and added -ea to the gv's (suppress errors when not present)
     * 2:23 PM 3/16/2021 added multi-tenant support ; debugged both exOP & exo, added -ReportFail & -ReportRowsLimit params. At this point Exclusive params are only partially configured
     * 1:12 PM 3/15/2021 init work was done 3/12, removed recursive-err generating #Require on the hosting verb-EXO module
     .DESCRIPTION
@@ -180,8 +181,8 @@ function get-MsgTrace {
             } else {
                 #-=-record a STATUS=-=-=-=-=-=-=
                 $statusdelta = ";ERROR";
-                $script:PassStatus += $statusdelta ;
-                set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
+                if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
                 #-=-=-=-=-=-=-=-=
                 $smsg = "Unable to resolve $($tenorg) `$o365Cred value!"
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
@@ -214,8 +215,8 @@ function get-MsgTrace {
             } else {
                 #-=-record a STATUS=-=-=-=-=-=-=
                 $statusdelta = ";ERROR";
-                $script:PassStatus += $statusdelta ;
-                set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
+                if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
                 #-=-=-=-=-=-=-=-=
                 $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
@@ -531,5 +532,6 @@ function get-MsgTrace {
     END {
         remove-alias ps1GetMsgTrace ;
     } ; 
-} 
-#*------^ END Function get-MsgTrace() ^------
+}
+
+#*------^ get-MsgTrace.ps1 ^------

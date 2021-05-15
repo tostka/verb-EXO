@@ -15,8 +15,7 @@ Function check-EXOLegalHold {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,Legal
     REVISIONS   :
-    # 11:21 AM 3/31/2021 added TenDom test, after AccDom test ;  added verbose suppress to all import-mods
-    * 12:37 PM 11/6/2020 init version 
+    * 1:23 PM 5/14/2021 init version, roughed in, completely untested (was prev a largely unmodified dupe of disconnect-exo)
     .DESCRIPTION
     check-EXOLegalHold - check passed in EXO mailbox object for Legal Hold status
     .PARAMETER  ProxyEnabled
@@ -44,252 +43,174 @@ Function check-EXOLegalHold {
     .LINK
     https://github.com/JeremyTBradshaw
     #>
+    ##Requires -Modules ActiveDirectory,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-Network,verb-AAD,verb-ADMS,verb-Ex2010,verb-logging
+
     [CmdletBinding()]
-    [Alias('cxo')]
-    Param(
-        [Parameter(HelpMessage = "Use Proxy-Aware SessionOption settings [-ProxyEnabled]")]
-        [boolean]$ProxyEnabled = $False,
-        [Parameter(HelpMessage = "[verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-CommandPrefix tag]")]
-        [string]$CommandPrefix = 'exo',
-        [Parameter(HelpMessage = "Credential to use for this connection [-credential [credential obj variable]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-        [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
-        [switch] $showDebug
+    PARAM(
+        [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="EXO Mailbox identifier[-mailbox 'xxx']")]
+        [ValidateNotNullOrEmpty()]$Mailbox,
+        [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
+        [switch] $useEXOv2
     ) ;
-    BEGIN{
-        $verbose = ($VerbosePreference -eq "Continue") ; 
-        if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
-        $MFA = get-TenantMFARequirement -Credential $Credential ;
-
-        # disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
-        if (!$CommandPrefix) {
-            $CommandPrefix = 'exo' ;
-            write-verbose -verbose:$true  "(asserting Prefix:$($CommandPrefix)" ;
-        } ;
-
-        $sTitleBarTag = "EXO" ;
-        $TenOrg=get-TenantTag -Credential $Credential ; 
-        if($TenOrg -ne 'TOR'){
-            # explicitly leave this tenant (default) untagged
-            $sTitleBarTag += $TenOrg ;
-        } ; 
-    } ;  # BEG-E
-    PROCESS{
-
-        # if we're using EXOv1-style BasicAuth, clear incompatible existing EXOv2 PSS's
-        $exov2Good = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')} ; 
-        $exov2Broken = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Broken*"}
-        $exov2Closed = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -eq "ExchangeOnlineInternalSession*" -and $_.State -like "*Closed*"}
-
-        if($exov2Good  ){
-            write-verbose "EXOv1:Disconnecting conflicting EXOv2 connection" ; 
-            Discheck-EXOLegalHold2 ; 
-        } ; 
-        if ($exov2Broken.count -gt 0){for ($index = 0 ;$index -lt $exov2Broken.count ;$index++){Remove-PSSession -session $exov2Broken[$index]} };
-        if ($exov2Closed.count -gt 0){for ($index = 0 ;$index -lt $exov2Closed.count ; $index++){Remove-PSSession -session $exov2Closed[$index] } } ; 
-    
-        $bExistingEXOGood = $false ; 
-        # $existingPSSession = Get-PSSession | where-object { $_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -match "^(Session|WinRM)\d*" }
-        #if( Get-PSSession|Where-Object{($_.ComputerName -match $rgxExoPsHostName) -AND ($_.State -eq 'Opened') -AND ($_.Availability -eq 'Available')}){
-        # EXOv1 & v2 both use ComputerName -match $rgxExoPsHostName, need to use the distinctive differentiators instead
-        if(Get-PSSession | where-object { $_.ConfigurationName -like "Microsoft.Exchange" -AND $_.Name -match "^(Session|WinRM)\d*" -AND $_.State -eq 'Opened' -AND $_.Availability -eq 'Available' }){
-            if( get-command Get-exoAcceptedDomain -ea 0) {
-                #if ((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
-                #-=-=-=-=-=-=-=-=
-                #$TenOrg = get-TenantTag -Credential $Credential ;
-                if(!(Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains){
-                    set-Variable  -name "$($TenOrg)Meta" -value ( (Get-Variable  -name "$($TenOrg)Meta").value += @{'o365_AcceptedDomains' = (Get-exoAcceptedDomain).domainname} )
-                } ;
-                if((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
-                    # validate that the connected EXO is to the $Credential tenant    
-                    $smsg = "(EXO Authenticated & Functional(AccDom):$($Credential.username.split('@')[1].tostring()))" ; 
-                    $bExistingEXOGood = $true ; 
-                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
-                }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
-                    $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    $bExistingEXOGood = $true ;
-                } else { 
-                    write-verbose "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ; 
-                    Discheck-EXOLegalHold ; 
-                    $bExistingEXOGood = $false ; 
-                } ; 
-            } else { 
-                # capture outlier: shows a session wo the test cmdlet, force reset
-                Discheck-EXOLegalHold ; 
-                $bExistingEXOGood = $false ; 
-            } ; 
-        } ; 
-
-        if($bExistingEXOGood -eq $false){
-    
-            $ImportPSSessionProps = @{
-                AllowClobber        = $true ;
-                DisableNameChecking = $true ;
-                Prefix              = $CommandPrefix ;
-                ErrorAction         = 'Stop' ;
-            } ;
-
-            if ($MFA) {
-                
-                throw "MFA is not currently supported by the check-EXOLegalHold cmdlet!. Use connect/disconnect/recheck-EXOLegalHold2 instead" ; 
-                Break 
-                <# 4:24 PM 7/30/2020 HAD TO UNINSTALL THE EXOMFA module, a bundled cmdlet fundementally conflicted with ExchangeOnlineManagement#>
-
+    BEGIN {
+        $Verbose = ($VerbosePreference -eq 'Continue') ;
+        # shifting from ps1 to a function: need updates self-name:
+        ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+        #-=-=configure EXO EMS aliases to cover useEXOv2 requirements-=-=-=-=-=-=
+        # have to preconnect, as it gcm's the targets
+        if ($script:useEXOv2) { reconnect-eXO2 }
+        else { reconnect-EXO } ;
+        # in this case, we need an alias for EXO, and non-alias for EXOP
+        [array]$cmdletMaps = 'ps1GetxRcp;get-exorecipient;','ps1GetxMbx;get-exomailbox;','ps1SetxMbx;Set-exoMailbox;','ps1GetxUser;get-exoUser;',
+            'ps1SetxCalProc;set-exoCalendarprocessing;','ps1GetxCalProc;get-exoCalendarprocessing;','ps1GetxMbxFldrPerm;get-exoMailboxfolderpermission;',
+            'ps1GetxAccDom;Get-exoAcceptedDomain;','ps1GetxRetPol;Get-exoRetentionPolicy','ps1GetxDistGrp;get-exoDistributionGroup;',
+            'ps1GetxDistGrpMbr;get-exoDistributionGroupmember;','ps1GetxMsgTrc;get-exoMessageTrace;','ps1GetxMsgTrcDtl;get-exoMessageTraceDetail;',
+            'ps1GetxMbxFldrStats;get-exoMailboxfolderStatistics','ps1GetxMContact;Get-exomailcontact;','ps1SetxMContact;Set-exomailcontact;',
+            'ps1NewxMContact;New-exomailcontact;' ,'ps1TestxMapi;Test-exoMAPIConnectivity','ps1GetxOrgCfg;Get-exoOrganizationConfig' ;
+        foreach($cmdletMap in $cmdletMaps){
+            if($script:useEXOv2){
+                if(!($cmdlet= Get-Command $cmdletMap.split(';')[1].replace('-exo','-xo') )){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
+                $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
+                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
             } else {
-                $EXOsplat = @{
-                    ConfigurationName = "Microsoft.Exchange" ;
-                    ConnectionUri     = "https://ps.outlook.com/powershell/" ;
-                    Authentication    = "Basic" ;
-                    AllowRedirection  = $true;
-                } ;
-                $EXOsplat.Add("Credential", $Credential); # just use the passed $Credential vari
-
-                $cMsg = "Connecting to Exchange Online ($($credential.username.split('@')[1]))"; 
-                If ($ProxyEnabled) {
-                    $EXOsplat.Add("sessionOption", $(New-PsSessionOption -ProxyAccessType IEConfig -ProxyAuthentication basic)) ;
-                    $cMsg += " via Proxy"  ;
-                } ;
-                Write-Host $cMsg ;
-                write-verbose "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
-                Try { $global:EOLSession = New-PSSession @EXOsplat ;
-                } catch {
-                    Write-Warning -Message "Tried but failed to import the EXO PS module.`n`nError message:" ;
-                    throw $_ ;
-                } ;
-                if ($error.count -ne 0) {
-                    if ($error[0].FullyQualifiedErrorId -eq '-2144108477,PSSessionOpenFailed') {
-                        write-warning "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-                        throw "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-                        Break ;
-                    } ;
-                } ;
-                if(!$global:EOLSession){
-                    write-warning "$((get-date).ToString('HH:mm:ss')):FAILED TO RETURN PSSESSION!`nAUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-                    throw "$((get-date).ToString('HH:mm:ss')):AUTH FAIL BAD PASSWORD? ABORTING TO AVOID LOCKOUT!" ;
-                    Break ;
-                } ; 
-                $pltiSess = [ordered]@{Session = $global:EOLSession ; DisableNameChecking = $true  ; AllowClobber = $true ; ErrorAction  = 'Stop' ;} ;
-                $pltIMod=@{Global=$true;PassThru=$true;DisableNameChecking=$true ; verbose=$false} ; # force verbose off, suppress spam in console
-                if($CommandPrefix){
-                    $pltIMod.add('Prefix',$CommandPrefix) ;
-                    $pltISess.add('Prefix',$CommandPrefix) ;
-                } ;
-                write-verbose "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltiSess|out-string).trim())" ;
-                Try {
-                    # Verbose:Continue is VERY noisey for module loads. Bracketed suppress:
-                    if($VerbosePreference = "Continue"){
-                        $VerbosePrefPrior = $VerbosePreference ;
-                        $VerbosePreference = "SilentlyContinue" ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    $Global:EOLModule = Import-Module (Import-PSSession @pltiSess) @pltIMod ;
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    Add-PSTitleBar $sTitleBarTag ;
-                } catch [System.ArgumentException] {
-                    <# 8:45 AM 7/29/2020 VEN tenant now throwing error:
-                        WARNING: Tried but failed to import the EXO PS module.
-                        Error message:
-                        Import-PSSession : Data returned by the remote Get-FormatData command is not in the expected format.
-                        At C:\Program Files\WindowsPowerShell\Modules\verb-exo\1.0.14\verb-EXO.psm1:370 char:52
-                        + ...   $Global:EOLModule = Import-Module (Import-PSSession @pltiSess) -Globa ...
-                        +                                          ~~~~~~~~~~~~~~~~~~~~~~~~
-                            + CategoryInfo          : InvalidResult: (:) [Import-PSSession], ArgumentException
-                            + FullyQualifiedErrorId : ErrorMalformedDataFromRemoteCommand,Microsoft.PowerShell.Commands.ImportPSSessionCommand
-                    
-                    EXO bug here:https://answers.microsoft.com/en-us/msoffice/forum/all/cannot-connect-to-exchange-online-via-powershell/25ca1cc2-e23a-470e-9c73-e6c56c4fbb46?page=7
-                    Workaround 1) Use EXO V2 module - but it breaks historical use of -suffix 'exo'
-                    2) use ?SerializationLevel=Full with the ConnectionURI: -ConnectionUri "https://outlook.office365.com/powershell-liveid?SerializationLevel=Full"
-                    #>
-                    $EXOsplat.ConnectionUri = 'https://outlook.office365.com/powershell-liveid?SerializationLevel=Full' ;
-                    write-warning -verbose:$true "$((get-date).ToString('HH:mm:ss')):'Get-FormatData command is not in the expected format' EXO bug: Retrying with '&SerializationLevel=Full'ConnectionUri`n(details at https://answers.microsoft.com/en-us/msoffice/forum/all/cannot-connect-to-exchange-online-via-powershell/)" ;
-                    write-verbose -verbose:$true "`n$((get-date).ToString('HH:mm:ss')):New-PSSession w`n$(($EXOsplat|out-string).trim())" ;
-                    TRY{
-                        $global:EOLSession | Remove-PSSession; ; 
-                        $global:EOLSession = New-PSSession @EXOsplat ;
-                    } CATCH {
-                        $ErrTrapd = $_ ; 
-                        Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                        Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
-                    } ; 
-                    $pltiSess = [ordered]@{Session = $global:EOLSession ; DisableNameChecking = $true  ; AllowClobber = $true ; ErrorAction = 'Stop' ;} ;
-                    $pltIMod=@{Global=$true;PassThru=$true;DisableNameChecking=$true ; verbose=$false} ; # force verbose off, suppress spam in console
-                    if($CommandPrefix){
-                        $pltIMod.add('Prefix',$CommandPrefix) ;
-                        $pltISess.add('Prefix',$CommandPrefix) ;
-                    } ;
-                    write-verbose -verbose:$true "`n$((get-date).ToString('HH:mm:ss')):Import-PSSession w`n$(($pltiSess|out-string).trim())" ;
-                    TRY{
-                        $Global:EOLModule = Import-Module (Import-PSSession @pltiSess) @pltIMod   ;
-                    } CATCH {
-                        $ErrTrapd = $_ ; 
-                        Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                        Break #STOP(debug)|EXIT(close)|Continue(move on in loop cycle) ; 
-                    } ; 
-                    # reenable VerbosePreference:Continue, if set, during mod loads 
-                    if($VerbosePrefPrior -eq "Continue"){
-                        $VerbosePreference = $VerbosePrefPrior ;
-                        $verbose = ($VerbosePreference -eq "Continue") ;
-                    } ; 
-                    Add-PSTitleBar $sTitleBarTag ;
-
-                } catch {
-                    Write-Warning -Message "Tried but failed to import the EXO PS module.`n`nError message:" ;
-                    throw $_ ;
-                } ;
-            
+                if(!($cmdlet= Get-Command $cmdletMap.split(';')[1])){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
+                $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;                
+                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
             } ;
+        } ;
+    
+        # shifting from ps1 to a function: need updates self-name:
+        ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
 
-        } ; #  # if-E $bExistingEXOGood
+        #$sBnr="#*======v START PASS:$($ScriptBaseName) v======" ; 
+        $sBnr="#*======v START PASS:$(${CmdletName}) v======" ; 
+        $smsg= $sBnr ;   
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+        # Clear error variable
+        $Error.Clear() ;
+        
+
+    } ;  # BEGIN-E
+    PROCESS {
+         <#
+        	# chk mbx-level holds
+	        Rxo ; 
+	        ╔░▒▓[LYN-8DCZ1G2]▓▒░░░░▒▓[Thu 11/05/2020 14:38]▓▒░
+	        ╚[kadriTSS]::[PS]:C:\u\w\e\scripts$ get-exomailbox Helen.Gotzian@toro.com | FL LitigationHoldEnabled,InPlaceHolds
+	        LitigationHoldEnabled : False
+	        InPlaceHolds          : {}
+	        # expand per arti
+	        ╔░▒▓[LYN-8DCZ1G2]▓▒░░░░▒▓[Thu 11/05/2020 14:39]▓▒░
+	        ╚[kadriTSS]::[PS]:C:\u\w\e\scripts$ get-exomailbox Helen.Gotzian@toro.com  | Select-Object -ExpandProperty InPlaceHolds
+	        # nothing
+	 
+	        # check for org hold
+	        ╔░▒▓[LYN-8DCZ1G2]▓▒░░░░▒▓[Thu 11/05/2020 14:39]▓▒░
+	        ╚[kadriTSS]::[PS]:C:\u\w\e\scripts$ Get-exoOrganizationConfig | FL InPlaceHolds
+	        InPlaceHolds : {}
+	        # expand spec
+	        ╔░▒▓[LYN-8DCZ1G2]▓▒░░░░▒▓[Thu 11/05/2020 14:40]▓▒░
+	        ╚[kadriTSS]::[PS]:C:\u\w\e\scripts$ Get-exoOrganizationConfig | select -expand InPlaceHolds
+	        # nothing
+	        # check compliancetaghold (per above)
+	        ╔░▒▓[LYN-8DCZ1G2]▓▒░░░░▒▓[Thu 11/05/2020 14:44]▓▒░
+	        ╚[kadriTSS]::[PS]:C:\u\w\e\scripts$ get-exomailbox Helen.Gotzian@toro.com  |FL ComplianceTagHoldApplied
+	        ComplianceTagHoldApplied : False
+	 
+	        No holds above.
+	 
+	        # eDiscovery holds – appears to require the GUID from one of the blank values above.(can't check)
+	        If had it, my run on the details would be:
+	        connect-ccms ; 
+	        $CaseHold = Get-ccCaseHoldPolicy <hold GUID without prefix> ; 
+	        Get-ccComplianceCase $CaseHold.CaseId | FL Name ; 
+	        $CaseHold | FL Name,ExchangeLocation ; 
+	        Get-exoMailboxSearch -InPlaceHoldIdentity <hold GUID> | FL Name,SourceMailboxes
+	        # check RetentionCompliancePolicy
+	        Get-ccRetentionCompliancePolicy <hold GUID without prefix or suffix> -DistributionDetail  | FL Name,*Location
+	 
+	        # check compliancetaghold in mbx:
+	        ╔░▒▓[LYN-8DCZ1G2]▓▒░░░░▒▓[Thu 11/05/2020 14:44]▓▒░
+	        ╚[kadriTSS]::[PS]:C:\u\w\e\scripts$ get-exomailbox Helen.Gotzian@toro.com  |FL ComplianceTagHoldApplied
+	        ComplianceTagHoldApplied : False
+	 
+	        Erm, did anyone *read* the following on holds in the above article?:
+	        This appears to be *routine* behavior per section…
+	 
+		        Managing mailboxes on delay hold  - https://docs.microsoft.com/en-us/microsoft-365/compliance/identify-a-hold-on-an-exchange-online-mailbox?view=o365-worldwide#managing-mailboxes-on-delay-hold
+		 
+		        After any type of hold is removed from a mailbox, a delay hold is applied. This means that the actual removal of the hold is delayed for 30 days to prevent data from being permanently deleted (purged) from the mailbox. This gives admins an opportunity to search for or recover mailbox items that will be purged after a hold is removed. A delay hold is placed on a mailbox the next time the Managed Folder Assistant processes the mailbox and detects that a hold was removed. Specifically, a delay hold is applied to a mailbox when the Managed Folder Assistant sets one of the following mailbox properties to True:
+		                · DelayHoldApplied: This property applies to email-related content (generated by people using Outlook and Outlook on the web) that's stored in a user's mailbox.
+		                · DelayReleaseHoldApplied: This property applies to cloud-based content (generated by non-Outlook apps such as Microsoft Teams, Microsoft Forms, and Microsoft Yammer) that's stored in a user's mailbox. Cloud data generated by a Microsoft app is typically stored in a hidden folder in a user's mailbox.
+		        When a delay hold is placed on the mailbox (when either of the previous properties is set to True), the mailbox is still considered to be on hold for an unlimited hold duration, as if the mailbox was on Litigation Hold. After 30 days, the delay hold expires, and Microsoft 365 will automatically attempt to remove the delay hold (by setting the DelayHoldApplied or DelayReleaseHoldApplied property to False) so that the hold is removed. After either of these properties are set to False, the corresponding items that are marked for removal are purged the next time the mailbox is processed by the Managed Folder Assistant.
+		        To view the values for the DelayHoldApplied and DelayReleaseHoldApplied properties for a mailbox, run the following command in Exchange Online PowerShell.
+	 
+	        # checking the above:
+	        ╔░▒▓[LYN-8DCZ1G2]▓▒░░░░▒▓[Thu 11/05/2020 14:49]▓▒░
+	        ╚[kadriTSS]::[PS]:C:\u\w\e\scripts$ get-exomailbox Helen.Gotzian@toro.com  | FL *HoldApplied*
+	        ComplianceTagHoldApplied : False
+	        DelayHoldApplied         : True
+	        DelayReleaseHoldApplied  : True
+        #>
+        $error.clear() ;
+        TRY {
+            $objReturn=[ordered]@{
+                Held=$false ; 
+                LitigationHoldEnabled=$null ; 
+                InPlaceHolds =$null ; 
+                ComplianceTagHoldApplied =$null ; 
+                DelayHoldApplied =$null ; 
+                DelayReleaseHoldApplied =$null ; 
+                OrgInPlaceHolds =$null ; 
+            } ; 
+            $xmbx = ps1GetxMbx -id $Mailbox -ea STOP; 
+            $xOrgCfgInPlaceHolds = ps1GetxOrgCfg -ea STOP | select -expand InPlaceHolds
+            if($xmbx.LitigationHoldEnabled){
+                $objReturn.Held=$true ;
+                $objReturn.LitigationHoldEnabled = $xmbx.LitigationHoldEnabled;
+            } ; 
+            if($xmbx.ComplianceTagHoldApplied){
+                $objReturn.Held=$true ;
+                $objReturn.ComplianceTagHoldApplied = $xmbx.ComplianceTagHoldApplied;
+            } ; 
+            if($xmbx.DelayHoldApplied){
+                $objReturn.Held=$true ;
+                $objReturn.DelayHoldApplied = $xmbx.DelayHoldApplied;
+            } ; 
+            if($xmbx.DelayReleaseHoldApplied){
+                $objReturn.Held=$true ;
+                $objReturn.DelayReleaseHoldApplied = $xmbx.DelayReleaseHoldApplied;
+            } ; 
+            # checking orgs: Get-exoOrganizationConfig | FL InPlaceHolds
+            # reportedly expanding InPlaceHolds will return a list of mbxs, but I can't find an example of the actual return, to try to test for it.
+            if(xOrgCfgInPlaceHolds){
+                $objReturn.Held=$true ;
+                $objReturn.OrgInPlaceHolds = $xOrgCfgInPlaceHolds;
+                $smsg = "$(${CmdletName}):detected $((get-alias ps1GetxOrgCfg).definition).OrgInPlaceHolds`nbut the function is not currently written to *expand and compare* the value contents`n(requires a code update to properly work with the sample returned)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ; 
+
+        } CATCH {
+            $ErrTrapd=$Error[0] ;
+            $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #-=-record a STATUSWARN=-=-=-=-=-=-=
+            $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+            if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+            if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+            #-=-=-=-=-=-=-=-=
+            $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+        } ; 
     } ;  # PROC-E
     END {
-        if($bExistingEXOGood -eq $false){ 
-            # implement caching of accepteddoms into the XXXMeta, in the session (cut back on queries to EXO on acceptedom)
-            <#
-            $credDom = ($Credential.username.split("@"))[1] ;
-            $Metas=(get-variable *meta|Where-Object{$_.name -match '^\w{3}Meta$'}) ;
-            foreach ($Meta in $Metas){
-                if( ($credDom -eq $Meta.value.legacyDomain) -OR ($credDom -eq $Meta.value.o365_TenantDomain) -OR ($credDom -eq $Meta.value.o365_OPDomain)){
-                    if(!$Meta.value.o365_AcceptedDomains){
-                        set-variable -Name $meta.name -Value ((get-variable -name $meta.name).value  += @{'o365_AcceptedDomains' = (Get-exoAcceptedDomain).domainname} )
-                    } ; 
-                    break ;
-                } ;
-            } ;
-            #>
-            # simpler non-looping version of testing for meta value, and adding/caching where absent
-            #$TenOrg = get-TenantTag -Credential $Credential ;
-            if( get-command Get-exoAcceptedDomain -ea 0) {
-                if(!(Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains){
-                    
-                    set-Variable  -name "$($TenOrg)Meta" -value ( (Get-Variable  -name "$($TenOrg)Meta").value += @{'o365_AcceptedDomains' = (Get-exoAcceptedDomain).domainname} )
-                } ; 
-            } ; 
-            #if ((Get-exoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
-            # do caching & check cached value, not qry unless unpopulated (first pass in global session)
-            #if($Meta.value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
-            if((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
-                # validate that the connected EXO is to the $Credential tenant    
-                write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
-                $bExistingEXOGood = $true ; 
-            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
-            }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
-                $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                $bExistingEXOGood = $true ;
-            } else { 
-                write-error "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ; 
-                Discheck-EXOLegalHold ; 
-                $bExistingEXOGood = $false ; 
-            } ;
-        } ; 
-    }  # END-E 
+        $objReturn | write-output ; 
+    } ;  # END-E
 }
-
 #*------^ check-EXOLegalHold.ps1 ^------

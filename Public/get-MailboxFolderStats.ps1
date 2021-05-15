@@ -15,6 +15,7 @@ function get-MailboxFolderStats {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
+    # 12:17 PM 5/14/2021 updated passstatus code to curr, and added -ea to the gv's (suppress errors when not present)
     * 11:54 AM 4/2/2021 updated wlt & recstat support, updated catch blocks
     * 3:28 PM 3/16/2021 added multi-tenant support
     * 1:12 PM 3/15/2021 init work was done 3/12, removed recursive-err generating #Require on the hosting verb-EXO module
@@ -131,8 +132,8 @@ function get-MailboxFolderStats {
         } else {
             #-=-record a STATUS=-=-=-=-=-=-=
             $statusdelta = ";ERROR";
-            $script:PassStatus += $statusdelta ;
-            set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
+            if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+            if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
             #-=-=-=-=-=-=-=-=
             $smsg = "Unable to resolve $($tenorg) `$o365Cred value!"
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
@@ -164,8 +165,8 @@ function get-MailboxFolderStats {
             } else {
                 #-=-record a STATUS=-=-=-=-=-=-=
                 $statusdelta = ";ERROR";
-                $script:PassStatus += $statusdelta ;
-                set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
+                if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
                 #-=-=-=-=-=-=-=-=
                 $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
@@ -257,8 +258,8 @@ function get-MailboxFolderStats {
             else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             #-=-record a STATUSWARN=-=-=-=-=-=-=
             $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
-            if(gv passstatus -scope Script){$script:PassStatus += $statusdelta } ;
-            if(gv -Name PassStatus_$($tenorg) -scope Script){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+            if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+            if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
             #-=-=-=-=-=-=-=-=
             $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
@@ -270,6 +271,6 @@ function get-MailboxFolderStats {
         remove-alias ps1GetMbxFldrStat ;
     } ; 
     
-} ; 
+}
 
 #*------^ get-MailboxFolderStats.ps1 ^------
