@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.76.0
+  Version     : 1.0.75.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -3972,7 +3972,6 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
-    * 1:54 PM 5/19/2021 expanded get-hybridcred to use both esvc & sid userroles
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     # 11:11 AM 5/7/2021 replaced verbose & bdebugs ; fixed missing logging function & added trailing echo of path.
     * 3:55 PM 5/6/2021 update logging, with move to module, it's logging into the ALlusers profile dir
@@ -4507,7 +4506,7 @@ function move-MailboxToXo{
         # do the OP creds too
         $OPCred=$null ;
         # default to the onprem svc acct
-        $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC','SID'; verbose=$($verbose)} ;
+        $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC' ;verbose=$($verbose)} ;
         if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
             # make it script scope, so we don't have to predetect & purge before using new-variable
             $tvari = "cred$($tenorg)OP" ; if(get-Variable -Name $tvari -scope Script){Remove-Variable -Name $tvari -scope Script} ;
@@ -6417,7 +6416,6 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
-    * 1:51 PM 5/19/2021 expanded $pltGHOpCred= to include 'ESVC','SID'; verbose=$($verbose)} ;
     # 12:27 PM 5/11/2021 updated to cover Room|Shared|Equipment mbx types, along with UserMailbox
     # 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
     # 3:15 PM 5/4/2021 added trailing |?{$_.length} bug workaround for get-gcfastxo.ps1
@@ -6776,7 +6774,7 @@ Function test-xoMailbox {
             # do the OP creds too
             $OPCred=$null ;
             # default to the onprem svc acct
-            $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC','SID'; verbose=$($verbose)} ;
+            $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC' ;verbose=$($verbose)} ;
             if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
                 # make it script scope, so we don't have to predetect & purge before using new-variable
                 New-Variable -Name "cred$($tenorg)OP" -scope Script -Value $OPCred ;
@@ -7882,8 +7880,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUK4mgZ9pK2AF5rHzhaQzjGguW
-# ahigggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUW2PXhfmQpZ+15yLhA+X50Jmr
+# o7mgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -7898,9 +7896,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT+PTdb
-# DNB2ARymdBSrEc1XzBY7cjANBgkqhkiG9w0BAQEFAASBgGPz5t8num1yVi2BhbtH
-# 1xS2Qr4pJ6zogL1mJb26B1BLFfIfjdPmSFS2iZCYXMmpH/7+Ljsaqkpt5JmBxlEs
-# ehiRk+05WGWB53IF6D2wHoE3oxVM6J6Ito4odxSZtgsfHalrbgm7N0m/RWgmjydB
-# hDYveEEPbqTtJyDUVc4MgkMu
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRJO1sa
+# 3NY25TFiJ8pYWmkW877xrjANBgkqhkiG9w0BAQEFAASBgDyCVgMWDgjewG/mVXcN
+# GcBSjaOm5zNsyTnxTILLzVpzZ6VVn9z35CWFBwVvueVkiZJd06HQneK6DdqcFtFb
+# V1S4EwrotewbvFvHu2syKvg93MEAARnOIFCRN1fzcvbZh1cWKUAntaejOYCJxSGA
+# U1IIffpiJQkBwNwra2XZ24UH
 # SIG # End signature block

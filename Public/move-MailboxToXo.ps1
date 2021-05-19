@@ -9,6 +9,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    * 1:54 PM 5/19/2021 expanded get-hybridcred to use both esvc & sid userroles
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     # 11:11 AM 5/7/2021 replaced verbose & bdebugs ; fixed missing logging function & added trailing echo of path.
     * 3:55 PM 5/6/2021 update logging, with move to module, it's logging into the ALlusers profile dir
@@ -543,7 +544,7 @@ function move-MailboxToXo{
         # do the OP creds too
         $OPCred=$null ;
         # default to the onprem svc acct
-        $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC' ;verbose=$($verbose)} ;
+        $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC','SID'; verbose=$($verbose)} ;
         if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
             # make it script scope, so we don't have to predetect & purge before using new-variable
             $tvari = "cred$($tenorg)OP" ; if(get-Variable -Name $tvari -scope Script){Remove-Variable -Name $tvari -scope Script} ;
