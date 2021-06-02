@@ -9,6 +9,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    # 10:46 AM 6/2/2021 sub'd verb-logging for v-trans
     * 1:54 PM 5/19/2021 expanded get-hybridcred to use both esvc & sid userroles
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     # 11:11 AM 5/7/2021 replaced verbose & bdebugs ; fixed missing logging function & added trailing echo of path.
@@ -93,7 +94,7 @@ function move-MailboxToXo{
     Perform immediate move of specified mailbox, suppress MEP tests (-NoTest), showdebug output & whatif pass
     .LINK
     #>
-    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Ex2010, verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-transcript
+    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Ex2010, verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-logging
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]

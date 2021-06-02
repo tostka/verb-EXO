@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.76.0
+  Version     : 1.0.77.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -3972,6 +3972,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    # 10:46 AM 6/2/2021 sub'd verb-logging for v-trans
     * 1:54 PM 5/19/2021 expanded get-hybridcred to use both esvc & sid userroles
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     # 11:11 AM 5/7/2021 replaced verbose & bdebugs ; fixed missing logging function & added trailing echo of path.
@@ -4056,7 +4057,7 @@ function move-MailboxToXo{
     Perform immediate move of specified mailbox, suppress MEP tests (-NoTest), showdebug output & whatif pass
     .LINK
     #>
-    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Ex2010, verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-transcript
+    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Ex2010, verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-logging
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
@@ -7882,8 +7883,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUK4mgZ9pK2AF5rHzhaQzjGguW
-# ahigggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUq/Nk6uJfifpnVoqzcQ6ztrum
+# 9YCgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -7898,9 +7899,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT+PTdb
-# DNB2ARymdBSrEc1XzBY7cjANBgkqhkiG9w0BAQEFAASBgGPz5t8num1yVi2BhbtH
-# 1xS2Qr4pJ6zogL1mJb26B1BLFfIfjdPmSFS2iZCYXMmpH/7+Ljsaqkpt5JmBxlEs
-# ehiRk+05WGWB53IF6D2wHoE3oxVM6J6Ito4odxSZtgsfHalrbgm7N0m/RWgmjydB
-# hDYveEEPbqTtJyDUVc4MgkMu
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT1n2Ty
+# 1+uqAbLd4nuV3+WheHC7eDANBgkqhkiG9w0BAQEFAASBgEFqth+4QcQ6rIJ9QYpR
+# l+/D7isdbryccFeqRvwkZSfYGsfF18JvTx1rwMs6hYoYlpv5cCh2m8ZsoT47m87p
+# kpX+lsnI65JJgGQxINMoa/nWh4fCmLMjBz2XeELgYRbGEBJ+qQ6rxu+5h4mg5zgW
+# GOrwp57UTAf5zrNcG3uFYIff
 # SIG # End signature block
