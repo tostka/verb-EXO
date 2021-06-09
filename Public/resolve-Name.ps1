@@ -15,7 +15,7 @@ Function resolve-Name {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell,ExchangeOnline,Exchange,MsolUser,AzureADUser,ADUser
     REVISIONS
-    * 9:47 AM 6/9/2021 init; flipped -displayname to -identifier, and handle smtpaddr|alias|displayname lookups 
+    * 4:00 PM 6/9/2021 added alias 'nlu' (7nlu is still ahk macro) ; fixed typo; expanded echo for $lic;flipped -displayname to -identifier, and handle smtpaddr|alias|displayname lookups ; init; 
     .DESCRIPTION
     resolve-Name.ps1 - Port 7nlu to a verb-EXO function. Resolves a mailbox user Identifier into Exchange Online/Exchange Onprem mailbox/MsolUser/AzureADUser info, and licensing status. Detect's cross-org hybrid AD objects as well. 
     .PARAMETER TenOrg
@@ -46,6 +46,7 @@ Function resolve-Name {
     #>
     #Requires -Modules ActiveDirectory,AzureAD,MSOnline,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-AAD,verb-ADMS,verb-Ex2010,verb-logging
     [CmdletBinding()]
+    [Alias('nlu')]
     PARAM(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOR']")]
         $TenOrg = 'TOR',
@@ -63,9 +64,9 @@ Function resolve-Name {
         #$adprops = "samaccountname", "msExchRemoteRecipientType", "msExchRecipientDisplayType", "msExchRecipientTypeDetails", "userprincipalname" ;
         $adprops = "samaccountname","UserPrincipalName","memberof","msExchMailboxGuid","msexchrecipientdisplaytype","msExchRecipientTypeDetails","msExchRemoteRecipientType"
         
-        [regex]$rgxDname = "^[\w'\-,.][^0-9_!¡?÷?¿/\\+=@#$%ˆ&*(){}|~<>;:[\]]{2,}$"
+        [regex]$rgxDname = "^[\w'\-,.][^0-9_!�?�?�/\\+=@#$%�&*(){}|~<>;:[\]]{2,}$"
         # below doesn't encode cleanly, mainly black diamonds
-        #"^[a-zA-Z������acce����ei����ln����������uu��zz��c��������ACCEE��������ILN����������UU��ZZ��ǌ�C��?� ,.'-]+$"
+        #"^[a-zA-Z??????acce????ei????ln??????????uu??zz??c????????ACCEE????????ILN??????????UU??ZZ????C???? ,.'-]+$"
         [regex]$rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"
         [regex]$rgxCMWDomain = 'DC=cmw,DC=internal$' ;
         [regex]$rgxExAlias = "^[0-9a-zA-Z-._+&]{1,64}$" ;
@@ -80,17 +81,25 @@ Function resolve-Name {
             Break ;
         } ; 
 
-        <#[regex]$rgxDname = "^[\w'\-,.][^0-9_!¡?÷?¿/\\+=@#$%ˆ&*(){}|~<>;:[\]]{2,}$"
+        <#[regex]$rgxDname = "^[\w'\-,.][^0-9_!�?�?�/\\+=@#$%�&*(){}|~<>;:[\]]{2,}$"
         # below doesn't encode cleanly, mainly black diamonds
-        #"^[a-zA-Z������acce����ei����ln����������uu��zz��c��������ACCEE��������ILN����������UU��ZZ��ǌ�C��?� ,.'-]+$"
+        #"^[a-zA-Z??????acce????ei????ln??????????uu??zz??c????????ACCEE????????ILN??????????UU??ZZ????C???? ,.'-]+$"
         [regex]$rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"
         #>
         $IdentifierType = $null ; 
         switch -regex ($Identifier){
+            $rgxExAlias {
+                write-verbose "(`$Identifier appears to be an Alias)" ;
+                $IdentifierType = "Alias" ;
+                #$Displayname = $Identifier.split('@')[0].replace('.',' ')
+                #$nameparts = $Identifier.split('@')[0].replace('.',' ').split(' ')
+                $nameparts = $Identifier.split(' ')
+                break;
+            } ;
             $rgxDname {
                 write-verbose "(`$Identifier appears to be a DisplayName)" ;
                 $IdentifierType = "DisplayName" ;
-                $nameparts = $Displayname.split(' ')
+                $nameparts = $Identifier.split(' ')
                 break;
             }
             $rgxEmailAddr {
@@ -100,15 +109,6 @@ Function resolve-Name {
                 $nameparts = $Identifier.split('@')[0].replace('.',' ').split(' ')
                 break;
             } ;
-            $rgxExAlias {
-                write-verbose "(`$Identifier appears to be an Alias)" ;
-                $IdentifierType = "Alias" ;
-                #$Displayname = $Identifier.split('@')[0].replace('.',' ')
-                #$nameparts = $Identifier.split('@')[0].replace('.',' ').split(' ')
-                $nameparts = $Identifier.split(' ')
-                break;
-            } ;
-
             default {
                 write-warning "Unable to resolve -Identifier ($($Identifier)) into a proper DisplayName|EmailAddress|Alias string" ;
                 $IdentifierType = $null ;
@@ -452,7 +452,11 @@ Function resolve-Name {
                 write-host "$(($msolu|fl @{Name='HasLic';Expression={$_.IsLicensed }},@{Name='LicIssue';Expression={$_.LicenseReconciliationNeeded }}|out-string).trim())" ; 
             "Licenses Assigned:`n$((($msolu.licenses.AccountSkuId) -join ";" | out-string).trim())" ;
                 if(!($bCmwAD)){
-                    write-host "LicGrp:$(($tadu.memberof -match $rgxLicGrp|out-string).trim())" ; 
+                    if($LicGrp = $tadu.memberof -match $rgxLicGrp){
+                        write-host "LicGrp:$(($LicGrp|out-string).trim())" ; 
+                    } else { 
+                        write-host "LicGrp:(no ADUser.memberof matched pattern:$($rgxLicGrp.tostring())" ; 
+                    } ; 
                 } else {
                     write-warning "$((get-date).ToString('HH:mm:ss')):Unable to expand ADU, user is hybrid AD from CMW.internal domain" ; 
                 } ; 

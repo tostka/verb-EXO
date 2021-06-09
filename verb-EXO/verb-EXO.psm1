@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.79.0
+  Version     : 1.0.80.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -6049,7 +6049,7 @@ Function resolve-Name {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell,ExchangeOnline,Exchange,MsolUser,AzureADUser,ADUser
     REVISIONS
-    * 9:47 AM 6/9/2021 init; flipped -displayname to -identifier, and handle smtpaddr|alias|displayname lookups 
+    * 4:00 PM 6/9/2021 added alias 'nlu' (7nlu is still ahk macro) ; fixed typo; expanded echo for $lic;flipped -displayname to -identifier, and handle smtpaddr|alias|displayname lookups ; init; 
     .DESCRIPTION
     resolve-Name.ps1 - Port 7nlu to a verb-EXO function. Resolves a mailbox user Identifier into Exchange Online/Exchange Onprem mailbox/MsolUser/AzureADUser info, and licensing status. Detect's cross-org hybrid AD objects as well. 
     .PARAMETER TenOrg
@@ -6080,6 +6080,7 @@ Function resolve-Name {
     #>
     #Requires -Modules ActiveDirectory,AzureAD,MSOnline,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-AAD,verb-ADMS,verb-Ex2010,verb-logging
     [CmdletBinding()]
+    [Alias('nlu')]
     PARAM(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOR']")]
         $TenOrg = 'TOR',
@@ -6097,7 +6098,7 @@ Function resolve-Name {
         #$adprops = "samaccountname", "msExchRemoteRecipientType", "msExchRecipientDisplayType", "msExchRecipientTypeDetails", "userprincipalname" ;
         $adprops = "samaccountname","UserPrincipalName","memberof","msExchMailboxGuid","msexchrecipientdisplaytype","msExchRecipientTypeDetails","msExchRemoteRecipientType"
         
-        [regex]$rgxDname = "^[\w'\-,.][^0-9_!�?�?�/\\+=@#$%�&*(){}|~<>;:[\]]{2,}$"
+        [regex]$rgxDname = "^[\w'\-,.][^0-9_!?????/\\+=@#$%?&*(){}|~<>;:[\]]{2,}$"
         # below doesn't encode cleanly, mainly black diamonds
         #"^[a-zA-Z??????acce????ei????ln??????????uu??zz??c????????ACCEE????????ILN??????????UU??ZZ????C???? ,.'-]+$"
         [regex]$rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"
@@ -6114,17 +6115,25 @@ Function resolve-Name {
             Break ;
         } ; 
 
-        <#[regex]$rgxDname = "^[\w'\-,.][^0-9_!�?�?�/\\+=@#$%�&*(){}|~<>;:[\]]{2,}$"
+        <#[regex]$rgxDname = "^[\w'\-,.][^0-9_!?????/\\+=@#$%?&*(){}|~<>;:[\]]{2,}$"
         # below doesn't encode cleanly, mainly black diamonds
         #"^[a-zA-Z??????acce????ei????ln??????????uu??zz??c????????ACCEE????????ILN??????????UU??ZZ????C???? ,.'-]+$"
         [regex]$rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"
         #>
         $IdentifierType = $null ; 
         switch -regex ($Identifier){
+            $rgxExAlias {
+                write-verbose "(`$Identifier appears to be an Alias)" ;
+                $IdentifierType = "Alias" ;
+                #$Displayname = $Identifier.split('@')[0].replace('.',' ')
+                #$nameparts = $Identifier.split('@')[0].replace('.',' ').split(' ')
+                $nameparts = $Identifier.split(' ')
+                break;
+            } ;
             $rgxDname {
                 write-verbose "(`$Identifier appears to be a DisplayName)" ;
                 $IdentifierType = "DisplayName" ;
-                $nameparts = $Displayname.split(' ')
+                $nameparts = $Identifier.split(' ')
                 break;
             }
             $rgxEmailAddr {
@@ -6134,15 +6143,6 @@ Function resolve-Name {
                 $nameparts = $Identifier.split('@')[0].replace('.',' ').split(' ')
                 break;
             } ;
-            $rgxExAlias {
-                write-verbose "(`$Identifier appears to be an Alias)" ;
-                $IdentifierType = "Alias" ;
-                #$Displayname = $Identifier.split('@')[0].replace('.',' ')
-                #$nameparts = $Identifier.split('@')[0].replace('.',' ').split(' ')
-                $nameparts = $Identifier.split(' ')
-                break;
-            } ;
-
             default {
                 write-warning "Unable to resolve -Identifier ($($Identifier)) into a proper DisplayName|EmailAddress|Alias string" ;
                 $IdentifierType = $null ;
@@ -6486,7 +6486,11 @@ Function resolve-Name {
                 write-host "$(($msolu|fl @{Name='HasLic';Expression={$_.IsLicensed }},@{Name='LicIssue';Expression={$_.LicenseReconciliationNeeded }}|out-string).trim())" ; 
             "Licenses Assigned:`n$((($msolu.licenses.AccountSkuId) -join ";" | out-string).trim())" ;
                 if(!($bCmwAD)){
-                    write-host "LicGrp:$(($tadu.memberof -match $rgxLicGrp|out-string).trim())" ; 
+                    if($LicGrp = $tadu.memberof -match $rgxLicGrp){
+                        write-host "LicGrp:$(($LicGrp|out-string).trim())" ; 
+                    } else { 
+                        write-host "LicGrp:(no ADUser.memberof matched pattern:$($rgxLicGrp.tostring())" ; 
+                    } ; 
                 } else {
                     write-warning "$((get-date).ToString('HH:mm:ss')):Unable to expand ADU, user is hybrid AD from CMW.internal domain" ; 
                 } ; 
@@ -8383,8 +8387,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUwWlT7ebqvzNDe6HOf+0Pi5cp
-# cvegggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUOLgZ2lPltcxGv9Lv74zHQ8Wr
+# ANqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -8399,9 +8403,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSn58uP
-# SRd5BU9ERK7Rf303nEs7BDANBgkqhkiG9w0BAQEFAASBgJHMwua+QAxeOOn9Muis
-# s/2JwhGQ8/0chC0cRXH+Zrtz5qE0JhJ0Az94KW/EvkMEQBCrFgjV2HZrgEnth7XP
-# 9Noeqwfxup9pSSCuoz8lRcuHrcPFfcuv4QdxSCcSLQKxJHR+O4NRdsVITPEe3yVc
-# dfDh95EBiAlY93gsS37qkvwd
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQmhKVH
+# YCDESyx4CNQSjHsl/7Mp3jANBgkqhkiG9w0BAQEFAASBgGYJu9oWDtVADhios8CZ
+# 8P+w9aQIXpSMT88PgzgsUnXxuH7kW5mdM8KnIKPPDNbnI7fylzZ9u7ZaaOkwKwdB
+# TTXU6E87v7u5JZymo7M/iK/M7CKZ+7qVTYBTL906xdw4O0mcX0hzRZkA/n+KPE8W
+# YQhdtJWxUtEE0mP93Dsn72Qb
 # SIG # End signature block
