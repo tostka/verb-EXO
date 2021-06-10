@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.79.0
+  Version     : 1.0.80.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -6049,6 +6049,7 @@ Function resolve-Name {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell,ExchangeOnline,Exchange,MsolUser,AzureADUser,ADUser
     REVISIONS
+    * 10:15 AM 6/10/2021 add lic grp memberof check for aadu, for x-hyb users; add missing $rgxLicGrp, as $rgxLicGrpDN & $rgxLicGrpDName (aduser & aaduser respectively); pulled datestamps on echo's, simplified echo's (removed "$($smsg)")
     * 4:00 PM 6/9/2021 added alias 'nlu' (7nlu is still ahk macro) ; fixed typo; expanded echo for $lic;flipped -displayname to -identifier, and handle smtpaddr|alias|displayname lookups ; init; 
     .DESCRIPTION
     resolve-Name.ps1 - Port 7nlu to a verb-EXO function. Resolves a mailbox user Identifier into Exchange Online/Exchange Onprem mailbox/MsolUser/AzureADUser info, and licensing status. Detect's cross-org hybrid AD objects as well. 
@@ -6099,11 +6100,18 @@ Function resolve-Name {
         $adprops = "samaccountname","UserPrincipalName","memberof","msExchMailboxGuid","msexchrecipientdisplaytype","msExchRecipientTypeDetails","msExchRemoteRecipientType"
         
         [regex]$rgxDname = "^[\w'\-,.][^0-9_!?????/\\+=@#$%?&*(){}|~<>;:[\]]{2,}$"
-        # below doesn't encode cleanly, mainly black diamonds
-        #"^[a-zA-Z??????acce????ei????ln??????????uu??zz??c????????ACCEE????????ILN??????????UU??ZZ????C???? ,.'-]+$"
+        # below doesn't encode cleanly, mainly black diamonds - better w alt font (non-lucida console)
+        #"^[a-zA-Z‡·‚‰„ÂacceËÈÍÎeiÏÌÓÔlnÚÛÙˆı¯˘˙˚¸uuˇ˝zzÒÁcöû¿¡¬ƒ√≈ACCEE»… ÀÃÕŒœILN“”‘÷’ÿŸ⁄€‹UUü›ZZ—ﬂ«å∆Cäé? ,.'-]+$"
         [regex]$rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"
         [regex]$rgxCMWDomain = 'DC=cmw,DC=internal$' ;
         [regex]$rgxExAlias = "^[0-9a-zA-Z-._+&]{1,64}$" ;
+        # used for adu.memberof
+        [regex]$rgxLicGrpDN = "^CN=ENT-APP-Office365-.*-DL,((OU=Enterprise\sApplications,)*)OU=ENTERPRISE,DC=global,DC=ad,DC=toro((lab)*),DC=com$" ;  ; 
+        # used for taadu memberof
+        [regex]$rgxLicGrpDName = "^ENT-APP-Office365-.*-DL((\s)*)$" ;
+        #"^ENT-APP-Office365-.*-DL$" ;  
+        # cute, we've got cmw AAD grps with trailing spaces: 'ENT-APP-Office365-CMWUsers-E3-DL ', pull trailing $
+
         if(!$Identifier -AND (gcm get-clipboard) -AND (get-clipboard)){
             $Identifier = get-clipboard ;
             #$cb = get-clipboard ; 
@@ -6111,7 +6119,7 @@ Function resolve-Name {
 
 
         } else {
-            write-warning "$((get-date).ToString('HH:mm:ss')):No Identifier specified, and clipboard did not match 'Identifier' content" ; 
+            write-warning "No Identifier specified, and clipboard did not match 'Identifier' content" ; 
             Break ;
         } ; 
 
@@ -6205,7 +6213,7 @@ Function resolve-Name {
         <#$sBnr="#*======v START PASS:$(${CmdletName}) v======" ; 
         $smsg= $sBnr ;   
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        else{ write-host -foregroundcolor green $smsg } ;
         #>
         
         # steer all onprem code on $XXXMeta.ExOPAccessFromToro & Ex10Server values
@@ -6241,13 +6249,13 @@ Function resolve-Name {
                 if(get-Variable -Name cred$($tenorg) -scope Script -ea 0){remove-variable -Name cred$($tenorg) -scope Script} ; 
                 New-Variable -Name cred$($tenorg) -scope Script -Value $o365Cred.cred ;
                 $smsg = "Resolved $($Tenorg) `$o365cred:$($o365Cred.cred.username) (assigned to `$cred$($tenorg))" ; 
-                write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)"  ;
+                write-verbose $smsg  ;
             } else {
                 $statusdelta = ";ERROR";
                 $script:PassStatus += $statusdelta ;
                 set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
                 $smsg = "Unable to resolve $($tenorg) `$o365Cred value!"
-                write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)"  ;
+                write-verbose $smsg  ;
                 throw "Unable to resolve $($tenorg) `$o365Cred value!`nEXIT!"
                 Break ;
             } ;
@@ -6281,15 +6289,15 @@ Function resolve-Name {
                 if(get-Variable -Name "cred$($tenorg)OP" -scope Script -ea 0){remove-variable -Name "cred$($tenorg)OP" -scope Script} ; 
                 New-Variable -Name "cred$($tenorg)OP" -scope Script -Value $OPCred ;
                 $smsg = "Resolved $($Tenorg) `$OPCred:$($OPCred.username) (assigned to `$cred$($tenorg)OP)" ; 
-                write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)"  ;
+                write-verbose $smsg  ;
             } else {
                 $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
-                write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)"  ;
+                write-verbose $smsg  ;
                 throw "Unable to resolve $($tenorg) `$OPCred value!`nEXIT!"
                 Break ;
             } ;
             $smsg= "Using EXOP cred:`$cred$($tenorg)OP:$((Get-Variable -name "cred$($tenorg)OP" ).value.username)" ;  
-            write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)"  ; 
+            write-verbose $smsg  ; 
             <# CALLS ARE IN FORM: (cred$($tenorg))
             $pltRX10 = @{
                 Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
@@ -6318,7 +6326,6 @@ Function resolve-Name {
         if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
         #>
         write-verbose "(loading ADMS...)" ;
-        #write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MSG" ; 
         # 2:12 PM 6/9/2021 load-ADMS is returning boolean, capture it
         $bRet = load-ADMS -verbose:$($verbose) ;
 
@@ -6327,13 +6334,13 @@ Function resolve-Name {
             # setup ADMS PSDrives per tenant 
             if(!$global:ADPsDriveNames){
                 $smsg = "(connecting X-Org AD PSDrives)" ;
-                write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)"  ;
+                write-verbose $smsg  ;
                 $global:ADPsDriveNames = mount-ADForestDrives -verbose:$($verbose) ;
             } ; 
             if(($global:ADPsDriveNames|measure).count){
                 $useEXOforGroups = $false ; 
                 $smsg = "Confirming ADMS PSDrives:`n$(($global:ADPsDriveNames.Name|%{get-psdrive -Name $_ -PSProvider ActiveDirectory} | ft -auto Name,Root,Provider|out-string).trim())" ;
-                write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)"  ;
+                write-verbose $smsg  ;
                 # returned object
                 #         $ADPsDriveNames
                 #         UserName                Status Name        
@@ -6349,7 +6356,7 @@ Function resolve-Name {
                 set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
                 #-=-=-=-=-=-=-=-=
                 $smsg = "Unable to detect POPULATED `$global:ADPsDriveNames!`n(should have multiple values, resolved to $()"
-                write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)"  ;
+                write-warning $smsg  ;
                 throw "Unable to resolve $($tenorg) `$o365Cred value!`nEXIT!"
                 Break ;
             } ; 
@@ -6429,7 +6436,7 @@ Function resolve-Name {
             }
         } ;
 
-        write-verbose "$((get-date).ToString('HH:mm:ss')):$((get-alias ps1GetxUser).definition) w`n$(($pltGetxUser|out-string).trim())" ;         
+        write-verbose "$((get-alias ps1GetxUser).definition) w`n$(($pltGetxUser|out-string).trim())" ;         
         #rxo ; cmsol ; caad ; rx10 ;
         $error.clear() ;
         TRY {
@@ -6439,7 +6446,7 @@ Function resolve-Name {
                 $tAADu = get-AzureAdUser -objectID $msolu.UserPrincipalName |?{($_.provisionedplans.service -eq 'exchange')} ;
                 if($taadu.extensionproperty.onPremisesDistinguishedName -match $rgxCMWDomain){
                     $bCmwAD=$true ;
-                    write-warning "$((get-date).ToString('HH:mm:ss')):ADUser is onprem CMW hybrid!:`n$($taadu.extensionproperty.onPremisesDistinguishedName)" ; 
+                    write-host -fo yellow "ADUser is onprem CMW hybrid!:`n$($taadu.extensionproperty.onPremisesDistinguishedName)" ; 
                 } elseif($taadu.DirSyncEnabled -AND $taadu.ImmutableId) {
                     #$tadu = get-aduser -filter {UserPrincipalName -eq $txUser.UserPrincipalName }
                     # no use the converted immutableid
@@ -6447,12 +6454,12 @@ Function resolve-Name {
                     $tadu = get-aduser -Identity $guid.guid ; 
                 };
             } else { 
-                write-warning "$((get-date).ToString('HH:mm:ss')):No matching licensed MSolu:(get-msoluser -user $txUser.UserPrincipalName)" ; 
+                write-warning "No matching licensed MSolu:(get-msoluser -user $txUser.UserPrincipalName)" ; 
             } ; 
         } CATCH {
             $ErrTrapd=$Error[0] ;
             $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-            write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+            write-warning $smsg ;
         } ; 
         switch ($txUser.Recipienttype){
             'UserMailbox'{
@@ -6461,7 +6468,7 @@ Function resolve-Name {
                 CATCH {
                     $ErrTrapd=$Error[0] ;
                     $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                    write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    write-warning $smsg ;
                 } ; 
             }
             'MailUser'{
@@ -6486,16 +6493,26 @@ Function resolve-Name {
                 write-host "$(($msolu|fl @{Name='HasLic';Expression={$_.IsLicensed }},@{Name='LicIssue';Expression={$_.LicenseReconciliationNeeded }}|out-string).trim())" ; 
             "Licenses Assigned:`n$((($msolu.licenses.AccountSkuId) -join ";" | out-string).trim())" ;
                 if(!($bCmwAD)){
-                    if($LicGrp = $tadu.memberof -match $rgxLicGrp){
-                        write-host "LicGrp:$(($LicGrp|out-string).trim())" ; 
+                    if($LicGrp = $tadu.memberof -match $rgxLicGrpDN){
+                        write-host "LicGrp(AD):$(($LicGrp|out-string).trim())" ; 
                     } else { 
-                        write-host "LicGrp:(no ADUser.memberof matched pattern:$($rgxLicGrp.tostring())" ; 
+                        write-host "LicGrp(AD):(no ADUser.memberof matched pattern:`n$($rgxLicGrpDN.tostring())" ; 
                     } ; 
                 } else {
-                    write-warning "$((get-date).ToString('HH:mm:ss')):Unable to expand ADU, user is hybrid AD from CMW.internal domain" ; 
+                    write-host -fo yellow  "Unable to expand ADU, user is hybrid AD from CMW.internal domain`nproxying AzureADUser memberof" ; 
+                    if($taadu){
+                        $mbrof = $taadu | Get-AzureADUserMembership | select DisplayName,DirSyncEnabled,MailEnabled,SecurityEnabled,Mail,objectid ;
+                        if($LicGrp = $mbrof.displayname -match $rgxLicGrpDName){
+                            write-host "LicGrp(AAD):$(($LicGrp|out-string).trim())" ; 
+                        } else { 
+                            write-host "LicGrp(AAD):(no ADUser.memberof matched pattern:`n$($rgxLicGrpDName.tostring())" ; 
+                        } ; 
+                    } else { 
+                        write-warning "(unpopulated AzureADUser: skipping memberof)" ; 
+                    }
                 } ; 
             }else {
-                write-warning "$((get-date).ToString('HH:mm:ss')):Unable to find matching MsolU for $Identifier" ; 
+                write-warning "Unable to find matching MsolU for $Identifier" ; 
             } ; 
         } ; 
         
