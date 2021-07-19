@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.86.0
+  Version     : 1.0.87.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -6574,6 +6574,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:55 PM 7/19/2021 added guest & exo-mailcontact support (resolving missing ext-federated addresses), retolled logic down to grcp & gxrcp to drive balance of tests.
     * 12:05 PM 7/14/2021 rem'd requires: verb-exo  rem'd requires version 5 (gen'ing 'version' is specified more than once.); rem'd the $rgxSamAcctName, gen's parsing errors compiling into mod ;  added alias 'ulu'; added mailcontact excl on init grcp, to force those to exombx qry ; init vers
     .DESCRIPTION
     .PARAMETER  users
@@ -6598,7 +6599,7 @@ function resolve-user {
     .LINK
     #>
     ###Requires -Version 5
-    #Requires -Modules ActiveDirectory, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
+    #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
     #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
@@ -6616,7 +6617,7 @@ function resolve-user {
         $rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ; 
         $rgxDName = "^([a-zA-Z]{2,}\s[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ; 
         $rgxSamAcctNameTOR = "^\w{2,20}$" ; # up to 20k, the limit prior to win2k
-        #$rgxSamAcctName = "^[^\/\\\[\]:;|=,+?<>@”]+$" # no char limit ;
+        #$rgxSamAcctName = "^[^\/\\\[\]:;|=,+?<>@�]+$" # no char limit ;
 
         if(!$users){
             $users= (get-clipboard).trim().replace("'",'').replace('"','') ; 
@@ -6627,10 +6628,10 @@ function resolve-user {
                 Break ; 
             } ; 
         } else {
-            write-verbose "-users specified: '$($users)'" ;         
+            write-verbose "($(($users|measure).count)) user(s) specified:`n'$($users -join "','")'" ;         
         } ; 
 
-        rx10 ; rxo ; cmsol ;
+        rx10 -Verbose:$false ; rxo  -Verbose:$false ; cmsol  -Verbose:$false ;
 
     } 
     PROCESS{
@@ -6663,7 +6664,7 @@ function resolve-user {
                 } 
                 default {
                     write-warning "$((get-date).ToString('HH:mm:ss')):No -user specified, nothing matching dname, emailaddress or samaccountname, found on clipboard. EXITING!" ; 
-                    Break ; 
+                    #Break ; 
                 } ; 
             } ; 
 
@@ -6689,10 +6690,16 @@ function resolve-user {
                 $pltgM.add('filter',$fltr) ;
             } ; 
 
-            write-verbose "get-[Remote|exo]Mailbox w`n$(($pltgM|out-string).trim())" ; 
+            $error.clear() ;
+            
+            $tRcp=get-recipient @pltgM -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}
+            #$txMbx=get-exomailbox @pltgM -ea 0 ;
+            $txRcp=get-exorecipient @pltgM -ea 0 ;
+
+            write-verbose "get-[exo]Recipient w`n$(($pltgM|out-string).trim())" ; 
             #write-verbose "get-recipient w`n$(($pltgM|out-string).trim())" ; 
             # exclude contacts, they don't represent real onprem mbx assoc, and we need to refer those to EXO mbx qry anyway.
-            if($tRcp=get-recipient @pltgM -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
+            if($tRcp){
                 $error.clear() ;
                 TRY {
                     switch -regex ($tRcp.recipienttype){
@@ -6730,13 +6737,90 @@ function resolve-user {
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Continue ; 
                 } ; 
-            }elseif($txMbx=get-exomailbox @pltgM -ea stop ){
+            #}elseif($txMbx){
+            }elseif($txRcp){
+                foreach($txR in $txRcp){
+                    TRY {
+                        switch -regex ($txR.recipienttypedetails){
+                            "UserMailbox" {
+                                $txMbx=get-exomailbox @pltgM -ea 0 ;
+                                $Rpt += $txMbx.primarysmtpaddress ; 
+                                break ; 
+                            } 
+                            "GuestMailUser" {
+                                #$txRMbx=get-remotemailbox $txR.identity  ;
+                                caad -verbose:$false ; 
+                                $txU = $txR | get-exouser ;
+                                $txGuest = get-AzureAdUser  -objectid $txU.userPrincipalName ;
+                                #$Rpt += $txRMbx.primarysmtpaddress ;  
+                                write-host "$($txR.ExternalEmailAddress): matches a Guest object with UPN:$($txU.userPrincipalName)" ; 
+                                if($txGuest.EmailAddresses -eq $null){
+                                    write-warning "Guest appears to have damage from conficting replicated onprem MailContact, as it's EmailAddresses property is *blank*" ; 
+                                } ; 
+                                break ; 
+                            } ;
+                            "MailContact" {
+                                #$txRMbx=get-remotemailbox $txR.identity  ;
+                                #$Rpt += $txRMbx.primarysmtpaddress ;  
+                                write-host "$($txR.primarysmtpaddress): matches an EXO MailContact with external Email: $($txR.primarysmtpaddress)" ; 
+                                break ; 
+                            } ;
+                            "MailUniversalSecurityGroup" {
+                                #$txRMbx=get-remotemailbox $txR.identity  ;
+                                #$Rpt += $txRMbx.primarysmtpaddress ;  
+                                write-host "$($txR.primarysmtpaddress): matches an EXO MailUniversalSecurityGroup with Dname: $($txR.displayname)" ; 
+                                break ; 
+                            } ;
+                            default {
+                                write-warning "$((get-date).ToString('HH:mm:ss')):Unsupported RecipientType:($tRcp.recipienttype). EXITING!" ; 
+                                Break ; 
+                            }
+                        }
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Continue ; 
+                    } ; 
+                }  # loop-E $txR
+                # contacts and guests won't drop with $txRmbx or $tmbx populated
+                TRY {
+                    $pltGadu=[ordered]@{Identity = $null ; Properties='*' ;errorAction='SilentlyContinue'} ;
+                    if($txRMbx ){
+                        $pltGadu.identity = $txRmbx.samaccountname;
+                    }elseif($tMbx){
+                        $pltGadu.identity = $tmbx.samaccountname ;
+                    } ; 
+                    if($pltGadu.identity){
+                        $tADU =Get-ADUser @pltGadu ;
+                        $smsg = "(TOR USER, fed:ad.toro.com)" ; 
+                        write-host -Fore yellow $smsg ; 
+                        if($txRMbx){$smsg = "$(($txRMbx |fl $xMProps|out-string).trim())`n-Title:$($tADU.Title)" } ; 
+                        if($tMbx){$smsg =  "$(($tMbx |fl $xMProps|out-string).trim())`n-Title:$($tADU.Title)" } ; 
+                        write-host $smsg ;
+                    } ; 
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    Continue ; 
+                } ; 
+
                 $Rpt += $txMbx.primarysmtpaddress ; 
                 if($txMbx.isdirsynced){$smsg="(CMW USER, fed:cmw.internal)"}
                 else{$smsg="(CLOUD-1ST ACCT, unfederated)"} ;
                 write-host -Fore yellow $smsg ; 
-                $txU = get-exouser -id $txmbx.UserPrincipalName ; 
+                # skip user lookup if guest already pulled it 
+                if(!$txU){
+                    $txU = get-exouser -id $txmbx.UserPrincipalName ; 
+                } 
+                if($txMbx){
                 write-host "=get-xMbx:>`n$(($txMbx |fl ($xMprops |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($txU.Title)";
+                }elseif($txGuest){
+                    write-host "=get-AADU:>`n$(($txGuest |fl userp*,PhysicalDeliveryOfficeName,JobTitle|out-string).trim())"
+                } ; 
                 TRY {
                     $xMmbrOf = Get-exoRecipient -Filter "Members -eq '$($txU.DistinguishedName)'" -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup ;
                 } CATCH {
@@ -6746,30 +6830,35 @@ function resolve-user {
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Continue ; 
                 } ; 
-            } else {  "(no matching Mbx, rMbx or xMbx)" ; break ;  } ;
+            } else { write-warning "(no matching EXOP or EXO recipient object:$($usr))"   } ; # don't break, doesn't continue loop
 
             $pltgMU=@{UserPrincipalName=$null} ; 
             if($tADU){$pltgMU.UserPrincipalName = $tADU.UserPrincipalName } 
-            elseif($txMbx){$pltgMU.UserPrincipalName = $txMbx.UserPrincipalName } ;
-            write-host -foregroundcolor yellow "=get-msoluser $($pltgMU.UserPrincipalName):(licences)>:" ;
-            TRY{
-                $mu=get-msoluser @pltgMU ;
-            } CATCH {
-                $ErrTrapd=$Error[0] ;
-                $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Continue ; 
+            elseif($txMbx){$pltgMU.UserPrincipalName = $txMbx.UserPrincipalName }
+            elseif($txGuest){$pltgMU.UserPrincipalName = $txGuest.userprincipalname } 
+            else{} ; 
+            
+            if($pltgMU.UserPrincipalName){
+                write-host -foregroundcolor yellow "=get-msoluser $($pltgMU.UserPrincipalName):(licences)>:" ;
+                TRY{
+                    $mu=get-msoluser @pltgMU ;
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    Continue ; 
+                } ; 
+                $smsg = "$(($mu|fl $lProps|out-string).trim())`n" ;
+                $smsg += "Licenses Assigned:$(($mu.licenses.AccountSkuId -join '; '|out-string).trim())" ; 
+                write-host $smsg ; 
+                if($tadu){$licgrp = $tadu.memberof |?{$_ -match $rgxOPLic }}
+                elseif($xMmbrOf){$licgrp = $xMmbrOf.Name |?{$_ -match $rgxXLic}}
+                if(!($licgrp) -AND ($mu.licenses.AccountSkuId -contains 'toroco:ENTERPRISEPACK')){$licgrp = '(direct-assigned E3)'} ; 
+                if($licgrp){$smsg = "LicGrp:$($licgrp)"}
+                else{$smsg = "LicGrp:(unresolved, direct-assigned other?)" } ; 
+                write-host $smsg ; 
             } ; 
-            $smsg = "$(($mu|fl $lProps|out-string).trim())`n" ;
-            $smsg += "Licenses Assigned:$(($mu.licenses.AccountSkuId -join '; '|out-string).trim())" ; 
-            write-host $smsg ; 
-            if($tadu){$licgrp = $tadu.memberof |?{$_ -match $rgxOPLic }}
-            elseif($xMmbrOf){$licgrp = $xMmbrOf.Name |?{$_ -match $rgxXLic}}
-            if(!($licgrp) -AND ($mu.licenses.AccountSkuId -contains 'toroco:ENTERPRISEPACK')){$licgrp = '(direct-assigned E3)'} ; 
-            if($licgrp){$smsg = "LicGrp:$($licgrp)"}
-            else{$smsg = "LicGrp:(unresolved, direct-assigned other?)" } ; 
-            write-host $smsg ; 
             write-host -foregroundcolor green $sBnr.replace('=v','=^').replace('v=','^=') ; 
         } ; 
     }
@@ -8633,8 +8722,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUrJh3Oc/QCcSVL0xTlxA2w7hD
-# yAGgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKwnNJMhFUtLvESC0FeWXBN6o
+# dgygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -8649,9 +8738,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS9gA8D
-# SSvuiyhIOo4BrjGxOEkcfTANBgkqhkiG9w0BAQEFAASBgI8ng8oZpd8xwUI2tExE
-# qDuHN2XNE8QvYpR8v2L+ob8KgMxgutMrKweK0flgtpY47E3O6m3bYNhx09DLuH0r
-# ZrgUer0S+MXS2YRah+SHjdY14uFKlw0HSQEqmPG7C5JM+bYPf+0IYvGQ6tXOYsT/
-# 6j/loKhDVEXBbMUIRYh5+xdh
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRkG6XB
+# Xp9mzJ+RSp8IUlVlaU/EtTANBgkqhkiG9w0BAQEFAASBgA3eUcxEKx0Tek+PR7E4
+# u3765vuG3JPpl84g8mMUxX8biBhpZp8a08bBrdLLKR70ectvF0wK+K99S5AGWbOO
+# wzsSypHINjQKUlxDZHG0JqermVxOQfmC5toSR1OH6QfpCZQ5R/aqRb3rouEM8kiw
+# J/6UOJOpIouPbqOAfdUENEca
 # SIG # End signature block
