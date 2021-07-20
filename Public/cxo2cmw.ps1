@@ -3,11 +3,15 @@ function cxo2cmw {
     <#
     .SYNOPSIS
     cxo2CMW - Connect-EXO to specified Tenant
+    .NOTES
+    REVISIONS
+    * 10:16 AM 7/20/2021 reverted old typo (missing '[exo]2' in call)
     .DESCRIPTION
     Connect-EXO2 - Establish PSS to EXO V2 Modern Auth PS
     .EXAMPLE
     cxo2cmw
     #>
-    Connect-EXO -cred $credO365CMWCSID-Verbose:($VerbosePreference -eq 'Continue') ; 
+    Connect-EXO2 -cred $credO365CMWCSID-Verbose:($VerbosePreference -eq 'Continue') ; 
 }
+
 #*------^ cxo2cmw.ps1 ^------

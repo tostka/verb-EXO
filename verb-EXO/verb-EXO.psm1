@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.87.0
+  Version     : 1.0.88.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -2622,12 +2622,15 @@ function cxo2cmw {
     <#
     .SYNOPSIS
     cxo2CMW - Connect-EXO to specified Tenant
+    .NOTES
+    REVISIONS
+    * 10:16 AM 7/20/2021 reverted old typo (missing '[exo]2' in call)
     .DESCRIPTION
     Connect-EXO2 - Establish PSS to EXO V2 Modern Auth PS
     .EXAMPLE
     cxo2cmw
     #>
-    Connect-EXO -cred $credO365CMWCSID-Verbose:($VerbosePreference -eq 'Continue') ; 
+    Connect-EXO2 -cred $credO365CMWCSID-Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxo2cmw.ps1 ^------
@@ -2637,12 +2640,15 @@ function cxo2TOL {
     <#
     .SYNOPSIS
     cxo2TOL - Connect-EXO to specified Tenant
+    .NOTES
+    REVISIONS
+    * 10:16 AM 7/20/2021 reverted old typo (missing '[exo]2' in call)
     .DESCRIPTION
     Connect-EXO2 - Establish PSS to EXO V2 Modern Auth PS
     .EXAMPLE
     cxo2TOL
     #>
-    Connect-EXO -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; 
+    Connect-EXO2 -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ;
 }
 
 #*------^ cxo2tol.ps1 ^------
@@ -2652,12 +2658,15 @@ function cxo2TOR {
     <#
     .SYNOPSIS
     cxo2TOR - Connect-EXO to specified Tenant
+    .NOTES
+    REVISIONS
+    * 10:16 AM 7/20/2021 reverted old typo (missing '[exo]2' in call)
     .DESCRIPTION
     Connect-EXO2 - Establish PSS to EXO V2 Modern Auth PS
     .EXAMPLE
     cxo2TOR
     #>
-    Connect-EXO -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; 
+    Connect-EXO2 -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxo2tor.ps1 ^------
@@ -2667,12 +2676,15 @@ function cxo2VEN {
     <#
     .SYNOPSIS
     cxo2VEN - Connect-EXO to specified Tenant
+    .NOTES
+    REVISIONS
+    * 10:16 AM 7/20/2021 reverted old typo (missing '[exo]2' in call)
     .DESCRIPTION
     Connect-EXO2 - Establish PSS to EXO V2 Modern Auth PS
     .EXAMPLE
     cxo2VEN
     #>
-    Connect-EXO -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
+    Connect-EXO2 -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxo2ven.ps1 ^------
@@ -8722,8 +8734,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUKwnNJMhFUtLvESC0FeWXBN6o
-# dgygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU0AUWTY04aZq/yteEYHeLiVlC
+# vR+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -8738,9 +8750,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRkG6XB
-# Xp9mzJ+RSp8IUlVlaU/EtTANBgkqhkiG9w0BAQEFAASBgA3eUcxEKx0Tek+PR7E4
-# u3765vuG3JPpl84g8mMUxX8biBhpZp8a08bBrdLLKR70ectvF0wK+K99S5AGWbOO
-# wzsSypHINjQKUlxDZHG0JqermVxOQfmC5toSR1OH6QfpCZQ5R/aqRb3rouEM8kiw
-# J/6UOJOpIouPbqOAfdUENEca
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTZJvUK
+# KTKJefRLVKy8hVqfMNtyPTANBgkqhkiG9w0BAQEFAASBgJt3XoHBJOffnvVO04KF
+# loN7KGWNbSdsz/5v4NcpFiMrgQKiIRvbqFrRRUghg6wsnw5oLNx4YgwohVqskNrQ
+# xjlorVPYuxGIIfx6bfN5DUfgou5OjpDgYUjCml7/tB05v51yhn4Hix+tzxL5Aifm
+# n0GzKm6KaZ47Bo+COR7IqbFj
 # SIG # End signature block
