@@ -5,6 +5,6 @@ function rxo2TOL {
     rxo2TOL - Reonnect-EXO to specified Tenant
     .DESCRIPTION
     #>
-    Reconnect-EXO2 -cred $credO365TOLSID
+    Reconnect-EXO2 -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue')
 }
 #*------^ rxo2tol.ps1 ^------

@@ -21,6 +21,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 1:20 PM 7/21/2021 enabled TOR titlebar tagging with TenOrg (prompt tagging by scraping TitleBar values)
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     * 11:43 AM 4/2/2021 updated added wlt & recstat support, updated catch blocks
     # 2:56 PM 3/31/2021 typo/mispaste fix: had $E10Sess assigning on the import ;  bugfix: @toroco.onmicr...com, isn't in EXO.AccDoms, so added a 2nd test for match to TenDom ; added verbose suppress to all import-mods
@@ -100,12 +101,9 @@ Function Connect-EXO {
             write-host -foregroundcolor white  "(asserting Prefix:$($CommandPrefix)" ;
         } ;
 
-        $sTitleBarTag = "EXO" ;
         $TenOrg=get-TenantTag -Credential $Credential ; 
-        if($TenOrg -ne 'TOR'){
-            # explicitly leave this tenant (default) untagged
-            $sTitleBarTag += $TenOrg ;
-        } ; 
+        $sTitleBarTag = @("EXO") ;
+        $sTitleBarTag += $TenOrg ;
     } ;  # BEG-E
     PROCESS{
 
@@ -245,7 +243,7 @@ Function Connect-EXO {
                         $verbose = ($VerbosePreference -eq "Continue") ;
                     } ; 
                     #>
-                    Add-PSTitleBar $sTitleBarTag ;
+                    Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
                 } catch [System.ArgumentException] {
                     <# 8:45 AM 7/29/2020 VEN tenant now throwing error:
                         WARNING: Tried but failed to import the EXO PS module.
@@ -321,7 +319,7 @@ Function Connect-EXO {
                         $VerbosePreference = $VerbosePrefPrior ;
                         $verbose = ($VerbosePreference -eq "Continue") ;
                     } ; 
-                    Add-PSTitleBar $sTitleBarTag ;
+                    Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
 
                 } CATCH {
                         $ErrTrapd=$Error[0] ;

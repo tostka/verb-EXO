@@ -11,7 +11,7 @@ function cxo2cmw {
     .EXAMPLE
     cxo2cmw
     #>
-    Connect-EXO2 -cred $credO365CMWCSID-Verbose:($VerbosePreference -eq 'Continue') ; 
+    Connect-EXO2 -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxo2cmw.ps1 ^------

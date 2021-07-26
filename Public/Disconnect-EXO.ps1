@@ -53,7 +53,7 @@ Function Disconnect-EXO {
     if($global:EOLSession){$global:EOLSession | Remove-PSSession -Verbose:$false ; } ;
     Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName } | Remove-PSSession -Verbose:$false ;
     Disconnect-PssBroken -verbose:$($verbose) ;
-    Remove-PSTitlebar 'EXO' ;
+    Remove-PSTitlebar 'EXO' -verbose:$($VerbosePreference -eq "Continue");
     
     [console]::ResetColor()  # reset console colorscheme
     <#

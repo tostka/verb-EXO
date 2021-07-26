@@ -38,7 +38,7 @@ Function Disconnect-EXO2 {
     if($global:EOLSession){$global:EOLSession | Remove-PSSession ; } ;
     Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName } | Remove-PSSession ;
     Disconnect-PssBroken -verbose:$($verbose) ;
-    Remove-PSTitlebar 'EXO' ;
+    Remove-PSTitlebar 'EXO' -verbose:$($VerbosePreference -eq "Continue");
     #>
     # confirm module present
     $modname = 'ExchangeOnlineManagement' ; 
@@ -51,7 +51,7 @@ Function Disconnect-EXO2 {
     RemoveExistingEXOPSSession -Verbose:$false ;
     
     Disconnect-PssBroken -verbose:$false ;
-    Remove-PSTitlebar 'EXO' ;
+    Remove-PSTitlebar 'EXO' -verbose:$($VerbosePreference -eq "Continue");
     [console]::ResetColor()  # reset console colorscheme
 }
 

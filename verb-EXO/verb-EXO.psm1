@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.88.0
+  Version     : 1.0.89.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -621,6 +621,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 1:20 PM 7/21/2021 enabled TOR titlebar tagging with TenOrg (prompt tagging by scraping TitleBar values)
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     * 11:43 AM 4/2/2021 updated added wlt & recstat support, updated catch blocks
     # 2:56 PM 3/31/2021 typo/mispaste fix: had $E10Sess assigning on the import ;  bugfix: @toroco.onmicr...com, isn't in EXO.AccDoms, so added a 2nd test for match to TenDom ; added verbose suppress to all import-mods
@@ -700,12 +701,9 @@ Function Connect-EXO {
             write-host -foregroundcolor white  "(asserting Prefix:$($CommandPrefix)" ;
         } ;
 
-        $sTitleBarTag = "EXO" ;
         $TenOrg=get-TenantTag -Credential $Credential ; 
-        if($TenOrg -ne 'TOR'){
-            # explicitly leave this tenant (default) untagged
-            $sTitleBarTag += $TenOrg ;
-        } ; 
+        $sTitleBarTag = @("EXO") ;
+        $sTitleBarTag += $TenOrg ;
     } ;  # BEG-E
     PROCESS{
 
@@ -845,7 +843,7 @@ Function Connect-EXO {
                         $verbose = ($VerbosePreference -eq "Continue") ;
                     } ; 
                     #>
-                    Add-PSTitleBar $sTitleBarTag ;
+                    Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
                 } catch [System.ArgumentException] {
                     <# 8:45 AM 7/29/2020 VEN tenant now throwing error:
                         WARNING: Tried but failed to import the EXO PS module.
@@ -921,7 +919,7 @@ Function Connect-EXO {
                         $VerbosePreference = $VerbosePrefPrior ;
                         $verbose = ($VerbosePreference -eq "Continue") ;
                     } ; 
-                    Add-PSTitleBar $sTitleBarTag ;
+                    Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");
 
                 } CATCH {
                         $ErrTrapd=$Error[0] ;
@@ -1023,6 +1021,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    # 1:31 PM 7/21/2021 revised Add-PSTitleBar $sTitleBarTag with TenOrg spec (for prompt designators)
     * 11:53 AM 4/2/2021 updated with rlt & recstat support, updated catch blocks
     # 8:34 AM 3/31/2021 added verbose suppress to all import-mods
     * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
@@ -1146,12 +1145,9 @@ Function Connect-EXO2 {
             throw "Invalid AzureADAuthorizationEndpointUri parameter '$AzureADAuthorizationEndpointUri'"
         }
 
-        $sTitleBarTag = "EXO2" ;
         $TenOrg = get-TenantTag -Credential $Credential ;
-        if ($TenOrg -ne 'TOR') {
-            # explicitly leave this tenant (default) untagged
-            $sTitleBarTag += $TenOrg ;
-        } ;
+        $sTitleBarTag = @("EXO2") ;
+        $sTitleBarTag += $TenOrg ;
 
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
@@ -1488,7 +1484,7 @@ Function Connect-EXO2 {
                 # Set the AppSettings disabling the logging
                 Set-ExoAppSettings -ShowProgress $ShowProgress.Value -PageSize $PageSize.Value -UseMultithreading $UseMultithreading.Value -TrackPerformance $TrackPerformance.Value -ExchangeEnvironmentName $ExchangeEnvironmentName -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri -EnableErrorReporting $false ;
 
-                Add-PSTitleBar $sTitleBarTag ;
+                Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");;
             }
         } ; #  # if-E $bExistingEXOGood
     } ; # PROC-E
@@ -2630,7 +2626,7 @@ function cxo2cmw {
     .EXAMPLE
     cxo2cmw
     #>
-    Connect-EXO2 -cred $credO365CMWCSID-Verbose:($VerbosePreference -eq 'Continue') ; 
+    Connect-EXO2 -cred $credO365CMWCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 
 #*------^ cxo2cmw.ps1 ^------
@@ -2901,7 +2897,7 @@ Function Disconnect-EXO {
     if($global:EOLSession){$global:EOLSession | Remove-PSSession -Verbose:$false ; } ;
     Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName } | Remove-PSSession -Verbose:$false ;
     Disconnect-PssBroken -verbose:$($verbose) ;
-    Remove-PSTitlebar 'EXO' ;
+    Remove-PSTitlebar 'EXO' -verbose:$($VerbosePreference -eq "Continue");
     
     [console]::ResetColor()  # reset console colorscheme
     <#
@@ -2963,7 +2959,7 @@ Function Disconnect-EXO2 {
     if($global:EOLSession){$global:EOLSession | Remove-PSSession ; } ;
     Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName } | Remove-PSSession ;
     Disconnect-PssBroken -verbose:$($verbose) ;
-    Remove-PSTitlebar 'EXO' ;
+    Remove-PSTitlebar 'EXO' -verbose:$($VerbosePreference -eq "Continue");
     #>
     # confirm module present
     $modname = 'ExchangeOnlineManagement' ; 
@@ -2976,7 +2972,7 @@ Function Disconnect-EXO2 {
     RemoveExistingEXOPSSession -Verbose:$false ;
     
     Disconnect-PssBroken -verbose:$false ;
-    Remove-PSTitlebar 'EXO' ;
+    Remove-PSTitlebar 'EXO' -verbose:$($VerbosePreference -eq "Continue");
     [console]::ResetColor()  # reset console colorscheme
 }
 
@@ -6905,7 +6901,7 @@ function rxo2TOL {
     rxo2TOL - Reonnect-EXO to specified Tenant
     .DESCRIPTION
     #>
-    Reconnect-EXO2 -cred $credO365TOLSID
+    Reconnect-EXO2 -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue')
 }
 
 #*------^ rxo2tol.ps1 ^------
@@ -8734,8 +8730,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU0AUWTY04aZq/yteEYHeLiVlC
-# vR+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUX+zEg/H5CwLNWxAHQ7F7dIkh
+# GdKgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -8750,9 +8746,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTZJvUK
-# KTKJefRLVKy8hVqfMNtyPTANBgkqhkiG9w0BAQEFAASBgJt3XoHBJOffnvVO04KF
-# loN7KGWNbSdsz/5v4NcpFiMrgQKiIRvbqFrRRUghg6wsnw5oLNx4YgwohVqskNrQ
-# xjlorVPYuxGIIfx6bfN5DUfgou5OjpDgYUjCml7/tB05v51yhn4Hix+tzxL5Aifm
-# n0GzKm6KaZ47Bo+COR7IqbFj
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQxg7X6
+# Ls48G37amohM4QGif7/UiTANBgkqhkiG9w0BAQEFAASBgIz50Ierw+3wfQqcvLJ8
+# OG9prTLZ6dCpL/5htbSMHHjS1amTArA8yeoRvwGXcIehM5Fgl5EMco7Ilu9XU3PV
+# kf/R/xwumqvEhoFQSR2Syw6BTZchlX6QsYRyKGcRWYDhf/cwUmwS2jU4GMkzez2h
+# TJ77CV57as5aqrZbk+P223v7
 # SIG # End signature block

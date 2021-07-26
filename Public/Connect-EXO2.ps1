@@ -21,6 +21,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    # 1:31 PM 7/21/2021 revised Add-PSTitleBar $sTitleBarTag with TenOrg spec (for prompt designators)
     * 11:53 AM 4/2/2021 updated with rlt & recstat support, updated catch blocks
     # 8:34 AM 3/31/2021 added verbose suppress to all import-mods
     * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
@@ -144,12 +145,9 @@ Function Connect-EXO2 {
             throw "Invalid AzureADAuthorizationEndpointUri parameter '$AzureADAuthorizationEndpointUri'"
         }
 
-        $sTitleBarTag = "EXO2" ;
         $TenOrg = get-TenantTag -Credential $Credential ;
-        if ($TenOrg -ne 'TOR') {
-            # explicitly leave this tenant (default) untagged
-            $sTitleBarTag += $TenOrg ;
-        } ;
+        $sTitleBarTag = @("EXO2") ;
+        $sTitleBarTag += $TenOrg ;
 
         $MFA = get-TenantMFARequirement -Credential $Credential ;
 
@@ -486,7 +484,7 @@ Function Connect-EXO2 {
                 # Set the AppSettings disabling the logging
                 Set-ExoAppSettings -ShowProgress $ShowProgress.Value -PageSize $PageSize.Value -UseMultithreading $UseMultithreading.Value -TrackPerformance $TrackPerformance.Value -ExchangeEnvironmentName $ExchangeEnvironmentName -ConnectionUri $ConnectionUri -AzureADAuthorizationEndpointUri $AzureADAuthorizationEndpointUri -EnableErrorReporting $false ;
 
-                Add-PSTitleBar $sTitleBarTag ;
+                Add-PSTitleBar $sTitleBarTag -verbose:$($VerbosePreference -eq "Continue");;
             }
         } ; #  # if-E $bExistingEXOGood
     } ; # PROC-E

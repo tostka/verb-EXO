@@ -1,4 +1,4 @@
-﻿#*------v Function Disconnect-ExchangeOnline v------
+﻿#*------v Disconnect-ExchangeOnline.ps1 v------
 function Disconnect-ExchangeOnline{
     <#
     .SYNOPSIS
@@ -92,4 +92,5 @@ function Disconnect-ExchangeOnline{
         }
     }
 }
-#*------^ END Function Disconnect-ExchangeOnline ^------
+
+#*------^ Disconnect-ExchangeOnline.ps1 ^------
