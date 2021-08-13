@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.93.0
+  Version     : 1.0.94.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -2633,6 +2633,7 @@ function copy-XPermissionGroupToCloudOnly {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:40 PM 8/11/2021 ADDED & debugged -Mailbox param (spec target of grants), and code to add-mailboxperm/add-(ad|recipient)permission to OP or EXO target mailbox, and more detailed follow up dump report. Ran against exo-mailbox wio issues. Need to dbug against a still onprem mbx next.
     * 2:19 PM 8/3/2021 step-debugged, looks functional ; init 
     .DESCRIPTION
     copy-XPermissionGroupToCloudOnly.ps1 - Copy an onprem replicated Mail-Enabled Security Group, used for Mailbox Access grants, to a cloud-only EXO DistributionGroup, to grant EXO perms to foreign-hybrid multi-HCW federated objects in the tenant
@@ -2645,8 +2646,16 @@ function copy-XPermissionGroupToCloudOnly {
     The resulting EXO DG is intended to hold those SecPrincipals that can't be represented in the on-prem Org. 
     In effect you'll have one onprem DG granting permissions for locally federated SecPrins, 
     And this newly duplicated EXO DG granting permissions for externally federated SecPrins.
-    .PARAMETER  users
-    Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)
+    .PARAMETER ticket
+    ticket number[-ticket nnnnn]
+    .PARAMETER SourceGroupName
+    Name of on-prem replicated Exchange DistributionGroup to be copied to a cloud-only variant[-SourceGroupName somegroup]
+    .PARAMETER Mailbox
+    Identifier for the mailbox/mailuser object that the new group should be granted access to (generally matches target of on-prem SourceGroupName permissions grants)[-Mailbox email@domain.com]
+    .PARAMETER Owner
+    Identifier for the mailbox/mailuser object that will be the Owner of the new group[-Owner email@domain.com]
+    .PARAMETER MembersCloudOnly
+    Array of cloud-only unreplicated mailbox/mailuser designators to be added as members of the newly copied group[-MembersCloudOnly email@domain.com,email2@domain.com]
     .PARAMETER useEXOv2
     Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
     .PARAMETER Whatif
@@ -2657,26 +2666,23 @@ function copy-XPermissionGroupToCloudOnly {
     None. Does not accepted piped input.(.NET types, can add description)
     .EXAMPLE
     PS> $whatif = $true ;
-        [array]$tgroups = "123456;SIT-SEC-Email-MailboxName-G;owner@domain.com;member1@domain.com,member2@domain.com" ;
-        [array]$tgroups += "123457;SIT-SEC-Email-MailboxName2-G;owner2@domain.com;member1@domain.com,member2@domain.com" ;
+        [array]$tgroups = @("627192;LYN-SEC-Email-ToroMobilityTeam-G;ToroMobilityTeam@toro.com;dccoldiron@charlesmachine.works;member1@domain.com,dccoldiron@charlesmachine.works") ;
+        [array]$tgroups += "123457;SIT-SEC-Email-GrantMailbox2-G;GrantMailbox2@domain.com;owner2@domain.com;member1@domain.com,member2@domain.com" ;
         foreach($tgrp in $tgroups){
-            $ticket = $tgrp.split(';')[0] ;
-            $SourceGroupName = $tgrp.split(';')[1] ;
-            $Owner = $tgrp.split(';')[2] ; 
-            $MembersCloudOnly = $tgrp.split(';')[3].split(',') ;
             $pltCXPermGrp=[ordered]@{
                 ticket = $tgrp.split(';')[0] ;
-                SourceGroupName = $tgrp.split(';')[1] ;
-                Owner = $tgrp.split(';')[2] ; 
-                MembersCloudOnly = $tgrp.split(';')[3].split(',') ;
+                Mailbox = $tgrp.split(';')[1] ;
+                SourceGroupName = $tgrp.split(';')[2] ;
+                Owner = $tgrp.split(';')[3] ;
+                MembersCloudOnly = $tgrp.split(';')[4].split(',') ;
                 verbose=$true ;
                 whatif=$($whatif) ;
-            } ; 
-            write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):copy-XPermissionGroupToCloudOnly w`n$(($pltCXPermGrp|out-string).trim())" ; 
+            } ;
+            write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):copy-XPermissionGroupToCloudOnly w`n$(($pltCXPermGrp|out-string).trim())" ;
             copy-XPermissionGroupToCloudOnly @pltCXPermGrp ;
         } ; 
-    Example demoing processing an array of descriptors, as a semicolon-delimited summary of inputs (useful for stacking bulk-creations)
-    Schema for the $tgroups input is "[ticket];[source grp identifier];[owner];[members array]"
+    Example demoing processing of an array of descriptors, as a semicolon-delimited summary of inputs (useful for stacking bulk-creations)
+    Schema for the $tgroups input is "[SourceGroupName];[Mailbox];[Owner];[MembersCloudOnly array]"
     .LINK
     https://github.com/tostka/verb-exo
     .LINK
@@ -2693,6 +2699,8 @@ function copy-XPermissionGroupToCloudOnly {
         $ticket, 
         [Parameter(Mandatory=$true,HelpMessage="Name of on-prem replicated Exchange DistributionGroup to be copied to a cloud-only variant[-SourceGroupName somegroup]")]
         $SourceGroupName, 
+        [Parameter(Mandatory=$true,HelpMessage="Identifier for the mailbox/mailuser object that the new group should be granted access to (generally matches target of on-prem SourceGroupName permissions grants)[-Mailbox email@domain.com]")]
+        $Mailbox, 
         [Parameter(Mandatory=$true,HelpMessage="Identifier for the mailbox/mailuser object that will be the Owner of the new group[-Owner email@domain.com]")]
         $Owner, 
         [Parameter(Mandatory=$true,HelpMessage="Array of cloud-only unreplicated mailbox/mailuser designators to be added as members of the newly copied group[-MembersCloudOnly email@domain.com,email2@domain.com]")]
@@ -2700,25 +2708,23 @@ function copy-XPermissionGroupToCloudOnly {
         [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
         [switch] $useEXOv2,
         [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
-        [switch] $whatIf=$true
+        [switch] $whatIf
     ) ;
     BEGIN{
         $Verbose = ($VerbosePreference -eq 'Continue') ; 
         $propsdg = 'SamAccountName','ManagedBy','AcceptMessagesOnlyFrom','AcceptMessagesOnlyFromDLMembers','AddressListMembership',
             'Alias','DisplayName','EmailAddresses','ExternalDirectoryObjectId','HiddenFromAddressListsEnabled','EmailAddressPolicyEnabled',
             'PrimarySmtpAddress','RecipientType','RecipientTypeDetails','WindowsEmailAddress','Name','DistinguishedName','WhenChanged','WhenCreated'; 
-        connect-AD -Verbose:$false ; rx10 -Verbose:$false ; rxo  -Verbose:$false ; #cmsol  -Verbose:$false ;
+        $rgxMbxPermLocal = '^(S-\d-\d-\d{2}-\d{10}-\d{9}-\d{10}-\d{5}|NT\sAUTHORITY\\SELF)' ;
+        $propsmbxperm = 'User','AccessRights','IsInherited','Deny';
+        $propsrcpperm = 'trustee','AccessRights','IsInherited','Deny';
+        $propsadperm = 'User','AccessRights','ExtendedRights','IsInherited','Deny';
+
+        connect-AD -Verbose:$false | out-null ; 
+        rx10 -Verbose:$false ; rxo  -Verbose:$false ; #cmsol  -Verbose:$false ;
+        
     } 
     PROCESS{
-        <# 
-        For mail-anabled groups, it's a complete waste of time below using new-azureadgroup; set-azureadgroup; add-azureadgroupmember
-        michev
-            22686Reputation 1218Posts 0Following 38Followers
-        answered � Apr 26 2021 at 7:04 AM
-        You cannot use the Graph API for that. Mail-enabled security groups are authored in Exchange Online, and Graph currently has no support for Exchange admin operations. Use PowerShell instead.
-        E.g. you have to use new-exodistributiongroup  for those. 
-        #> 
-
         # check ExternalDirectoryObjectId to ensure unfederated
         $sBnr="===v $($SourceGroupName) - $($Owner) v===" ;
         $smsg = $sBnr ; 
@@ -2755,7 +2761,7 @@ function copy-XPermissionGroupToCloudOnly {
                 whatif=$($whatif) ;
                 ErrorAction='STOP';
             } ;
-            # set-azureadgroup -ObjectId -MailEnabled -MailNickName -ErrorAction
+
             $pltSxDG=[ordered]@{
                 identity = $null; 
                 HiddenFromAddressListsEnabled=$true;
@@ -2797,70 +2803,206 @@ function copy-XPermissionGroupToCloudOnly {
                 TRY {
                     set-exodistributiongroup @pltSxDG ;
                     $pxdg = get-exodistributiongroup -id $pltNxDG.DisplayName ;
-                    $pxDGm = get-exodistributiongroupmembers -id $pltNxDG.DisplayName ;
+                    $pxDGm = get-exodistributiongroupmember -id $pltNxDG.DisplayName ;
                 } CATCH {
                     $smsg = "Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Continue ;
                 } ;
-                    
-                $hMsg = @"
 
-POST:exodistributiongroup
-
-$(($pxdg|fl $propsdg|out-string).trim())
-
-Members:
-$(($pxDGm.PrimarySmtpAddress|out-string).trim())
-
-Grant this group against EXO mailboxes using:
-
-# EXO PERMS GRANT
-`$whatif=`$true ;
-`$GrantSplat=@{
-    Identity="TARGETMAILBOX@toro.com" ;
-    User='$($pxdg.primarysmtpaddress)' ;
-    AccessRights="FullAccess"
-};
-add-exomailboxpermission @Grantsplat -whatif:`$(`$whatif) ;
-Get-exoMailboxPermission -Identity `$GrantSplat.Identity |
-    ?{(`$_.IsInherited -eq `$false) -AND !(`$_.user -match '^(S-\d-\d-\d{2}-\d{10}-\d{9}-\d{10}-\d{5}|NT\sAUTHORITY\\SELF)')}| 
-    select User,AccessRights,IsInherited,Deny | out-string| 
-    format-table -wrap ;
-
-#EXO SENDAS GRANT
-`$whatif=`$true ;
-`$GrantSplat=@{
-    Identity="TARGETMAILBOX@toro.com" ;
-    trustee='$($pxdg.primarysmtpaddress)' ;
-    AccessRights="SendAs" ;
-    whatif=`$(`$whatif) ;
-};
-add-exoRecipientPermission @Grantsplat ;
-get-exoRecipientPermission `$Grantsplat.identity|
-    ?{(`$_.IsInherited -eq `$false) -AND !(`$_.trustee -match '^(S-\d-\d-\d{2}-\d{10}-\d{9}-\d{10}-\d{5}|NT\sAUTHORITY\\SELF)')} | 
-    format-table -wrap trustee,AccessRights,IsInherited,Deny | out-string ;
-
-"@ ; 
-                    $smsg = $hMsg ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
-                } else {
-                    $smsg = "(-whatif detected, skipping:set-exodistributiongroup @pltNxDG" ;
+                if($tmbxr = get-recipient -id $Mailbox -ea 0 ){
+                    $smsg = "(-Mailbox:$($tmbxr.PrimarySmtpAddress) specified, adding $($xdg.name) to it's permissions...)" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                } ; 
-            } else { 
-                $smsg = "Unable to get-distributiongroup -id $($SourceGroupName) ; aborting!" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                    TRY {
+                        # aliased ExOP|EXO|EXOv2 cmdlets (permits simpler single code block for any of the three variants of targets & syntaxes)
+                        # each is '[aliasname];[exOPcmd];[exOcmd] (xOv2cmd is converted from [exocmd])
+                        [array]$cmdletMaps= 'ps1GetMbx;get-mailbox;get-exomailbox','ps1SetMbx;Set-Mailbox;Set-exoMailbox','ps1GetMUsr;Get-MailUser;Get-exoMailUser',
+                                            'ps1SetMUsr;Set-MailUser;Set-exoMailUser','ps1AddMbxPrm;Add-MailboxPermission;Add-exoMailboxPermission;',
+                                            'ps1GetMbxPrm;Get-MailboxPermission;Get-exoMailboxPermission;','ps1RmvMbxPrm;Remove-MailboxPermission;Remove-exoMailboxPermission;',
+                                            'ps1AddRcpPrm;Add-ADPermission;Add-exoRecipientPermission;','ps1GetRcpPrm;Get-ADPermission;Get-exoRecipientPermission;',
+                                            'ps1RmvRcpPrm;Remove-ADPermission;Remove-exoRecipientPermission;'
+                        $OpRcp=$tmbxr ;
+                        $pltRXO = [ordered]@{
+                            credential =  $credO365TORSID ;
+                            Verbose = $($VerbosePreference -eq 'Continue');
+                        } ; 
+                        reconnect-exo @pltRXO ;
+                        foreach($cmdletMap in $cmdletMaps){
+                            switch ($OpRcp.recipienttype){
+                                "MailUser" {
+                                    $iIndex = 2 ;
+                                    if($script:useEXOv2){
+                                        reconnect-eXO2 @pltRXO ; 
+                                        if(!($cmdlet= Get-Command $cmdletMap.split(';')[$iIndex ].replace('-exo','-xo') )){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
+                                        $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
+                                        write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                                    } else {
+                                        reconnect-exo @pltRXO ;
+                                        if(!($cmdlet= Get-Command $cmdletMap.split(';')[$iIndex ])){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
+                                        $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
+                                        write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                                    } ;
+                                }
+                                "UserMailbox" { 
+                                    $iIndex = 1 ;
+                                    reconnect-ex2010 ;
+                                    if(!($cmdlet= Get-Command $cmdletMap.split(';')[$iIndex ])){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
+                                    $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
+                                    write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                                }
+                                default { throw "Unrecognized recipienttype!:$($OpRcp.recipienttype)" }
+                            } ; 
+                        } ; 
+                        
+                        # exo mbx, need to flip to exo rcp, if we're going to get a functional DN for recipientperms cmds: pull the actual mbx instead of rcp (which provided RecipientType to steer balance)
+                        $pltGmbx=[ordered]@{
+                            Identity=$tmbxr.PrimarySmtpAddress ; 
+                            ErrorAction='STOP' ;};
+
+                        $smsg = "$((get-alias ps1GetMbx).definition) w`n$(($pltGmbx|out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $tmbxr = ps1GetMbx @pltGmbx ; 
+                        
+                        $pltAMP=[ordered]@{
+                            Identity=$tmbxr.PrimarySmtpAddress ; 
+                            User=$pxdg.primarysmtpaddress ; 
+                            AccessRights="FullAccess";
+                            confirm = $false ; # suppress prompts
+                            ErrorAction='STOP' ;
+                            whatif=$($whatif);};
+
+                        $pltARP=@{
+                            identity=$tmbxr.DistinguishedName ; 
+                            trustee=$pxdg.primarysmtpaddress ;
+                            AccessRights="SendAs" ;
+                            confirm = $false ; # suppress prompts
+                            ErrorAction='STOP' ;
+                            whatif=$($whatif);}; 
+                        # SendAs perms target user onprem, trustee in exo:
+                        $smsg = "$((get-alias ps1GetMbxPrm).definition) -Identity $($pltAMP.Identity) | `n?{`$_.user -eq '$($pxdg.name)' -AND `$_.AccessRights -eq '$($pltARP.AccessRights)'}" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        if($mbxperm = ps1GetMbxPrm -Identity $pltAMP.Identity | ?{$_.user -eq $pxdg.name -AND $_.AccessRights -eq $pltAMP.AccessRights}){
+                            $smsg = "($($pdxg.name) already granted $($pltAMP.AccessRights) perms on $($pltAMP.identity))" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        } else {
+                            $smsg = "$((get-alias ps1AddMbxPrm).definition) w`n$(($pltAMP|out-string).trim())" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $xmp = ps1AddMbxPrm @pltAMP ;
+                        } ; 
+                        $mbxperm = ps1GetMbxPrm -Identity $pltAMP.Identity -user $pltAMP.user ; 
+                        $smsg = "$((get-alias ps1GetMbxPrm).definition):`n$(($mbxperm|ft -wrap $propsmbxperm |out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                        switch ($OpRcp.recipienttype){
+                                "MailUser" {
+                                    $pltARP.identity = $tmbxr.distinguishedname ; 
+                                    $smsg = "$((get-alias ps1GetRcpPrm).definition) -Identity $($pltARP.Identity) | `n?{`$_.trustee -eq '$($pxdg.name)' -AND `$_.AccessRights -eq '$($pltARP.AccessRights)'}" ; 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    if($rcpperm = ps1GetRcpPrm -Identity $pltARP.Identity | ?{$_.trustee -eq $pxdg.name -AND $_.AccessRights -eq $pltARP.AccessRights}){
+                                        $smsg = "(Trustee:$($pxdg.name) already granted AccessRights:$($pltARP.AccessRights) perms on `n$($pltARP.identity))" ; 
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    } else {
+                                        $smsg = "$((get-alias ps1AddRcpPrm).definition) w`n$(($pltARP|out-string).trim())" ; 
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                        $xmp = ps1AddRcpPrm @pltARP ;
+                                    } ; 
+                                    $rcpperm= ps1GetRcpPrm -Identity $pltARP.Identity -Trustee $pltARP.trustee -errorAction STOP ; 
+                                    $smsg = "$((get-alias ps1GetRcpPrm).definition):`n$(($rcpperm|ft -wrap $propsrcpperm |out-string).trim())" ; 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                } ;
+                                "UserMailbox" { 
+                                    $pltARP.remove('AccessRights') ; 
+                                    $pltARP.add('ExtendedRights','Send As') ; 
+                                    $pltARP.identity = $tmbxr.distinguishedname ; 
+                                    $smsg = "$((get-alias ps1GetRcpPrm).definition) -Identity $($pltARP.Identity) | ?{`$_.user -eq '$($pxdg.name)' -AND `$_.ExtendedRights -eq '$($pltARP.AccessRights)'}" ; 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    if($rcpperm = ps1GetRcpPrm -Identity $pltARP.Identity | ?{$_.user -eq $pxdg.name -AND $_.ExtendedRights -eq $pltARP.AccessRights}){
+                                        $smsg = "($($pdxg.name) already granted $($pltARP.AccessRights) perms on $($pltARP.identity))" ; 
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    } else {
+                                        $smsg = "$((get-alias ps1AddRcpPrm).definition) w`n$(($pltARP|out-string).trim())" ; 
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                        $xmp = ps1AddRcpPrm @pltARP ;
+                                    } ; 
+                                    $rcpperm= $rcpperm = ps1GetRcpPrm -Identity $pltARP.Identity | ?{$_.user -eq $pxdg.name -AND $_.ExtendedRights -eq $pltARP.AccessRights} ; 
+                                    $smsg = "$((get-alias ps1GetRcpPrm).definition) w`n$(($rcpperm|ft -wrap $propsadperm |out-string).trim())" ; 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    # set common props for final report
+                                    $propsrcpperm = $propsadperm ; 
+                                } ;
+                        } ;  # switch-E
+
+                    } CATCH {
+                        $smsg = "Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Continue ;
+                    } ;
+
+
+                } else { 
+                    $smsg = "(No -Mailbox specified, slipping $($xdg.name) permissions grant...)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ;
+                
+
+                $hMsg = @"
+
+*------v REVIEW RESULTS v------
+
+POST:exodistributiongroup
+-----------
+$(($pxdg|fl $propsdg|out-string).trim())
+-----------
+
+Members:
+-----------
+$(($pxDGm.PrimarySmtpAddress|out-string).trim())
+-----------
+"@ ; 
+
+            if($Mailbox){
+                $hMsg += "Associated Mailbox Permissions:`n$(($mbxperm|ft -wrap $propsmbxperm |out-string).trim())`n`n" ;     
+
+                $hMsg += "Associated Recipient Permissions:`n$(($rcpperm|ft -wrap $propsrcpperm  |out-string).trim())`n`n" ; 
             } ;
-            $smsg = $sBnr.replace('=v','=^').replace('v=','^=') ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            $hMsg += "*------^ REVIEW RESULTS ^------`n" ; 
+
+            $smsg = $hMsg ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        #} ;  # loop-E
+
+            } else {
+                $smsg = "(-whatif detected, skipping:set-exodistributiongroup @pltNxDG" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ; 
+        } else { 
+            $smsg = "Unable to get-distributiongroup -id $($SourceGroupName) ; aborting!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ;
+        $smsg = $sBnr.replace('=v','=^').replace('v=','^=') ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        
     }
     END{}
  }
@@ -9051,8 +9193,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQURRkfbr0sOiwEmSM0lyf5YnTh
-# k7SgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUtLD1YqObRDW6WYz+Lx+7LY1M
+# TgGgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -9067,9 +9209,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTr+XT3
-# v3maqff7NCUEeI8bw/ywHzANBgkqhkiG9w0BAQEFAASBgGfXVv/JFw+5VGOWr4e9
-# w0ZXDhpaHK4qw1r0PUG5oJb2dEusIds2IYC4jvcsEjt+hIhxuTnDzm2GbS+hBjN4
-# hrkfkPFZHXkvZhSQ3MlZYZOpe6aDX8F6p3E/bfCH3wK88oSJHwGVfikKBMn6YhqO
-# hA6KY1jNaFvJFbnZf4Fms8qi
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQmaIke
+# 1RZTPd4o0p+9AOqMTUBTwjANBgkqhkiG9w0BAQEFAASBgGP4ti+P2qsbGAh1XVWp
+# ngEAbcfWc5+uyF16327E5vntWKXxmUDtynqbgzGwGJ+c9tjfRqvx6ZEC7PIbiNLy
+# /wLBB6/jjUciVLWdtpR5aNHqRQSVf1F9eqhYFk6K9mJYemfqOnc67VM8AZRVnT8J
+# LDptlXyzk0zPkiert1SD75Q7
 # SIG # End signature block
