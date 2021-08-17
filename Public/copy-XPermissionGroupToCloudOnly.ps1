@@ -18,6 +18,7 @@ function copy-XPermissionGroupToCloudOnly {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:51 PM 8/17/2021 added $MembersCloudOnly | select -unique - kept leaking in duplicates in the inputs.
     * 1:40 PM 8/11/2021 ADDED & debugged -Mailbox param (spec target of grants), and code to add-mailboxperm/add-(ad|recipient)permission to OP or EXO target mailbox, and more detailed follow up dump report. Ran against exo-mailbox wio issues. Need to dbug against a still onprem mbx next.
     * 2:19 PM 8/3/2021 step-debugged, looks functional ; init 
     .DESCRIPTION
@@ -56,8 +57,8 @@ function copy-XPermissionGroupToCloudOnly {
         foreach($tgrp in $tgroups){
             $pltCXPermGrp=[ordered]@{
                 ticket = $tgrp.split(';')[0] ;
-                Mailbox = $tgrp.split(';')[1] ;
-                SourceGroupName = $tgrp.split(';')[2] ;
+                SourceGroupName = $tgrp.split(';')[1] ;
+                Mailbox = $tgrp.split(';')[2] ;
                 Owner = $tgrp.split(';')[3] ;
                 MembersCloudOnly = $tgrp.split(';')[4].split(',') ;
                 verbose=$true ;
@@ -130,10 +131,10 @@ function copy-XPermissionGroupToCloudOnly {
             $nameClean= Remove-StringLatinCharacters -string $nameClean ;
             $samaccountname=$( ([System.Text.RegularExpressions.Regex]::Replace($nameClean,"[^1-9a-zA-Z_]","").tostring().substring(0,[math]::min([System.Text.RegularExpressions.Regex]::Replace($nameClean,"[^1-9a-zA-Z_]","").tostring().length,20))).toLower() )  ;
             $samaccountname = "$($samaccountname)-$((new-guid).guid.split('-')[0])-C1" ;
-            $smsg = "Resolving potential members:`n$(($MembersCloudOnly|out-string).trim())" ; 
+            $smsg = "Resolving potential members:`n$(($MembersCloudOnly| select -unique | sort | out-string).trim())" ; 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            $rmbrs = $MembersCloudOnly |foreach-object {get-exorecipient -id $_} | select -expand primarysmtpaddress ; 
+            $rmbrs = $MembersCloudOnly | select -unique | sort |foreach-object {get-exorecipient -id $_} | select -expand primarysmtpaddress ; 
             $pltNxDG=[ordered]@{
                 Notes="$((get-group -id ($dg.alias)).notes),$($ticket) for $($Owner)(Cloud-only replica of on-prem group)" ;
                 DisplayName=$tdgName ;
@@ -391,4 +392,5 @@ $(($pxDGm.PrimarySmtpAddress|out-string).trim())
     }
     END{}
  }
+
 #*------^ copy-XPermissionGroupToCloudOnly.ps1 ^------

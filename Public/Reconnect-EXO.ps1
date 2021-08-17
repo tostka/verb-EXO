@@ -10,6 +10,7 @@ Function Reconnect-EXO {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 1:17 PM 8/17/2021 added -silent param
     * 3:20 PM 3/31/2021 fixed pssess typo
     * 8:30 AM 10/22/2020 added $TenOrg, swapped looping meta resolve with 1-liner approach ; added AcceptedDom caching to the middle status test (suppress one more get-exoaccepteddomain call if possible)
     * 1:30 PM 9/21/2020 added caching of AcceptedDomain, dynamically into XXXMeta - checks for .o365_AcceptedDomains, and pops w (Get-exoAcceptedDomain).domainname when blank. 
@@ -64,12 +65,14 @@ Function Reconnect-EXO {
     [CmdletBinding()]
     [Alias('rxo')]
     Param(
-      [Parameter(HelpMessage="Use Proxy-Aware SessionOption settings [-ProxyEnabled]")]
-      [boolean]$ProxyEnabled = $False,
-      [Parameter(HelpMessage="Credential to use for this connection [-credential [credential obj variable]")]
-      [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-      [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
-      [switch] $showDebug
+        [Parameter(HelpMessage="Use Proxy-Aware SessionOption settings [-ProxyEnabled]")]
+        [boolean]$ProxyEnabled = $False,
+        [Parameter(HelpMessage="Credential to use for this connection [-credential [credential obj variable]")]
+        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
+        [switch] $showDebug,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+        [switch] $silent
     ) ;
     $verbose = ($VerbosePreference -eq "Continue") ; 
     if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
@@ -142,9 +145,11 @@ Function Reconnect-EXO {
                 write-verbose "(Authenticated to EXO:$($Credential.username.split('@')[1].tostring()))" ; 
             # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
             }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
-                $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                if($silent){} else { 
+                    $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ; 
                 $bExistingEXOGood = $true ;
             } else { 
                 write-verbose "(NOT Authenticated to Credentialed Tenant:$($Credential.username.split('@')[1].tostring()))" ; 
