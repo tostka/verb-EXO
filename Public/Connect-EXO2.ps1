@@ -361,7 +361,7 @@ Function Connect-EXO2 {
                     + CategoryInfo          : InvalidResult: (:) [Import-PSSession], ArgumentException
                     + FullyQualifiedErrorId : ErrorMalformedDataFromRemoteCommand,Microsoft.PowerShell.Commands.ImportPSSessionCommand
 
-                    +[kadriTSS]::[PS]:D:\scripts$ $error[0]
+                    +[SIDS]::[PS]:D:\scripts$ $error[0]
                     Import-PSSession : Data returned by the remote Get-FormatData command is not in the expected format.
                     At C:\Program Files\WindowsPowerShell\Modules\ExchangeOnlineManagement\1.0.1\ExchangeOnlineManagement.psm1:454 char:40
                     + ... oduleInfo = Import-PSSession $PSSession -AllowClobber -DisableNameChe ...

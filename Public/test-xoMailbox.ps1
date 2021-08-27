@@ -15,6 +15,7 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
+    * 8:41 AM 8s/27a/n2021 cleanup comments
     * 1:51 PM 5/19/2021 expanded $pltGHOpCred= to include 'ESVC','SID'; verbose=$($verbose)} ;
     # 12:27 PM 5/11/2021 updated to cover Room|Shared|Equipment mbx types, along with UserMailbox
     # 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
@@ -724,7 +725,7 @@ Function test-xoMailbox {
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         $exofldrs = ps1GetxMbxFldrStats @pltGetxMbxFldrStats | 
                             ?{($_.ItemsInFolder -gt 0 ) -AND ($_.identity -notmatch $rgxExoSysFolders)} ;
-                        #$fldrs = get-exomailboxfolderstatistics -id KADRITS -IncludeOldestAndNewestItems ;
+                        #$fldrs = get-exomailboxfolderstatistics -id ID -IncludeOldestAndNewestItems ;
                         #$fldrs = $fldrs |?{($_.ItemsInFolder -gt 0 ) -AND ($_.identity -notmatch $rgxExoSysFolders)} ;
                         #$fldrs | ft -auto $propsmbxfldrs ;
 

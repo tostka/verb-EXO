@@ -183,7 +183,7 @@ https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-
         if(!$ExoPowershellModulePath){
             $ExoPowershellModulePath = [System.IO.Path]::Combine($EOMgmtModulePath, $ExoPowershellModule) ;
         } ;
-        # full path: C:\Users\kadritss\Documents\WindowsPowerShell\Modules\ExchangeOnlineManagement\1.0.1\Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll
+        # full path: C:\Users\SIDs\Documents\WindowsPowerShell\Modules\ExchangeOnlineManagement\1.0.1\Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll
         # Name: Microsoft.Exchange.Management.ExoPowershellGalleryModule
         if(-not(get-module Microsoft.Exchange.Management.ExoPowershellGalleryModule)){
             Import-Module $ExoPowershellModulePath -verbose:$false ;

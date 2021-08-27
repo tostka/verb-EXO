@@ -18,6 +18,8 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:30 PM 8/27/2021 new sniggle: CMW user that has EXOP mbx, remote: Added xoMailUser support, failed through DName lookups to try '*lname*' for near-missies. Could add trailing 'lnamne[0-=3]* searches, if not rcp/xrcps found...
+    * 9:16 AM 8/18/2021 $xMProps: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
     * 12:40 PM 8/17/2021 added -outObject, outputs a full descriptive object for each resolved recipient ; added a $hSum hash and shifted all the varis into mountpoints in the hash, with -outObject, the entire hash is conv'd to an obj and appended to $Rpt ; renamed most of the varis/as objects very clearly for what they are, as sub-props of the output objects. Wo -outobject, the usual comma-delim'd string of addresses is output.
     * 3:26 PM 7/29/2021 had sorta bug (AD context was adtorocom:, gadu failing throwing undefined error), but debugging added extensive verbose echos, and an AD-specific try/catch to trap AD notfound errors (notorious, they throw terminating fails, unlike other modules; which crashes out processing even when using -EA continue). So it hardens up the fail recovery process.
     * 12:55 PM 7/19/2021 added guest & exo-mailcontact support (resolving missing ext-federated addresses), retolled logic down to grcp & gxrcp to drive balance of tests.
@@ -103,21 +105,22 @@ function resolve-user {
             $isEml=$isDname=$isSamAcct=$false ; 
 
             $hSum = [ordered]@{
-                dname = $dname;
-                fname = $fname;
-                lname = $lname;
-                OPRcp = $OPRcp;
-                xoRcp = $xoRcp;
-                OPMailbox = $OPMailbox;
-                OPRemoteMailbox = $OPRemoteMailbox;
-                ADUser = $ADUser;
-                Federator = $null  ;
-                xoMailbox = $xoMailbox;
-                xoUser = $xoUser ;
-                xoMemberOf = $xoMemberOf ;
-                txGuest = $txGuest;
-                MsolUser = $MsolUser ;
-                LicenseGroup = $LicenseGroup ;
+                dname = $null ; 
+                fname = $null ; 
+                lname = $null ; 
+                OPRcp = $null ; 
+                xoRcp = $null ; 
+                OPMailbox = $null ; 
+                OPRemoteMailbox = $null ; 
+                ADUser = $null ; 
+                Federator = $null ; 
+                xoMailbox = $null ; 
+                xoMUser = $null ; 
+                xoUser = $null ; 
+                xoMemberOf = $null ; 
+                txGuest = $null ; 
+                MsolUser = $null ; 
+                LicenseGroup = $null ; 
             } ;
             $procd++ ; 
             write-verbose "processing:$($usr)" ; 
@@ -151,10 +154,14 @@ function resolve-user {
             elseif($isSamAcct){$sBnr+="(SAM)"}
             write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($sBnr)" ;
         
-            $xMProps="samaccountname","windowsemailaddress","DistinguishedName","Office","RecipientTypeDetails" ;
+            # $xMProps: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
+            $xMProps='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','IsDirSynced','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
+            $XMFedProps = 'samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ; ;
             $lProps = @{Name='HasLic'; Expression={$_.IsLicensed }},@{Name='LicIssue'; Expression={$_.LicenseReconciliationNeeded }} ;
-            $adprops = "samaccountname","UserPrincipalName","distinguishedname" ; 
-            
+            $adprops = 'samaccountname','UserPrincipalName','distinguishedname' ; 
+            $aaduprops = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
+            $aaduFedProps = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
+
             $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ; 
             $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ; 
             write-host -foreground yellow "get-Rmbx/xMbx: " -nonewline;
@@ -182,13 +189,49 @@ function resolve-user {
             # exclude contacts, they don't represent real onprem mbx assoc, and we need to refer those to EXO mbx qry anyway.
             write-verbose "get-recipient w`n$(($pltgM|out-string).trim())" ; 
             rx10 -Verbose:$false -silent ;
-            $hSum.OPRcp=get-recipient @pltgM -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}
+            if($hSum.OPRcp=get-recipient @pltgM -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
+                write-verbose "`$hSum.OPRcp found" ; 
+            } elseif($isDname -and $hsum.lname) { 
+                $smsg = "Failed:RETRY: detected 'LName':$($hsum.lname) for near matches..." ; 
+                write-host $smsg ;
+                $lname = $hsum.lname ;
+                $fltrB = "displayname -like '*$lname*'" ; 
+                write-verbose "RETRY:get-recipient -filter {$($fltr)}" ; 
+                if($hSum.OPRcp=get-recipient -filter $fltr -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
+                    write-verbose "`$hSum.OPRcp found" ;     
+                } ;
+            };
+
+            if(!$hsum.OpRcp){
+                $smsg = "Failed to get-recipient on:$($usr)"
+                if($isDname){$smsg += " or *$($hsum.lname )*"}
+                write-host $smsg ;
+            } else { 
+                write-verbose "`$hSum.OPRcp:`n$(($hSum.OPRcp|out-string).trim())" ; 
+            } ; 
+
+
             write-verbose "get-exorecipient w`n$(($pltgM|out-string).trim())" ; 
             rxo  -Verbose:$false -silent ; 
-            $hSum.xoRcp=get-exorecipient @pltgM -ea 0 ;
-
-            write-verbose "`$hSum.OPRcp:`n$(($hSum.OPRcp|out-string).trim())" ; 
-            write-verbose "`$hSum.xoRcp:`n$(($hSum.xoRcp|out-string).trim())" ; 
+            if($hSum.xoRcp=get-exorecipient @pltgM -ea 0 ){
+                write-verbose "`$hSum.xoRcp found" ;     
+            } elseif($isDname -and $hsum.lname) { 
+                $smsg = "Failed:RETRY: detected 'LName':$($hsum.lname) for near matches..." ; 
+                write-host $smsg ;
+                $lname = $hsum.lname ;
+                $fltrB = "displayname -like '*$lname*'" ; 
+                write-verbose "RETRY:get-recipient -filter {$($fltr)}" ; 
+                if($hSum.xoRcp=get-exorecipient -filter $fltr -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
+                    write-verbose "`$hSum.xoRcp found" ;     
+                } ;  
+            } 
+            if(!$hsum.xoRcp){
+                $smsg = "Failed to get-exorecipient on:$(usr)"
+                if($isDname){$smsg += " or *$($hsum.lname )*"} ;
+                write-host $smsg ;
+            } else { 
+                write-verbose "`$hSum.xoRcp:`n$(($hSum.xoRcp|out-string).trim())" ; 
+            } ; 
 
             if($hSum.OPRcp){
                 $error.clear() ;
@@ -265,7 +308,6 @@ function resolve-user {
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Continue ; 
                 } ; 
-            #}elseif($hSum.xoMailbox){
             }elseif($hSum.xoRcp){
                 foreach($txR in $hSum.xoRcp){
                     TRY {
@@ -281,6 +323,26 @@ function resolve-user {
                                 } ; 
                                 break ; 
                             } 
+                            "MailUser" {
+                                # external mail recipient, *not* in TTC - likely in other rgs, and migrated to remote EXOP enviro
+                                #$hSum.OPRemoteMailbox=get-remotemailbox $txR.identity  ;
+                                caad -silent -verbose:$false ; 
+                                write-verbose "`$txR | get-exoMailuser..." ;
+                                $hSum.xoMUser = $txR | get-exoMailuser ;
+                                write-verbose "`$txR | get-exouser..." ;
+                                $hSum.xoUser = $txR | get-exouser ;
+                                write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
+                                write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ; 
+                                write-verbose "`$hSum.xoMUser:`n$(($hSum.xoMUser|out-string).trim())" ;
+                                #$Rpt += $hSum.OPRemoteMailbox.primarysmtpaddress ;  
+                                write-host "$($txR.ExternalEmailAddress): matches a MailUser object with UPN:$($hSum.xoMUser.userPrincipalName)" ; 
+                                if($outObject){
+
+                                } else { 
+                                    $Rpt += $hSum.xoMUser.primarysmtpaddress ; 
+                                } ; 
+                                break ; 
+                            } ;
                             "GuestMailUser" {
                                 #$hSum.OPRemoteMailbox=get-remotemailbox $txR.identity  ;
                                 caad -verbose:$false ; 
@@ -372,6 +434,9 @@ function resolve-user {
                 if($hSum.xoMailbox.isdirsynced){
                     $smsg="(CMW USER, fed:cmw.internal)" ;
                     $hSum.Federator = 'cmw.internal' ; 
+                } elseif($hSum.xoMuser.IsDirSynced){
+                    $smsg="(CMW USER - Remote Sync'd *FOREIGN* AD (CMW OnPrem mbx?) - fed:cmw.internal)" ;
+                    $hSum.Federator = 'cmw.internal' ; 
                 }else{
                     $smsg="(CLOUD-1ST ACCT, unfederated)" ;
                     $hSum.Federator = 'Toroco' ; 
@@ -385,11 +450,13 @@ function resolve-user {
                 } 
                 if($hSum.xoMailbox){
                     write-host "=get-xMbx:>`n$(($hSum.xoMailbox |fl ($xMprops |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
+                }elseif($hSum.xoMUser){
+                    write-host "=get-xMUSR:>`n$(($hSum.xoMUser |fl ($xMprops |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
                 }elseif($hSum.txGuest){
                     write-host "=get-AADU:>`n$(($hSum.txGuest |fl userp*,PhysicalDeliveryOfficeName,JobTitle|out-string).trim())"
                 } ; 
                 TRY {
-                    write-verbose "Get-exoRecipient -Filter {Members -eq '$($hSum.xoUser.DistinguishedName)'} -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup"
+                    write-verbose "Get-exoRecipient -Filter {Members -eq '$($hSum.xoUser.DistinguishedName)'}`n -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup"
                     $hSum.xoMemberOf = Get-exoRecipient -Filter "Members -eq '$($hSum.xoUser.DistinguishedName)'" -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup ;
                     write-verbose "`$hSum.xoMemberOf:`n$(($hSum.xoMemberOf|out-string).trim())" ;
                 } CATCH {
@@ -399,11 +466,37 @@ function resolve-user {
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Continue ; 
                 } ; 
-            } else { write-warning "(no matching EXOP or EXO recipient object:$($usr))"   } ; # don't break, doesn't continue loop
+            } else { 
+                write-warning "(no matching EXOP or EXO recipient object:$($usr))"   
+                # do near Lname[0-3]* searches for comparison
+                if($hSum.lname){
+                    write-warning "Lname ($($hSum.lname) parsed from input,`nattempting similar LName g-rcp:..." ;
+                    $lname = $hsum.lname ;
+                    #$fltrB = "displayname -like '*$lname*'" ; 
+                    #write-verbose "RETRY:get-recipient -filter {$($fltr)}" ; 
+                    #get-recipient "$($txusr.lastname.substring(0,3))*"| sort name
+                    $substring = "$($txusr.lastname.substring(0,3))*"
+
+                    write-host "get-recipient -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} :" 
+                    if($hSum.Rcp=get-recipient -id $substring -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
+                        $hSum.Rcp | write-output ;
+                    } ;  
+                    write-host "get-exorecipient -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} : " 
+                    if($hSum.xoRcp=get-exorecipient -id $substring -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
+                        $hSum.xoRcp | write-output ;
+                    } ;  
+
+
+                } ; 
+
+
+            } ; # don't break, doesn't continue loop
+
 
             $pltgMU=@{UserPrincipalName=$null} ; 
             if($hSum.ADUser){$pltgMU.UserPrincipalName = $hSum.ADUser.UserPrincipalName } 
             elseif($hSum.xoMailbox){$pltgMU.UserPrincipalName = $hSum.txMbx.UserPrincipalName }
+            elseif($hSum.xoMUser){$pltgMU.UserPrincipalName = $hSum.xoMUser.UserPrincipalName }
             elseif($hSum.txGuest){$pltgMU.UserPrincipalName = $hSum.txGuest.userprincipalname } 
             else{} ; 
             
