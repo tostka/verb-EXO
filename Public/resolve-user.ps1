@@ -18,6 +18,8 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:05 PM 9/3/2021 fixed bugs introduced trying to user MaxResults (msol|aad), which come back param not recog'd when actually used - had to implement as postfiltering to assert open set return limits. ; Also implemented $xxxMeta.rgxOPFederatedDom check to resolve obj primarysmtpaddress to federating AD or AAD.
+    * 11:20 AM 8/30/2021 added $MaxResults (shutdown return-all recips in addr space, on failure to match oprcp or xorcp ; fixed a couple of typos; minior testing/logic improvements. Still needs genercized 7pswlt support.
     * 1:30 PM 8/27/2021 new sniggle: CMW user that has EXOP mbx, remote: Added xoMailUser support, failed through DName lookups to try '*lname*' for near-missies. Could add trailing 'lnamne[0-=3]* searches, if not rcp/xrcps found...
     * 9:16 AM 8/18/2021 $xMProps: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
     * 12:40 PM 8/17/2021 added -outObject, outputs a full descriptive object for each resolved recipient ; added a $hSum hash and shifted all the varis into mountpoints in the hash, with -outObject, the entire hash is conv'd to an obj and appended to $Rpt ; renamed most of the varis/as objects very clearly for what they are, as sub-props of the output objects. Wo -outobject, the usual comma-delim'd string of addresses is output.
@@ -79,6 +81,7 @@ function resolve-user {
         $rgxDName = "^([a-zA-Z]{2,}\s[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ; 
         $rgxSamAcctNameTOR = "^\w{2,20}$" ; # up to 20k, the limit prior to win2k
         #$rgxSamAcctName = "^[^\/\\\[\]:;|=,+?<>@?]+$" # no char limit ;
+        $MaxRecips = 25 ; # max number of objects to permit on a return resultsize/,ResultSetSize, to prevent empty set return of everything in the addressspace
 
         if(!$users){
             $users= (get-clipboard).trim().replace("'",'').replace('"','') ; 
@@ -119,7 +122,8 @@ function resolve-user {
                 xoUser = $null ; 
                 xoMemberOf = $null ; 
                 txGuest = $null ; 
-                MsolUser = $null ; 
+                MsolUser = $null ;
+                AADUser = $null ; # added for MailUser variant 
                 LicenseGroup = $null ; 
             } ;
             $procd++ ; 
@@ -161,13 +165,16 @@ function resolve-user {
             $adprops = 'samaccountname','UserPrincipalName','distinguishedname' ; 
             $aaduprops = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
             $aaduFedProps = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
+            $RcpPropsTbl = 'Alias','PrimarySmtpAddress','RecipientType','RecipientTypeDetails' ; 
 
             $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ; 
             $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ; 
             write-host -foreground yellow "get-Rmbx/xMbx: " -nonewline;
 
             # $isEml=$isDname=$isSamAcct=$false ; 
-            $pltgM=[ordered]@{} ; 
+            $pltgM=[ordered]@{
+                ResultSize = $MaxRecips ; 
+            } ; 
             if($isEml -OR $isSamAcct){
                 write-verbose "processing:'identity':$($usr)" ; 
                 $pltgM.add('identity',$usr) ;
@@ -221,12 +228,12 @@ function resolve-user {
                 $lname = $hsum.lname ;
                 $fltrB = "displayname -like '*$lname*'" ; 
                 write-verbose "RETRY:get-recipient -filter {$($fltr)}" ; 
-                if($hSum.xoRcp=get-exorecipient -filter $fltr -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
+                if($hSum.xoRcp=get-exorecipient -filter $fltr -ea 0 -ResultSize $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
                     write-verbose "`$hSum.xoRcp found" ;     
                 } ;  
             } 
             if(!$hsum.xoRcp){
-                $smsg = "Failed to get-exorecipient on:$(usr)"
+                $smsg = "Failed to get-exorecipient on:$($usr)"
                 if($isDname){$smsg += " or *$($hsum.lname )*"} ;
                 write-host $smsg ;
             } else { 
@@ -239,7 +246,7 @@ function resolve-user {
                     switch -regex ($hSum.OPRcp.recipienttype){
                         "UserMailbox" {
                             write-verbose "'UserMailbox':get-mailbox $($hSum.OPRcp.identity)"
-                            $hSum.OPMailbox=get-mailbox $hSum.OPRcp.identity ;
+                            $hSum.OPMailbox=get-mailbox $hSum.OPRcp.identity -resultsize $MaxRecips ;
                             write-verbose "`$hSum.OPMailbox:`n$(($hSum.OPMailbox|out-string).trim())" ; 
                             if($outObject){
 
@@ -249,7 +256,7 @@ function resolve-user {
                         } 
                         "MailUser" {
                             write-verbose "'MailUser':get-remotemailbox $($hSum.OPRcp.identity)"
-                            $hSum.OPRemoteMailbox=get-remotemailbox $hSum.OPRcp.identity  ;
+                            $hSum.OPRemoteMailbox=get-remotemailbox $hSum.OPRcp.identity -resultsize $MaxRecips  ;
                             write-verbose "`$hSum.OPRemoteMailbox:`n$(($hSum.OPRemoteMailbox|out-string).trim())" ; 
                             if($outObject){
 
@@ -262,9 +269,17 @@ function resolve-user {
                             Break ; 
                         }
                     }
-                    $pltGadu=[ordered]@{Identity = $null ; Properties='*' ;errorAction='STOP'} ;
+                    <# get-aduser docs say REsultSetSize is documented,
+                    [Get-ADUser (ActiveDirectory) | Microsoft Docs - docs.microsoft.com/](https://docs.microsoft.com/en-us/powershell/module/activedirectory/get-aduser?view=windowsserver2019-ps)
+                     but use of it throws: Parameter set cannot be resolved using the specified named parameters.
+                     pull it and post filter to 1...
+                    #> 
+                    #ResultSetSize = $MaxRecips 
+                    #$pltGadu=[ordered]@{Identity = $null ; Properties='*' ;errorAction='STOP' ; } ;
+                    $pltGadu=[ordered]@{Identity = $null ; Properties=$adprops ;errorAction='STOP' ; } ;
                     if($hSum.OPRemoteMailbox ){
-                        $pltGadu.identity = $hSum.OPRemoteMailbox.samaccountname;
+                        # get-aduser dox but doesn't really support ResultSetSize, post filter for it.
+                        $pltGadu.identity = $hSum.OPRemoteMailbox.samaccountname ;
                     }elseif($hSum.OPMailbox){
                         $pltGadu.identity = $hSum.OPMailbox.samaccountname ;
                     } ; 
@@ -282,7 +297,7 @@ function resolve-user {
                         # try a nested local trycatch, against a missing result
                         Try {
                             #Get-ADUser $DN -ErrorAction Stop ; 
-                            $hSum.ADUser =Get-ADUser @pltGadu ;
+                            $hSum.ADUser =Get-ADUser @pltGadu | select -first $MaxRecips ;
                         } Catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
                             write-warning "(no matching ADuser found:$($pltGadu.identity))" ; 
                         } catch {
@@ -314,7 +329,7 @@ function resolve-user {
                         switch -regex ($txR.recipienttypedetails){
                             "UserMailbox" {
                                 write-verbose "get-exomailbox w`n$(($pltgM|out-string).trim())" ; 
-                                $hSum.xoMailbox=get-exomailbox @pltgM -ea 0 ;
+                                $hSum.xoMailbox=get-exomailbox @pltgM -ea 0  ; 
                                 write-verbose "`$hSum.xoMailbox:`n$(($hSum.xoMailbox|out-string).trim())" ; 
                                 if($outObject){
 
@@ -328,11 +343,12 @@ function resolve-user {
                                 #$hSum.OPRemoteMailbox=get-remotemailbox $txR.identity  ;
                                 caad -silent -verbose:$false ; 
                                 write-verbose "`$txR | get-exoMailuser..." ;
-                                $hSum.xoMUser = $txR | get-exoMailuser ;
+                                $hSum.xoMUser = $txR | get-exoMailuser -ResultSize $MaxRecips ;
                                 write-verbose "`$txR | get-exouser..." ;
-                                $hSum.xoUser = $txR | get-exouser ;
+                                $hSum.xoUser = $txR | get-exouser -ResultSize $MaxRecips ;
                                 write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
-                                write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ; 
+                                #write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ; 
+                                #$hSum.AADUser  = get-AzureAdUser  -objectid $hSum.xoMUser.userPrincipalName -Top $MaxRecips ;
                                 write-verbose "`$hSum.xoMUser:`n$(($hSum.xoMUser|out-string).trim())" ;
                                 #$Rpt += $hSum.OPRemoteMailbox.primarysmtpaddress ;  
                                 write-host "$($txR.ExternalEmailAddress): matches a MailUser object with UPN:$($hSum.xoMUser.userPrincipalName)" ; 
@@ -346,11 +362,11 @@ function resolve-user {
                             "GuestMailUser" {
                                 #$hSum.OPRemoteMailbox=get-remotemailbox $txR.identity  ;
                                 caad -verbose:$false ; 
-                                get-verbose "`$txR | get-exouser..." ;
-                                $hSum.xoUser = $txR | get-exouser ;
+                                write-verbose "`$txR | get-exouser..." ;
+                                $hSum.xoUser = $txR | get-exouser -ResultSize $MaxRecips ;
                                 write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
                                 write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ; 
-                                $hSum.txGuest = get-AzureAdUser  -objectid $hSum.xoUser.userPrincipalName ;
+                                $hSum.txGuest = get-AzureAdUser  -objectid $hSum.xoUser.userPrincipalName -Top $MaxRecips ;
                                 write-verbose "`$hSum.txGuest:`n$(($hSum.txGuest|out-string).trim())" ;
                                 #$Rpt += $hSum.OPRemoteMailbox.primarysmtpaddress ;  
                                 write-host "$($txR.ExternalEmailAddress): matches a Guest object with UPN:$($hSum.xoUser.userPrincipalName)" ; 
@@ -432,20 +448,51 @@ function resolve-user {
                     $Rpt += $hSum.xoMailbox.primarysmtpaddress ; 
                 } ; 
                 if($hSum.xoMailbox.isdirsynced){
-                    $smsg="(CMW USER, fed:cmw.internal)" ;
-                    $hSum.Federator = 'cmw.internal' ; 
+                    # can be federated to VEN|CMW|Toro
+                    switch -regex ($hSum.xoMailbox.primarysmtpaddress.split('@')[1]){
+                        $CMWMeta.rgxOPFederatedDom {
+                            $smsg="(CMW USER, fed:cmw.internal)" ;
+                            $hSum.Federator = 'cmw.internal' ; 
+                        } 
+                        $TORMeta.rgxOPFederatedDom {
+                            $smsg="(TOR USER, fed:ad.toro.com)" ;
+                            $hSum.Federator = 'ad.toro.com' ; 
+                        } 
+                        $VENMeta.rgxOPFederatedDom {
+                            $smsg="(VEN USER, fed:ventrac)" ;
+                            $hSum.Federator = 'ventrac' ; 
+                        } 
+                        
+                    } ; 
                 } elseif($hSum.xoMuser.IsDirSynced){
-                    $smsg="(CMW USER - Remote Sync'd *FOREIGN* AD (CMW OnPrem mbx?) - fed:cmw.internal)" ;
-                    $hSum.Federator = 'cmw.internal' ; 
+                    switch -regex ($hSum.xoMailbox.primarysmtpaddress.split('@')[1]){
+                        $CMWMeta.rgxOPFederatedDom {
+                            $smsg="(CMW USER, fed:cmw.internal)" ;
+                            $hSum.Federator = 'cmw.internal' ; 
+                        } 
+                        $TORMeta.rgxOPFederatedDom {
+                            $smsg="(TOR USER, fed:ad.toro.com)" ;
+                            $hSum.Federator = 'ad.toro.com' ; 
+                        } 
+                        $VENMeta.rgxOPFederatedDom {
+                            $smsg="(VEN USER, fed:ventrac)" ;
+                            $hSum.Federator = 'ventrac' ; 
+                        } 
+                    } ; 
                 }else{
-                    $smsg="(CLOUD-1ST ACCT, unfederated)" ;
-                    $hSum.Federator = 'Toroco' ; 
+                    if($hsum.xoRcp.primarysmtpaddress -match "@toroco\.onmicrosoft\.com"){ 
+                            $smsg="(CLOUD-1ST ACCT, unfederated)" ;
+                            $hSum.Federator = 'Toroco' ;
+                    } else {
+                        $smsg="(CLOUD-1ST ACCT, unfederated)" ;
+                        $hSum.Federator = 'Toroco' ; 
+                    } ;
                 } ;
                 write-host -Fore yellow $smsg ; 
                 # skip user lookup if guest already pulled it 
                 if(!$hSum.xoUser){
                     write-verbose "get-exouser -id $($hSum.xoMailbox.UserPrincipalName)"
-                    $hSum.xoUser = get-exouser -id $hSum.xoMailbox.UserPrincipalName ; 
+                    $hSum.xoUser = get-exouser -id $hSum.xoMailbox.UserPrincipalName -ResultSize $MaxRecips ; 
                     write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
                 } 
                 if($hSum.xoMailbox){
@@ -470,20 +517,23 @@ function resolve-user {
                 write-warning "(no matching EXOP or EXO recipient object:$($usr))"   
                 # do near Lname[0-3]* searches for comparison
                 if($hSum.lname){
-                    write-warning "Lname ($($hSum.lname) parsed from input,`nattempting similar LName g-rcp:..." ;
+                    write-warning "Lname ($($hSum.lname) parsed from input),`nattempting similar LName g-rcp:...`n(up to `$MaxRecips:$($MaxRecips))" ;
                     $lname = $hsum.lname ;
                     #$fltrB = "displayname -like '*$lname*'" ; 
                     #write-verbose "RETRY:get-recipient -filter {$($fltr)}" ; 
                     #get-recipient "$($txusr.lastname.substring(0,3))*"| sort name
-                    $substring = "$($txusr.lastname.substring(0,3))*"
+                    $substring = "$($hSum.lname.substring(0,3))*"
 
                     write-host "get-recipient -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} :" 
-                    if($hSum.Rcp=get-recipient -id $substring -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
-                        $hSum.Rcp | write-output ;
+                    if($hSum.Rcp=get-recipient -id $substring -ea 0 -ResultSize $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                        #$hSum.Rcp | write-output ;
+                        # $RcpPropsTbl 
+                        write-host -foregroundcolor yellow "`n$(($hSum.Rcp | ft -a $RcpPropsTbl |out-string).trim())" ; 
                     } ;  
                     write-host "get-exorecipient -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} : " 
-                    if($hSum.xoRcp=get-exorecipient -id $substring -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
-                        $hSum.xoRcp | write-output ;
+                    if($hSum.xoRcp=get-exorecipient -id $substring -ea 0 -ResultSize $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                        #$hSum.xoRcp | write-output ;
+                        write-host -foregroundcolor yellow "`n$(($hSum.xoRcp | ft -a $RcpPropsTbl |out-string).trim())" ; 
                     } ;  
 
 
@@ -493,7 +543,10 @@ function resolve-user {
             } ; # don't break, doesn't continue loop
 
 
-            $pltgMU=@{UserPrincipalName=$null} ; 
+            #$pltgMU=@{UserPrincipalName=$null ; MaxResults= $MaxRecips; ErrorAction= 'STOP' } ; 
+            # maxresults is documented: 
+            # but causes a fault with no $error[0], doesn't seem to be functional param, post-filter
+            $pltgMU=@{UserPrincipalName=$null ; ErrorAction= 'STOP' } ; 
             if($hSum.ADUser){$pltgMU.UserPrincipalName = $hSum.ADUser.UserPrincipalName } 
             elseif($hSum.xoMailbox){$pltgMU.UserPrincipalName = $hSum.txMbx.UserPrincipalName }
             elseif($hSum.xoMUser){$pltgMU.UserPrincipalName = $hSum.xoMUser.UserPrincipalName }
@@ -505,7 +558,8 @@ function resolve-user {
                 TRY{
                     cmsol  -Verbose:$false -silent ;
                     write-verbose "get-msoluser w`n$(($pltgMU|out-string).trim())" ; 
-                    $hSum.MsolUser=get-msoluser @pltgMU ;
+                    # have to postfilter, if want specific count -maxresults catch's with no $error[0]
+                    $hSum.MsolUser=get-msoluser @pltgMU | select -first $MaxRecips;  ;
                     write-verbose "`$hSum.MsolUser:`n$(($hSum.MsolUser|out-string).trim())" ;
                 } CATCH {
                     $ErrTrapd=$Error[0] ;

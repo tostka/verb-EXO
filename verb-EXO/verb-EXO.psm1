@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.96.0
+  Version     : 1.0.98.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -5625,6 +5625,171 @@ function move-MailboxToXo{
 
 #*------^ move-MailboxToXo.ps1 ^------
 
+#*------v new-xoDGFromProperty.ps1 v------
+function new-xoDGFromProperty{
+    <#
+    .SYNOPSIS
+    new-xoDGFromProperty.ps1 - run a get-exorecipient to re-resolve an array of Recipients into the matching primarysmtpaddress
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2021-09-02
+    FileName    : new-xoDGFromProperty
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka/verb-XXX
+    Tags        : Powershell
+    AddedCredit : REFERENCE
+    AddedWebsite:	URL
+    AddedTwitter:	URL
+    REVISIONS
+    * 9:45 AM 9/2/2021 rev: added CBH, fixed existing block: Add-DistributionGroupMember -> propr xo alias:ps1AddxDistGrpMbr
+    .DESCRIPTION
+    new-xoDGFromProperty.ps1 - run a get-exorecipient to re-resolve an array of Recipients into the matching primarysmtpaddress
+    .PARAMETER Members
+    Array of Members to be resolved against current Exchange environment [-Members `$members ]
+    .PARAMETER NewDGName
+    Name to be used for New DG to be populated[-NewDGName (`"`$(`$preDDG.name)-ApprovedSenders`
+    .PARAMETER ManagedBy (override; defaults to ManagedBy of specified DDG)# [-ManagedBy `$preDDG.ManagedBy]
+    .PARAMETER useEXOv2
+    Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
+    .PARAMETER Whatif
+    Parameter to run a Test no-change pass [-Whatif switch]
+    .EXAMPLE
+    PS> $pltNxoDGfP=[ordered]@{
+        Members=$preDDG.AcceptMessagesOnlyFrom  ;
+        NewDGName=("$($preDDG.name)-ApprovedSenders") ;
+        ManagedBy=$preDDG.ManagedBy ;
+        whatIf=$true ;
+    } ; 
+    if($nDG = new-xoDGFromProperty @pltNxoDGfP){
+        set-exoDynamicDistributionGroup -id $preDDG.primarysmtpaddress -AcceptMessagesOnlyFromDLMembers $nDG.primarysmtpaddress -AcceptMessagesOnlyFrom $null -whatif ; 
+    } ; 
+    Generate a new DG to host a transplanted recipients value (to shift static AcceptMessagesOnlyFrom to a setparte SD-managable DG).
+    Then demo's updating a the source DDG, adding the new created DG onto the DDG.AcceptMessagesOnlyFromDLMembers, 
+    and blanking the original DDG.AcceptMessagesOnlyFrom.
+    .LINK
+    https://github.com/tostka/verb-Exo
+    #>
+    [CmdletBinding()]
+    PARAM(
+        [Parameter(Mandatory=$False,HelpMessage="Array of Members to be resolved against current Exchange environment [-Members `$members ]")]
+        [array]$Members,
+        [Parameter(Mandatory=$True,HelpMessage="Name to be used for New DG to be populated[-NewDGName (`"`$(`$preDDG.name)-ApprovedSenders`" ;)]")]
+        [string]$NewDGName,
+        [Parameter(Mandatory = $false, HelpMessage = "ManagedBy (override; defaults to ManagedBy of specified DDG)# [-ManagedBy `$preDDG.ManagedBy]")]
+        $ManagedBy,
+        [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
+        [switch] $useEXOv2,
+        [Parameter(HelpMessage="Whatif Flag (defaults true, override -whatif:`$false) [-whatIf]")]
+        [switch]$whatIf
+    ) 
+    if ($script:useEXOv2) { reconnect-eXO2 }
+    else { reconnect-EXO } ;
+    [array]$cmdletMaps = 'ps1GetxRcp;get-exorecipient;','ps1GetxDistGrp;get-exoDistributionGroup',
+        'ps1NewxDistGrp;new-exoDistributionGroup' ,'ps1SetxDistGrp;set-exoDistributionGroup',
+        'ps1GetxDistGrpMbr;get-exoDistributionGroupMember','ps1RmvxDistGrpMbr;remove-exoDistributionGroupMember',
+        'ps1AddxDistGrpMbr;Add-exoDistributionGroupMember','ps1GetxDDG;Get-exoDynamicDistributionGroup',
+        'ps1NewxDDG;New-exoDynamicDistributionGroup','ps1SetxDDG;Set-exoDynamicDistributionGroup',
+        'ps1GetxOrgCfg;Get-exoOrganizationConfig' ;
+    foreach($cmdletMap in $cmdletMaps){
+        if($script:useEXOv2){
+            if(!($cmdlet= Get-Command $cmdletMap.split(';')[1].replace('-exo','-xo') )){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
+            $nAName = ($cmdletMap.split(';')[0]) ;
+            if(-not(get-alias -name $naname -ea 0 |?{$_.Definition -eq $cmdlet.name})){
+                $nalias = set-alias -name $nAName -value ($cmdlet.name) -passthru ;
+                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+            } ;
+        } else {
+            if(!($cmdlet= Get-Command $cmdletMap.split(';')[1])){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
+            $nAName = ($cmdletMap.split(';')[0]);
+            if(-not(get-alias -name $naname -ea 0 |?{$_.Definition -eq $cmdlet.name})){
+                $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
+                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+            } ;
+        } ;
+    } ; 
+    if($ManagedBy){$oManagedBy = ps1GetxRcp $ManagedBy -ea 'STOP' | select -expand primarysmtpaddress  | select -unique ;} ; 
+    if($members){
+        $members = $members | ps1GetxRcp -ErrorAction Continue | select -expand primarysmtpaddress  | select -unique ;
+    } ; 
+    $pltNDG=[ordered]@{
+        DisplayName=$NewDGName;
+        Name=$NewDGName;
+        Members=$members ;
+        #DomainController=$domaincontroller;
+        Alias=([System.Text.RegularExpressions.Regex]::Replace($NewDGName,"[^1-9a-zA-Z_]",""));
+        ManagedBy=$oManagedBy;
+        #OrganizationalUnit = (get-organizationalunit (($preDDG.DistinguishedName.tostring().split(",") | select -Skip 1) -join ",").tostring()).CanonicalName ;
+        ErrorAction = 'Stop' ; 
+        whatif=$($whatif);
+    } ; 
+    if($existDG=ps1GetxDistGrp -id $pltndg.alias -ResultSize 1 -ea 0){
+        $pltSetDG=[ordered]@{
+            identity = $existDG.primarysmtpaddress ; 
+            #Members=$members ; # not supported have to add-DistributionGroupMember them in on existings
+            #DomainController=$domaincontroller;
+            ManagedBy=$oManagedBy;
+            whatif=$($whatif);
+            ErrorAction = 'Stop' ; 
+        } ; 
+        $smsg = "UpdateExisting DG:$((get-alias ps1SetxDistGrp).definition)  w`n$(($pltSetDG|out-string).trim())" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        ps1SetxDistGrp @pltSetDG ;
+        # pre-purge
+        $prembrs = ps1GetxDistGrpMbr -id $pltSetDG.identity ;
+        $pltModDGMbr=[ordered]@{identity= $pltSetDG.identity ;whatif = $($whatif) ;erroraction = 'STOP'  ;confirm=$false ;}
+        $smsg = "Clear existing members:$((get-alias ps1RmvxDistGrpMbr).definition) w`n$(($pltModDGMbr|out-string).trim())`n$(($prembrs |out-string).trim())" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        #$prembrs | %{ps1RmvxDistGrpMbr @$pltModDGMbr -Member $_.alias  } ; 
+        $prembrs.distinguishedname | ps1RmvxDistGrpMbr @pltModDGMbr ; 
+        # ps1GetxDistGrpMbr -id $pltSetDG.identity | ps1RmvxDistGrpMbr -id $pltSetDG.identity –whatif:$($whatif) -ea STOP ; 
+        # then add validated from scratch
+        $smsg = "re-add VALIDATED members:add-DistributionGroupMember w`n$(($pltModDGMbr|out-string).trim())`n$(($members|out-string).trim())" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $members | ps1AddxDistGrpMbr @pltModDGMbr ; 
+        $pdg =  ps1GetxDistGrp -id $pltSetDG.identity ;
+    } else { 
+        $smsg = "$((get-alias ps1NewxDistGrp).definition)  w`n$(($pltNDG|out-string).trim())" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $pdg = ps1NewxDistGrp @pltNDG ;
+    } ; 
+    if(!$whatif){
+        # was getting notfounds, trying to update the $pdg, so re-qry it from scratch, if it comes back it's *there* for updates
+        $1F=$false ;Do {if($1F){Sleep -s 5} ;  write-host "." -NoNewLine ; $1F=$true ; } Until ($existDG = ps1GetxDistGrp $pltNDG.alias -EA 0) ;
+        # set hidden (can't be done with new-dg command): -HiddenFromAddressListsEnabled
+        $pltSetDG=[ordered]@{
+            identity = $existDG.primarysmtpaddress ; 
+            HiddenFromAddressListsEnabled = $true ; 
+            whatif=$($whatif);
+            ErrorAction = 'Stop' ; 
+        } ; 
+        $smsg = "HiddenFromAddressListsEnabled:UpdateExisting DG:$((get-alias ps1SetxDistGrp).definition)  w`n$(($pltSetDG|out-string).trim())" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        ps1SetxDistGrp @pltSetDG ;
+
+        $pdg =  ps1GetxDistGrp -id $pltSetDG.identity ;
+        write-verbose "Returning new DG object to pipeline" ; 
+        $pdg | write-output ; 
+        
+    } else {
+        $smsg = "(-whatif: skipping balance of process)" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $false | write-output ; 
+    }  ;
+
+}
+
+#*------^ new-xoDGFromProperty.ps1 ^------
+
 #*------v Print-Details.ps1 v------
 function Print-Details{
     <#
@@ -6978,6 +7143,8 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:05 PM 9/3/2021 fixed bugs introduced trying to user MaxResults (msol|aad), which come back param not recog'd when actually used - had to implement as postfiltering to assert open set return limits. ; Also implemented $xxxMeta.rgxOPFederatedDom check to resolve obj primarysmtpaddress to federating AD or AAD.
+    * 11:20 AM 8/30/2021 added $MaxResults (shutdown return-all recips in addr space, on failure to match oprcp or xorcp ; fixed a couple of typos; minior testing/logic improvements. Still needs genercized 7pswlt support.
     * 1:30 PM 8/27/2021 new sniggle: CMW user that has EXOP mbx, remote: Added xoMailUser support, failed through DName lookups to try '*lname*' for near-missies. Could add trailing 'lnamne[0-=3]* searches, if not rcp/xrcps found...
     * 9:16 AM 8/18/2021 $xMProps: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
     * 12:40 PM 8/17/2021 added -outObject, outputs a full descriptive object for each resolved recipient ; added a $hSum hash and shifted all the varis into mountpoints in the hash, with -outObject, the entire hash is conv'd to an obj and appended to $Rpt ; renamed most of the varis/as objects very clearly for what they are, as sub-props of the output objects. Wo -outobject, the usual comma-delim'd string of addresses is output.
@@ -7039,6 +7206,7 @@ function resolve-user {
         $rgxDName = "^([a-zA-Z]{2,}\s[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ; 
         $rgxSamAcctNameTOR = "^\w{2,20}$" ; # up to 20k, the limit prior to win2k
         #$rgxSamAcctName = "^[^\/\\\[\]:;|=,+?<>@?]+$" # no char limit ;
+        $MaxRecips = 25 ; # max number of objects to permit on a return resultsize/,ResultSetSize, to prevent empty set return of everything in the addressspace
 
         if(!$users){
             $users= (get-clipboard).trim().replace("'",'').replace('"','') ; 
@@ -7079,7 +7247,8 @@ function resolve-user {
                 xoUser = $null ; 
                 xoMemberOf = $null ; 
                 txGuest = $null ; 
-                MsolUser = $null ; 
+                MsolUser = $null ;
+                AADUser = $null ; # added for MailUser variant 
                 LicenseGroup = $null ; 
             } ;
             $procd++ ; 
@@ -7121,13 +7290,16 @@ function resolve-user {
             $adprops = 'samaccountname','UserPrincipalName','distinguishedname' ; 
             $aaduprops = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
             $aaduFedProps = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
+            $RcpPropsTbl = 'Alias','PrimarySmtpAddress','RecipientType','RecipientTypeDetails' ; 
 
             $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ; 
             $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ; 
             write-host -foreground yellow "get-Rmbx/xMbx: " -nonewline;
 
             # $isEml=$isDname=$isSamAcct=$false ; 
-            $pltgM=[ordered]@{} ; 
+            $pltgM=[ordered]@{
+                ResultSize = $MaxRecips ; 
+            } ; 
             if($isEml -OR $isSamAcct){
                 write-verbose "processing:'identity':$($usr)" ; 
                 $pltgM.add('identity',$usr) ;
@@ -7181,12 +7353,12 @@ function resolve-user {
                 $lname = $hsum.lname ;
                 $fltrB = "displayname -like '*$lname*'" ; 
                 write-verbose "RETRY:get-recipient -filter {$($fltr)}" ; 
-                if($hSum.xoRcp=get-exorecipient -filter $fltr -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
+                if($hSum.xoRcp=get-exorecipient -filter $fltr -ea 0 -ResultSize $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
                     write-verbose "`$hSum.xoRcp found" ;     
                 } ;  
             } 
             if(!$hsum.xoRcp){
-                $smsg = "Failed to get-exorecipient on:$(usr)"
+                $smsg = "Failed to get-exorecipient on:$($usr)"
                 if($isDname){$smsg += " or *$($hsum.lname )*"} ;
                 write-host $smsg ;
             } else { 
@@ -7199,7 +7371,7 @@ function resolve-user {
                     switch -regex ($hSum.OPRcp.recipienttype){
                         "UserMailbox" {
                             write-verbose "'UserMailbox':get-mailbox $($hSum.OPRcp.identity)"
-                            $hSum.OPMailbox=get-mailbox $hSum.OPRcp.identity ;
+                            $hSum.OPMailbox=get-mailbox $hSum.OPRcp.identity -resultsize $MaxRecips ;
                             write-verbose "`$hSum.OPMailbox:`n$(($hSum.OPMailbox|out-string).trim())" ; 
                             if($outObject){
 
@@ -7209,7 +7381,7 @@ function resolve-user {
                         } 
                         "MailUser" {
                             write-verbose "'MailUser':get-remotemailbox $($hSum.OPRcp.identity)"
-                            $hSum.OPRemoteMailbox=get-remotemailbox $hSum.OPRcp.identity  ;
+                            $hSum.OPRemoteMailbox=get-remotemailbox $hSum.OPRcp.identity -resultsize $MaxRecips  ;
                             write-verbose "`$hSum.OPRemoteMailbox:`n$(($hSum.OPRemoteMailbox|out-string).trim())" ; 
                             if($outObject){
 
@@ -7222,9 +7394,17 @@ function resolve-user {
                             Break ; 
                         }
                     }
-                    $pltGadu=[ordered]@{Identity = $null ; Properties='*' ;errorAction='STOP'} ;
+                    <# get-aduser docs say REsultSetSize is documented,
+                    [Get-ADUser (ActiveDirectory) | Microsoft Docs - docs.microsoft.com/](https://docs.microsoft.com/en-us/powershell/module/activedirectory/get-aduser?view=windowsserver2019-ps)
+                     but use of it throws: Parameter set cannot be resolved using the specified named parameters.
+                     pull it and post filter to 1...
+                    #> 
+                    #ResultSetSize = $MaxRecips 
+                    #$pltGadu=[ordered]@{Identity = $null ; Properties='*' ;errorAction='STOP' ; } ;
+                    $pltGadu=[ordered]@{Identity = $null ; Properties=$adprops ;errorAction='STOP' ; } ;
                     if($hSum.OPRemoteMailbox ){
-                        $pltGadu.identity = $hSum.OPRemoteMailbox.samaccountname;
+                        # get-aduser dox but doesn't really support ResultSetSize, post filter for it.
+                        $pltGadu.identity = $hSum.OPRemoteMailbox.samaccountname ;
                     }elseif($hSum.OPMailbox){
                         $pltGadu.identity = $hSum.OPMailbox.samaccountname ;
                     } ; 
@@ -7242,7 +7422,7 @@ function resolve-user {
                         # try a nested local trycatch, against a missing result
                         Try {
                             #Get-ADUser $DN -ErrorAction Stop ; 
-                            $hSum.ADUser =Get-ADUser @pltGadu ;
+                            $hSum.ADUser =Get-ADUser @pltGadu | select -first $MaxRecips ;
                         } Catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
                             write-warning "(no matching ADuser found:$($pltGadu.identity))" ; 
                         } catch {
@@ -7274,7 +7454,7 @@ function resolve-user {
                         switch -regex ($txR.recipienttypedetails){
                             "UserMailbox" {
                                 write-verbose "get-exomailbox w`n$(($pltgM|out-string).trim())" ; 
-                                $hSum.xoMailbox=get-exomailbox @pltgM -ea 0 ;
+                                $hSum.xoMailbox=get-exomailbox @pltgM -ea 0  ; 
                                 write-verbose "`$hSum.xoMailbox:`n$(($hSum.xoMailbox|out-string).trim())" ; 
                                 if($outObject){
 
@@ -7288,11 +7468,12 @@ function resolve-user {
                                 #$hSum.OPRemoteMailbox=get-remotemailbox $txR.identity  ;
                                 caad -silent -verbose:$false ; 
                                 write-verbose "`$txR | get-exoMailuser..." ;
-                                $hSum.xoMUser = $txR | get-exoMailuser ;
+                                $hSum.xoMUser = $txR | get-exoMailuser -ResultSize $MaxRecips ;
                                 write-verbose "`$txR | get-exouser..." ;
-                                $hSum.xoUser = $txR | get-exouser ;
+                                $hSum.xoUser = $txR | get-exouser -ResultSize $MaxRecips ;
                                 write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
-                                write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ; 
+                                #write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ; 
+                                #$hSum.AADUser  = get-AzureAdUser  -objectid $hSum.xoMUser.userPrincipalName -Top $MaxRecips ;
                                 write-verbose "`$hSum.xoMUser:`n$(($hSum.xoMUser|out-string).trim())" ;
                                 #$Rpt += $hSum.OPRemoteMailbox.primarysmtpaddress ;  
                                 write-host "$($txR.ExternalEmailAddress): matches a MailUser object with UPN:$($hSum.xoMUser.userPrincipalName)" ; 
@@ -7306,11 +7487,11 @@ function resolve-user {
                             "GuestMailUser" {
                                 #$hSum.OPRemoteMailbox=get-remotemailbox $txR.identity  ;
                                 caad -verbose:$false ; 
-                                get-verbose "`$txR | get-exouser..." ;
-                                $hSum.xoUser = $txR | get-exouser ;
+                                write-verbose "`$txR | get-exouser..." ;
+                                $hSum.xoUser = $txR | get-exouser -ResultSize $MaxRecips ;
                                 write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
                                 write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ; 
-                                $hSum.txGuest = get-AzureAdUser  -objectid $hSum.xoUser.userPrincipalName ;
+                                $hSum.txGuest = get-AzureAdUser  -objectid $hSum.xoUser.userPrincipalName -Top $MaxRecips ;
                                 write-verbose "`$hSum.txGuest:`n$(($hSum.txGuest|out-string).trim())" ;
                                 #$Rpt += $hSum.OPRemoteMailbox.primarysmtpaddress ;  
                                 write-host "$($txR.ExternalEmailAddress): matches a Guest object with UPN:$($hSum.xoUser.userPrincipalName)" ; 
@@ -7392,20 +7573,51 @@ function resolve-user {
                     $Rpt += $hSum.xoMailbox.primarysmtpaddress ; 
                 } ; 
                 if($hSum.xoMailbox.isdirsynced){
-                    $smsg="(CMW USER, fed:cmw.internal)" ;
-                    $hSum.Federator = 'cmw.internal' ; 
+                    # can be federated to VEN|CMW|Toro
+                    switch -regex ($hSum.xoMailbox.primarysmtpaddress.split('@')[1]){
+                        $CMWMeta.rgxOPFederatedDom {
+                            $smsg="(CMW USER, fed:cmw.internal)" ;
+                            $hSum.Federator = 'cmw.internal' ; 
+                        } 
+                        $TORMeta.rgxOPFederatedDom {
+                            $smsg="(TOR USER, fed:ad.toro.com)" ;
+                            $hSum.Federator = 'ad.toro.com' ; 
+                        } 
+                        $VENMeta.rgxOPFederatedDom {
+                            $smsg="(VEN USER, fed:ventrac)" ;
+                            $hSum.Federator = 'ventrac' ; 
+                        } 
+                        
+                    } ; 
                 } elseif($hSum.xoMuser.IsDirSynced){
-                    $smsg="(CMW USER - Remote Sync'd *FOREIGN* AD (CMW OnPrem mbx?) - fed:cmw.internal)" ;
-                    $hSum.Federator = 'cmw.internal' ; 
+                    switch -regex ($hSum.xoMailbox.primarysmtpaddress.split('@')[1]){
+                        $CMWMeta.rgxOPFederatedDom {
+                            $smsg="(CMW USER, fed:cmw.internal)" ;
+                            $hSum.Federator = 'cmw.internal' ; 
+                        } 
+                        $TORMeta.rgxOPFederatedDom {
+                            $smsg="(TOR USER, fed:ad.toro.com)" ;
+                            $hSum.Federator = 'ad.toro.com' ; 
+                        } 
+                        $VENMeta.rgxOPFederatedDom {
+                            $smsg="(VEN USER, fed:ventrac)" ;
+                            $hSum.Federator = 'ventrac' ; 
+                        } 
+                    } ; 
                 }else{
-                    $smsg="(CLOUD-1ST ACCT, unfederated)" ;
-                    $hSum.Federator = 'Toroco' ; 
+                    if($hsum.xoRcp.primarysmtpaddress -match "@toroco\.onmicrosoft\.com"){ 
+                            $smsg="(CLOUD-1ST ACCT, unfederated)" ;
+                            $hSum.Federator = 'Toroco' ;
+                    } else {
+                        $smsg="(CLOUD-1ST ACCT, unfederated)" ;
+                        $hSum.Federator = 'Toroco' ; 
+                    } ;
                 } ;
                 write-host -Fore yellow $smsg ; 
                 # skip user lookup if guest already pulled it 
                 if(!$hSum.xoUser){
                     write-verbose "get-exouser -id $($hSum.xoMailbox.UserPrincipalName)"
-                    $hSum.xoUser = get-exouser -id $hSum.xoMailbox.UserPrincipalName ; 
+                    $hSum.xoUser = get-exouser -id $hSum.xoMailbox.UserPrincipalName -ResultSize $MaxRecips ; 
                     write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
                 } 
                 if($hSum.xoMailbox){
@@ -7430,20 +7642,23 @@ function resolve-user {
                 write-warning "(no matching EXOP or EXO recipient object:$($usr))"   
                 # do near Lname[0-3]* searches for comparison
                 if($hSum.lname){
-                    write-warning "Lname ($($hSum.lname) parsed from input,`nattempting similar LName g-rcp:..." ;
+                    write-warning "Lname ($($hSum.lname) parsed from input),`nattempting similar LName g-rcp:...`n(up to `$MaxRecips:$($MaxRecips))" ;
                     $lname = $hsum.lname ;
                     #$fltrB = "displayname -like '*$lname*'" ; 
                     #write-verbose "RETRY:get-recipient -filter {$($fltr)}" ; 
                     #get-recipient "$($txusr.lastname.substring(0,3))*"| sort name
-                    $substring = "$($txusr.lastname.substring(0,3))*"
+                    $substring = "$($hSum.lname.substring(0,3))*"
 
                     write-host "get-recipient -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} :" 
-                    if($hSum.Rcp=get-recipient -id $substring -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
-                        $hSum.Rcp | write-output ;
+                    if($hSum.Rcp=get-recipient -id $substring -ea 0 -ResultSize $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                        #$hSum.Rcp | write-output ;
+                        # $RcpPropsTbl 
+                        write-host -foregroundcolor yellow "`n$(($hSum.Rcp | ft -a $RcpPropsTbl |out-string).trim())" ; 
                     } ;  
                     write-host "get-exorecipient -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} : " 
-                    if($hSum.xoRcp=get-exorecipient -id $substring -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'}){
-                        $hSum.xoRcp | write-output ;
+                    if($hSum.xoRcp=get-exorecipient -id $substring -ea 0 -ResultSize $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                        #$hSum.xoRcp | write-output ;
+                        write-host -foregroundcolor yellow "`n$(($hSum.xoRcp | ft -a $RcpPropsTbl |out-string).trim())" ; 
                     } ;  
 
 
@@ -7453,7 +7668,10 @@ function resolve-user {
             } ; # don't break, doesn't continue loop
 
 
-            $pltgMU=@{UserPrincipalName=$null} ; 
+            #$pltgMU=@{UserPrincipalName=$null ; MaxResults= $MaxRecips; ErrorAction= 'STOP' } ; 
+            # maxresults is documented: 
+            # but causes a fault with no $error[0], doesn't seem to be functional param, post-filter
+            $pltgMU=@{UserPrincipalName=$null ; ErrorAction= 'STOP' } ; 
             if($hSum.ADUser){$pltgMU.UserPrincipalName = $hSum.ADUser.UserPrincipalName } 
             elseif($hSum.xoMailbox){$pltgMU.UserPrincipalName = $hSum.txMbx.UserPrincipalName }
             elseif($hSum.xoMUser){$pltgMU.UserPrincipalName = $hSum.xoMUser.UserPrincipalName }
@@ -7465,7 +7683,8 @@ function resolve-user {
                 TRY{
                     cmsol  -Verbose:$false -silent ;
                     write-verbose "get-msoluser w`n$(($pltgMU|out-string).trim())" ; 
-                    $hSum.MsolUser=get-msoluser @pltgMU ;
+                    # have to postfilter, if want specific count -maxresults catch's with no $error[0]
+                    $hSum.MsolUser=get-msoluser @pltgMU | select -first $MaxRecips;  ;
                     write-verbose "`$hSum.MsolUser:`n$(($hSum.MsolUser|out-string).trim())" ;
                 } CATCH {
                     $ErrTrapd=$Error[0] ;
@@ -7506,6 +7725,99 @@ function resolve-user {
  }
 
 #*------^ resolve-user.ps1 ^------
+
+#*------v resolve-xoRcps.ps1 v------
+function Resolve-xoRcps {
+    <#
+    .SYNOPSIS
+    Resolve-xoRcps.ps1 - run a get-exorecipient to re-resolve an array of Recipients into the matching primarysmtpaddress
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2021-09-02
+    FileName    : Resolve-xoRcps
+    License     : MIT License
+    Copyright   : (c) 2020 Todd Kadrie
+    Github      : https://github.com/tostka/verb-XXX
+    Tags        : Powershell
+    AddedCredit : REFERENCE
+    AddedWebsite:	URL
+    AddedTwitter:	URL
+    REVISIONS
+    .DESCRIPTION
+    Resolve-xoRcps.ps1 - run a get-exorecipient to re-resolve an array of Recipients into the matching primarysmtpaddress
+    .PARAMETER Recipients
+    Array of Recipients to be resolved against current Exchange environment [-Recipients `$ModeratedBy ]
+    .PARAMETER MatchRecipientTypeDetails
+    Regex for RecipientTypeDetails value to require for matched Recipients [-MatchRecipientTypeDetails '(UserMailbox|MailUser)']
+    .PARAMETER BlockRecipientTypeDetails
+    Regex for RecipientTypeDetails value to filter out of matched Recipients [-Block '(MailContact|GuestUser)']
+    .PARAMETER useEXOv2
+    Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
+    .PARAMETER Whatif
+    Parameter to run a Test no-change pass [-Whatif switch]
+    .EXAMPLE
+    PS> .\Resolve-xoRcps.ps1
+    .EXAMPLE
+    PS> if($pltSDdg.RejectMessagesFrom){
+            $pltSDdg.RejectMessagesFrom = (Resolve-xoRcps -Recipients $srcDg.RejectMessagesFrom -MatchRecipientTypeDetails '(UserMailbox|MailUser|MailContact)' -Verbose:($VerbosePreference -eq 'Continue') )  ; 
+        } ;
+        Resolve recip designators on the RejectMessagesFrom value, to EXO recipient objects, and return the primarysmtpaddress
+    .LINK
+    https://github.com/tostka/verb-EXO
+    #>
+    [CmdletBinding()]
+    PARAM(
+        [Parameter(Mandatory=$True,HelpMessage="Array of Recipients to be resolved against current Exchange environment [-Recipients `$ModeratedBy ]")]
+        [array]$Recipients,
+        [Parameter(HelpMessage="Regex for RecipientTypeDetails value to require for matched Recipients [-MatchRecipientTypeDetails '(UserMailbox|MailUser)']")]
+        [string]$MatchRecipientTypeDetails,
+        [Parameter(HelpMessage="Regex for RecipientTypeDetails value to filter out of matched Recipients [-Block '(MailContact|GuestUser)']")]
+        [string]$BlockRecipientTypeDetails,
+        [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
+        [switch] $useEXOv2
+    ) 
+    if ($script:useEXOv2) { reconnect-eXO2 }
+    [array]$cmdletMaps = 'ps1GetxRcp;get-exorecipient;' ;
+    foreach($cmdletMap in $cmdletMaps){
+        if($script:useEXOv2){
+            if(!($cmdlet= Get-Command $cmdletMap.split(';')[1].replace('-exo','-xo') )){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
+            $nAName = ($cmdletMap.split(';')[0]) ; 
+            if(!($nalias = get-alias -name $nAName -ea 0 )){
+                $nalias = set-alias -name $nAName -value ($cmdlet.name) -passthru ;
+                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+            } ;
+        } else {
+            if(!($cmdlet= Get-Command $cmdletMap.split(';')[1])){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
+            $nAName = ($cmdletMap.split(';')[0]);
+            if(!($nalias = get-alias -name $nAName -ea 0 )){
+                $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
+                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+            } ; 
+        } ;
+    } ;
+    if ($script:useEXOv2) { reconnect-eXO2 }
+    else { reconnect-EXO } ;
+    if($Recipients){
+        $resolvedRecipients = $Recipients | foreach-object {
+            ps1GetxRcp $_ 
+        } ; 
+        if($MatchRecipientTypeDetails){
+            $resolvedRecipients = $resolvedRecipients |?{$_.RecipientTypeDetails -match $MatchRecipientTypeDetails} ; 
+        } ; 
+        if($BlockRecipientTypeDetails){
+            $resolvedRecipients = $resolvedRecipients |?{$_.RecipientTypeDetails -notmatch $BlockRecipientTypeDetails} ; 
+        } ; 
+        $resolvedRecipients.primarysmtpaddress |write-output ;
+    } else { 
+        write-host "No Recipients specified" ;
+        $null | write-output ;
+    } ; 
+}
+
+#*------^ resolve-xoRcps.ps1 ^------
 
 #*------v rxo2cmw.ps1 v------
 function rxo2CMW {
@@ -9353,14 +9665,14 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,resolve-Name,resolve-user,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,Test-Uri,test-xoMailbox,_cleanup -Alias *
+Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,new-xoDGFromProperty,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,resolve-Name,resolve-user,Resolve-xoRcps,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,Test-Uri,test-xoMailbox,_cleanup -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUZHI4Y34g7sqsDbQjPNhFMPW3
-# Y86gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUz3oXt9UxLZdDwjqYPXEWfGZI
+# RQqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -9375,9 +9687,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQ0VABW
-# AxGNfxl9uM4e4Ko1AwVz0TANBgkqhkiG9w0BAQEFAASBgE17ThRk1+MiSkLVQXFa
-# sjiR8WwtDOh6LrVYC0H4QSllpQLPkF60WBoGF4DHJEVDueEZeeVDQ79LKMFLrCCx
-# 6dDsRf1EMfTDeXZUvKtzBg+t3754M3s6RYLqt259lTcUA/bG4eu/KIVpBJZRWs24
-# nJz5Bo6iX8U5rm5K5+3IayNp
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRSfToQ
+# 8lv2FOoNBjyhH4JPlbss4jANBgkqhkiG9w0BAQEFAASBgD19riU2ALTzawJidy/g
+# UnlNav8Z7fyN+Rpik09jgbeSMxlUhmHrdqXFDDXEr1ORw2ppnI1yHVZVjxLEcXS3
+# Yq71fga1CTFGmkD7lL1iuLOlcv6pTMQeZWFinqe1jmvfbazaFs7nb8efloq8dFkC
+# rpZiAadf1md5Z5Otnhhinv7c
 # SIG # End signature block
