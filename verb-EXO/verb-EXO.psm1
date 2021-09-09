@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.98.0
+  Version     : 1.0.99.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -7143,6 +7143,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 10:56 AM 9/9/2021 force-resolve xoMailbox, added AADUser pop to the msoluser pop block
     * 3:05 PM 9/3/2021 fixed bugs introduced trying to user MaxResults (msol|aad), which come back param not recog'd when actually used - had to implement as postfiltering to assert open set return limits. ; Also implemented $xxxMeta.rgxOPFederatedDom check to resolve obj primarysmtpaddress to federating AD or AAD.
     * 11:20 AM 8/30/2021 added $MaxResults (shutdown return-all recips in addr space, on failure to match oprcp or xorcp ; fixed a couple of typos; minior testing/logic improvements. Still needs genercized 7pswlt support.
     * 1:30 PM 8/27/2021 new sniggle: CMW user that has EXOP mbx, remote: Added xoMailUser support, failed through DName lookups to try '*lname*' for near-missies. Could add trailing 'lnamne[0-=3]* searches, if not rcp/xrcps found...
@@ -7667,6 +7668,12 @@ function resolve-user {
 
             } ; # don't break, doesn't continue loop
 
+            # 10:42 AM 9/9/2021 force populate the xoMailbox, ALWAYS - need for xbrain ids
+            if($hSum.xoRcp.recipienttypedetails -eq 'UserMailbox' -AND -not($hSum.xoMailbox)){
+                write-verbose "get-exomailbox w`n$(($pltgM|out-string).trim())" ; 
+                $hSum.xoMailbox=get-exomailbox @pltgM -ea 0  ; 
+                write-verbose "`$hSum.xoMailbox:`n$(($hSum.xoMailbox|out-string).trim())" ; 
+            } ;
 
             #$pltgMU=@{UserPrincipalName=$null ; MaxResults= $MaxRecips; ErrorAction= 'STOP' } ; 
             # maxresults is documented: 
@@ -7693,6 +7700,29 @@ function resolve-user {
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Continue ; 
                 } ; 
+
+                if(-not($hSum.AADUser)){
+                    #write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ; 
+                    #$hSum.AADUser  = get-AzureAdUser  -objectid $hSum.xoMUser.userPrincipalName -Top $MaxRecips ;
+                    write-host -foregroundcolor yellow "=get-AADuser $($pltgMU.UserPrincipalName):(licences)>:" ;
+                    TRY{
+                        caad  -Verbose:$false -silent ;
+                        write-verbose "get-AzureAdUser  -objectid $($pltgMU.UserPrincipalName)" ; 
+                        # have to postfilter, if want specific count -maxresults catch's with no $error[0]
+                        $hSum.AADUser  = get-AzureAdUser  -objectid $pltgMU.UserPrincipalName  | select -first $MaxRecips;  ;
+                        #write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser|out-string).trim())" ;
+                        # ObjectId                             DisplayName   UserPrincipalName      UserType
+                        write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser| ft -auto ObjectId,DisplayName,UserPrincipalName,UserType |out-string).trim())" ;
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Continue ; 
+                    } ; 
+
+                } ;
+
                 $smsg = "$(($hSum.MsolUser|fl $lProps|out-string).trim())`n" ;
                 $smsg += "Licenses Assigned:$(($hSum.MsolUser.licenses.AccountSkuId -join '; '|out-string).trim())" ; 
                 write-host $smsg ; 
@@ -7702,6 +7732,9 @@ function resolve-user {
                 if($hSum.LicenseGroup){$smsg = "LicenseGroup:$($hSum.LicenseGroup)"}
                 else{$smsg = "LicenseGroup:(unresolved, direct-assigned other?)" } ; 
                 write-host $smsg ; 
+
+
+
             } ; 
             
             if($outObject){
@@ -9671,8 +9704,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUz3oXt9UxLZdDwjqYPXEWfGZI
-# RQqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUVoTiwTW2SfTFncXnfKuDAfHu
+# n8WgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -9687,9 +9720,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRSfToQ
-# 8lv2FOoNBjyhH4JPlbss4jANBgkqhkiG9w0BAQEFAASBgD19riU2ALTzawJidy/g
-# UnlNav8Z7fyN+Rpik09jgbeSMxlUhmHrdqXFDDXEr1ORw2ppnI1yHVZVjxLEcXS3
-# Yq71fga1CTFGmkD7lL1iuLOlcv6pTMQeZWFinqe1jmvfbazaFs7nb8efloq8dFkC
-# rpZiAadf1md5Z5Otnhhinv7c
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTRQHnK
+# x2TBL/pDUepJkO2nT8Gf9DANBgkqhkiG9w0BAQEFAASBgEYuf95Xyy4Jwfki0qJq
+# Jp58yz0j+DoRjLL/tRp8HN02i/FfO7tDeZzlCge2EG3NTq9NV3Uf3t1yQFIhIKli
+# 1I2W1gPy1yNn/xVexIZMY63n862MIsGkxfdpRD4iZzS7sLvU+qbm3TrmhL1rAd1A
+# 25x0Ue4BEWlc7xPZ3WllqWL4
 # SIG # End signature block

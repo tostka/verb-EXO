@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 10:56 AM 9/9/2021 force-resolve xoMailbox, added AADUser pop to the msoluser pop block; added test-xxMapiConnectivity as well; expanded ADU outputs - description, when*, Enabled, to look for terms/recent-hires/disabled accts
     * 3:05 PM 9/3/2021 fixed bugs introduced trying to user MaxResults (msol|aad), which come back param not recog'd when actually used - had to implement as postfiltering to assert open set return limits. ; Also implemented $xxxMeta.rgxOPFederatedDom check to resolve obj primarysmtpaddress to federating AD or AAD.
     * 11:20 AM 8/30/2021 added $MaxResults (shutdown return-all recips in addr space, on failure to match oprcp or xorcp ; fixed a couple of typos; minior testing/logic improvements. Still needs genercized 7pswlt support.
     * 1:30 PM 8/27/2021 new sniggle: CMW user that has EXOP mbx, remote: Added xoMailUser support, failed through DName lookups to try '*lname*' for near-missies. Could add trailing 'lnamne[0-=3]* searches, if not rcp/xrcps found...
@@ -122,6 +123,8 @@ function resolve-user {
                 xoUser = $null ; 
                 xoMemberOf = $null ; 
                 txGuest = $null ; 
+                OPMapiTest = $null ;
+                xoMapiTest = $null ; 
                 MsolUser = $null ;
                 AADUser = $null ; # added for MailUser variant 
                 LicenseGroup = $null ; 
@@ -162,7 +165,7 @@ function resolve-user {
             $xMProps='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','IsDirSynced','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
             $XMFedProps = 'samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ; ;
             $lProps = @{Name='HasLic'; Expression={$_.IsLicensed }},@{Name='LicIssue'; Expression={$_.LicenseReconciliationNeeded }} ;
-            $adprops = 'samaccountname','UserPrincipalName','distinguishedname' ; 
+            $adprops = 'samaccountname','UserPrincipalName','distinguishedname','Description','title','whenCreated','whenChanged' ; 
             $aaduprops = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
             $aaduFedProps = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
             $RcpPropsTbl = 'Alias','PrimarySmtpAddress','RecipientType','RecipientTypeDetails' ; 
@@ -246,12 +249,16 @@ function resolve-user {
                     switch -regex ($hSum.OPRcp.recipienttype){
                         "UserMailbox" {
                             write-verbose "'UserMailbox':get-mailbox $($hSum.OPRcp.identity)"
-                            $hSum.OPMailbox=get-mailbox $hSum.OPRcp.identity -resultsize $MaxRecips ;
-                            write-verbose "`$hSum.OPMailbox:`n$(($hSum.OPMailbox|out-string).trim())" ; 
-                            if($outObject){
+                            if($hSum.OPMailbox=get-mailbox $hSum.OPRcp.identity -resultsize $MaxRecips){ ;
+                                write-verbose "`$hSum.OPMailbox:`n$(($hSum.OPMailbox|out-string).trim())" ; 
+                                if($outObject){
 
-                            } else { 
-                                $Rpt += $hSum.OPMailbox.primarysmtpaddress ; 
+                                } else { 
+                                    $Rpt += $hSum.OPMailbox.primarysmtpaddress ; 
+                                } ; 
+                                write-verbose "'UserMailbox':get-mailbox $($hSum.OPMailbox.userprincipalname)"
+                                $hSum.OPMapiTest = Test-MAPIConnectivity -identity $hSum.OPMailbox.userprincipalname ; 
+                                write-host -foreground yellow "Outlook (MAPI) Access Test Result:$($hsum.OPMapiTest.result)" ;
                             } ; 
                         } 
                         "MailUser" {
@@ -312,8 +319,15 @@ function resolve-user {
                         $smsg = "(TOR USER, fed:ad.toro.com)" ; 
                         $hSum.Federator = 'ad.toro.com' ; 
                         write-host -Fore yellow $smsg ; 
-                        if($hSum.OPRemoteMailbox){$smsg = "$(($hSum.OPRemoteMailbox |fl $xMProps|out-string).trim())`n-Title:$($hSum.ADUser.Title)" } ; 
-                        if($hSum.OPMailbox){$smsg =  "$(($hSum.OPMailbox |fl $xMProps|out-string).trim())`n-Title:$($hSum.ADUser.Title)" } ; 
+                        if($hSum.OPRemoteMailbox){
+                            $smsg = "$(($hSum.OPRemoteMailbox |fl $xMProps|out-string).trim())"
+                            #$smsg += "`n-Title:$($hSum.ADUser.Title)" 
+                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                        } ; 
+                        if($hSum.OPMailbox){
+                            $smsg =  "$(($hSum.OPMailbox |fl $xMProps|out-string).trim())" ; 
+                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                        } ; 
                         write-host $smsg ;
                     } ; 
                 } CATCH {
@@ -329,14 +343,18 @@ function resolve-user {
                         switch -regex ($txR.recipienttypedetails){
                             "UserMailbox" {
                                 write-verbose "get-exomailbox w`n$(($pltgM|out-string).trim())" ; 
-                                $hSum.xoMailbox=get-exomailbox @pltgM -ea 0  ; 
-                                write-verbose "`$hSum.xoMailbox:`n$(($hSum.xoMailbox|out-string).trim())" ; 
-                                if($outObject){
+                                if($hSum.xoMailbox=get-exomailbox @pltgM -ea 0){
+                                    write-verbose "`$hSum.xoMailbox:`n$(($hSum.xoMailbox|out-string).trim())" ; 
+                                    if($outObject){
 
-                                } else { 
-                                    $Rpt += $hSum.xoMailbox.primarysmtpaddress ; 
+                                    } else { 
+                                        $Rpt += $hSum.xoMailbox.primarysmtpaddress ; 
+                                    } ; 
+                                    write-verbose "'xoUserMailbox':Test-exoMAPIConnectivity $($hSum.xoMailbox.userprincipalname)"
+                                    $hSum.xoMapiTest = Test-exoMAPIConnectivity -identity $hSum.xoMailbox.userprincipalname ; 
+                                    write-host -foreground yellow "Outlook (xoMAPI) Access Test Result:$($hsum.xoMapiTest.result)" ;
+                                    break ; 
                                 } ; 
-                                break ; 
                             } 
                             "MailUser" {
                                 # external mail recipient, *not* in TTC - likely in other rgs, and migrated to remote EXOP enviro
@@ -430,8 +448,15 @@ function resolve-user {
                         $smsg = "(TOR USER, fed:ad.toro.com)" ;
                         $hSum.Federator = 'ad.toro.com' ;  
                         write-host -Fore yellow $smsg ; 
-                        if($hSum.OPRemoteMailbox){$smsg = "$(($hSum.OPRemoteMailbox |fl $xMProps|out-string).trim())`n-Title:$($hSum.ADUser.Title)" } ; 
-                        if($hSum.OPMailbox){$smsg =  "$(($hSum.OPMailbox |fl $xMProps|out-string).trim())`n-Title:$($hSum.ADUser.Title)" } ; 
+                        if($hSum.OPRemoteMailbox){
+                            $smsg = "$(($hSum.OPRemoteMailbox |fl $xMProps|out-string).trim())"
+                            #$smsg += "`n-Title:$($hSum.ADUser.Title)" 
+                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                        } ; 
+                        if($hSum.OPMailbox){
+                            $smsg =  "$(($hSum.OPMailbox |fl $xMProps|out-string).trim())" ; 
+                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                        } ; 
                         write-host $smsg ;
                     } ; 
                 } CATCH {
@@ -483,6 +508,7 @@ function resolve-user {
                     if($hsum.xoRcp.primarysmtpaddress -match "@toroco\.onmicrosoft\.com"){ 
                             $smsg="(CLOUD-1ST ACCT, unfederated)" ;
                             $hSum.Federator = 'Toroco' ;
+
                     } else {
                         $smsg="(CLOUD-1ST ACCT, unfederated)" ;
                         $hSum.Federator = 'Toroco' ; 
@@ -542,6 +568,16 @@ function resolve-user {
 
             } ; # don't break, doesn't continue loop
 
+            # 10:42 AM 9/9/2021 force populate the xoMailbox, ALWAYS - need for xbrain ids
+            if($hSum.xoRcp.recipienttypedetails -eq 'UserMailbox' -AND -not($hSum.xoMailbox)){
+                write-verbose "get-exomailbox w`n$(($pltgM|out-string).trim())" ; 
+                if($hSum.xoMailbox=get-exomailbox @pltgM -ea 0){
+                    write-verbose "`$hSum.xoMailbox:`n$(($hSum.xoMailbox|out-string).trim())" ; 
+                    write-verbose "'xoUserMailbox':Test-exoMAPIConnectivity $($hSum.xoMailbox.userprincipalname)"
+                    $hSum.xoMapiTest = Test-exoMAPIConnectivity -identity $hSum.xoMailbox.userprincipalname ; 
+                    write-host -foreground yellow "Outlook (xoMAPI) Access Test Result:$($hsum.xoMapiTest.result)" ;
+                } ; 
+            } ;
 
             #$pltgMU=@{UserPrincipalName=$null ; MaxResults= $MaxRecips; ErrorAction= 'STOP' } ; 
             # maxresults is documented: 
@@ -568,6 +604,34 @@ function resolve-user {
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Continue ; 
                 } ; 
+
+                if(-not($hSum.AADUser)){
+                    #write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ; 
+                    #$hSum.AADUser  = get-AzureAdUser  -objectid $hSum.xoMUser.userPrincipalName -Top $MaxRecips ;
+                    write-host -foregroundcolor yellow "=get-AADuser $($pltgMU.UserPrincipalName):(licences)>:" ;
+                    TRY{
+                        caad  -Verbose:$false -silent ;
+                        write-verbose "get-AzureAdUser  -objectid $($pltgMU.UserPrincipalName)" ; 
+                        # have to postfilter, if want specific count -maxresults catch's with no $error[0]
+                        $hSum.AADUser  = get-AzureAdUser  -objectid $pltgMU.UserPrincipalName  | select -first $MaxRecips;  ;
+                        #write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser|out-string).trim())" ;
+                        # ObjectId                             DisplayName   UserPrincipalName      UserType
+                        if(-not($hSum.ADUser)){
+                            $smsg = "$(($hSum.OPRemoteMailbox |fl $xMProps|out-string).trim())"
+                            "$(($hSum.ADUser |fl $xMProps|out-string).trim())"
+                        } else { 
+                            write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser| ft -auto ObjectId,DisplayName,UserPrincipalName,UserType |out-string).trim())" ;
+                        } ; 
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Continue ; 
+                    } ; 
+
+                } ;
+
                 $smsg = "$(($hSum.MsolUser|fl $lProps|out-string).trim())`n" ;
                 $smsg += "Licenses Assigned:$(($hSum.MsolUser.licenses.AccountSkuId -join '; '|out-string).trim())" ; 
                 write-host $smsg ; 
@@ -577,6 +641,9 @@ function resolve-user {
                 if($hSum.LicenseGroup){$smsg = "LicenseGroup:$($hSum.LicenseGroup)"}
                 else{$smsg = "LicenseGroup:(unresolved, direct-assigned other?)" } ; 
                 write-host $smsg ; 
+
+
+
             } ; 
             
             if($outObject){
