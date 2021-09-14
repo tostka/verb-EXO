@@ -12,7 +12,7 @@
 RootModule = 'verb-EXO.psm1'
 
 # Version number of this module.
-ModuleVersion = '1.0.101'
+ModuleVersion = '1.0.102'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -69,7 +69,7 @@ Description = 'Powershell Exchange Online generic functions module'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('check-EXOLegalHold','Connect-ExchangeOnlineTargetedPurge','Connect-EXO','Connect-EXO2','connect-EXO2old','Connect-EXOPSSession','connect-EXOv2RAW','Connect-IPPSSessionTargetedPurge','convert-HistoricalSearchCSV','copy-XPermissionGroupToCloudOnly','cxo2cmw','cxo2TOL','cxo2TOR','cxo2VEN','cxoCMW','cxoTOL','cxoTOR','cxoVEN','Disconnect-ExchangeOnline','Disconnect-EXO','Disconnect-EXO2','get-MailboxFolderStats','get-MsgTrace','Get-OrgNameFromUPN','Invoke-ExoOnlineConnection','move-MailboxToXo','check-ReqMods','new-xoDGFromProperty','Print-Details','Reconnect-EXO','Reconnect-EXO2','Reconnect-EXO2old','RemoveExistingEXOPSSession','RemoveExistingPSSessionTargeted','Remove-EXOBrokenClosed','resolve-Name','resolve-user','Resolve-xoRcps','rxo2CMW','rxo2TOL','rxo2TOR','rxo2VEN','rxoCMW','rxoTOL','rxoTOR','rxoVEN','test-ExoPSession','test-EXOToken','Test-Uri','test-xoMailbox','_cleanup')
+FunctionsToExport = @('check-EXOLegalHold','Connect-ExchangeOnlineTargetedPurge','Connect-EXO','Connect-EXO2','connect-EXO2old','Connect-EXOPSSession','connect-EXOv2RAW','Connect-IPPSSessionTargetedPurge','convert-HistoricalSearchCSV','copy-XPermissionGroupToCloudOnly','cxo2cmw','cxo2TOL','cxo2TOR','cxo2VEN','cxoCMW','cxoTOL','cxoTOR','cxoVEN','Disconnect-ExchangeOnline','Disconnect-EXO','Disconnect-EXO2','get-MailboxFolderStats','get-MsgTrace','Get-OrgNameFromUPN','Invoke-ExoOnlineConnection','move-MailboxToXo','check-ReqMods','new-DgTor','_cleanup','new-xoDGFromProperty','Print-Details','Reconnect-EXO','Reconnect-EXO2','Reconnect-EXO2old','RemoveExistingEXOPSSession','RemoveExistingPSSessionTargeted','Remove-EXOBrokenClosed','resolve-Name','resolve-user','Resolve-xoRcps','rxo2CMW','rxo2TOL','rxo2TOR','rxo2VEN','rxoCMW','rxoTOL','rxoTOR','rxoVEN','test-ExoPSession','test-EXOToken','Test-Uri','test-xoMailbox','_cleanup')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
@@ -126,8 +126,8 @@ PrivateData = @{
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUlulLoW3y5FwMzbbINm9oLYJx
-# 5PmgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUhfHDFgub1q3qxE1mLwUGkFYB
+# gKmgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -142,9 +142,9 @@ PrivateData = @{
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTulIOm
-# 7x+I2S8cC5xOQ21YUlrW/DANBgkqhkiG9w0BAQEFAASBgGDzA87XkJNPt41BjUZu
-# PwYOBAZwuj3y7+Rfr+ySKUUIsc97FDpmKlI9polKPJKhSHLHmttPPJ4+jVvRxINX
-# iirc9kw49ci3GJ1YJwcKs3PzZuVWZBsC4UqOmAKq1H1ymx5M6L4dBMKrLSpNxcI2
-# oT97UBTxA/5YMr6NdOr+2ABy
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSLyrUC
+# UQY+uiw+jAdfCeHJEgTKwDANBgkqhkiG9w0BAQEFAASBgDoAU98Xn5FE3lOhaehu
+# F1LitXrOUmlUBa9dKFWxC2xLLaFBtIJyEARuJGt9JU53REXRL4KYzU2M16PeyUy1
+# sgBPkMWdu02knQ6/H82Qd4mRpF9DKqaTSe20KQKKylhrRHVnHrMkRHhVjIM9qW5I
+# DCAuu+f5FDPCPRz17rcwFMOX
 # SIG # End signature block

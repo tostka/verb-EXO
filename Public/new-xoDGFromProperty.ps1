@@ -2,7 +2,7 @@
 function new-xoDGFromProperty{
     <#
     .SYNOPSIS
-    new-xoDGFromProperty.ps1 - run a get-exorecipient to re-resolve an array of Recipients into the matching primarysmtpaddress
+    new-xoDGFromProperty.ps1 - expand a property (of a DDG) into a new DDG populated with the original property's recipients (aimed at transplanting AcceptMailOnlyFrom values into AcceptMailOnlyFromDLMember's leveraging a free-standing Helpdesk-maintainable DG
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
@@ -18,9 +18,11 @@ function new-xoDGFromProperty{
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 4:40 PM 9/14/2021 corrected synopsis/description
     * 9:45 AM 9/2/2021 rev: added CBH, fixed existing block: Add-DistributionGroupMember -> propr xo alias:ps1AddxDistGrpMbr
     .DESCRIPTION
-    new-xoDGFromProperty.ps1 - run a get-exorecipient to re-resolve an array of Recipients into the matching primarysmtpaddress
+    new-xoDGFromProperty.ps1 - expand a property (of a DDG) into a new DG populated with the original property's recipients (aimed at transplanting AcceptMailOnlyFrom values into AcceptMailOnlyFromDLMember's populated with a free-standing Helpdesk-maintainable DG object. 
+    Generally, one would specify to have the new DG inherit the matching ManagedBy of the DDG. 
     .PARAMETER Members
     Array of Members to be resolved against current Exchange environment [-Members `$members ]
     .PARAMETER NewDGName
