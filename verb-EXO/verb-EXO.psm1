@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.102.0
+  Version     : 1.0.104.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -2391,19 +2391,20 @@ function convert-HistoricalSearchCSV {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 11:21 AM 9/15/2021 updated Example to demo pipline-input, and post-processing to group Status (like you could a MessageTrace); added $DotsInterval param.
     * 2:54 PM 4/23/2021 wrote as freestanding .ps1, decided to flip it into func in verb-EXO
     .DESCRIPTION
     convert-HistoricalSearchCSV - Summarize (to XML) or re-expand(to CSV), MS EXO HistoricalSearch csv output files, to permit MessageTrace-style parsing of the output for delivery patterns.
     Issue is that HistoricalSearch csv files summarize a lot of detail from the normal MessageTrace .csv output, into the single Recipient_status field,
-    which is a concatonated combo of every reciopient, double-hash (##) delimited with the following information per recipient
+    which is a concatonated combo of every recipient, double-hash (##) delimited with the following information per recipient
     <email address>##<status>
     And there can be a series of Status entries logged, for the single email address.
 
     - If ToXML is chosen, the RecipientAddress & RecipientEvents are nested as an array of CustomObjects in a field named 'RecipientStatuses'
     - If ToCsv is chosen, each transaction is unpacked back into separate 'Status' lines for each RecipientStatus (closer to the way get-MessageTrace returns records)
 
-    The benefit of expanded CSV, over the native HS output, is you can do MessageTrace-like parsing of the output:
-    $msgsx = import-csv -path path-to\file.csv ; 
+    The benefit of expanded CSV, over the native HS output, is you can do MessageTrace-like parsing of the results:
+    $msgsx = import-csv -path path-to\MTSummary_History-expanded.csv ; 
     $msgsx | group status | ft -auto count,name
     Count Name
     ----- ----
@@ -2419,15 +2420,25 @@ function convert-HistoricalSearchCSV {
     ToCSV switch (Defaults True ; expands transactions into a logged entry per RecipientStatus)[-ToCSV]
     .PARAMETER DoDots
     Use progress dotcrawl over explicit x/y echo.
+    .PARAMETER DotsInterval
+    Progress dotcrawl interval (dot per every X proceessed, defaults to 3)[-DotsInterval 5]
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
     outputs .csv or .xml with variant [originalname]-Expanded.[ext] filename of source .csv file.
-    Returns a string filepath to pipeline for each converted file.
+    System.String is returned (filepath of each converted file)
     .EXAMPLE
     convert-HistoricalSearchCSV.ps1 -ToXML -Files "C:\usr\work\incid\123456-fname.lname@domain.com-EXOHistSrch,-60D-History,From-ANY@mssociety.org,20210222-0000AM-20210423-0919AM,run-20210423-1007AM.csv" ; 
+    Convert a HistoricalSearch .csv report, to XML (with filename:[originalname]-Expanded.xml)
     .EXAMPLE
-    convert-HistoricalSearchCSV.ps1 -ToCSV -Files "C:\usr\work\incid\654321-MTSummary_fname.lname@domain.com-90D-History.csv" ; 
+    $ifile = "C:\pathTo\MTSummary_History.csv" ;
+    $ofile = convert-HistoricalSearchCSV.ps1 -ToCSV -Files $ifile  ; 
+    $msgsx = import-csv -path $ofile ; 
+    $msgsx | group status | ft -auto count,name
+    Convert a HistoricalSearch .csv report, to -expanded.CSV, and then group the Status (as you could a normal MessageTrace). 
+    .EXAMPLE
+    "HistReport1.csv","HistReport2.csv | convert-HistoricalSearchCSV.ps1 -ToCSV ; 
+    Pipeline convert multiple Hist reort csvs to xxx-expanded.csv files.
     .LINK
     https://github.com/tostka/verb-exo
     .LINK
@@ -2445,7 +2456,9 @@ function convert-HistoricalSearchCSV {
         [Parameter(ParameterSetName='CSV',HelpMessage="ToCSV switch (expands transactions into a line per RecipientStatus)[-ToCSV]")]
         [switch] $ToCSV=$true,
         [Parameter(HelpMessage="Use progress dotcrawl over explicit x/y echo switch[-DoDots]")]
-        [switch]$DoDots=$true 
+        [switch]$DoDots=$true, 
+        [Parameter(HelpMessage="Progress dotcrawl interval (dot per every X proceessed, defaults to 3)[-DotsInterval 5]")]
+        [int]$DotsInterval=3
     ) ;
     $pltXCsv = [ordered]@{
         path = $null ; 
@@ -2486,8 +2499,8 @@ function convert-HistoricalSearchCSV {
         if($DoDots){write-host -foregroundcolor Red "[" -NoNewline } ; 
         foreach ($record in $records){
             $procd++ ; 
-            # echo every 3rd record
-            if(($procd % 3) -eq 0){
+            # echo every $DotsInterval'th record
+            if(($procd % $DotsInterval) -eq 0){
                 if($DoDots){
                       $ino++ ; 
                       if(($ino % 80) -eq 0){
@@ -10983,8 +10996,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU9RDDUo5Sm/5/vk8hCNhf4Pnb
-# jougggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUa3rHUJbGomMkZ7gU0jb8ABVj
+# vyKgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -10999,9 +11012,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSrX7Mn
-# VohZbgxM9/Z9foivxby46jANBgkqhkiG9w0BAQEFAASBgIFrTuvDPs779o5Wc1sl
-# QDmiwCi5aD+fUAfqiY2Bb72k9K22EQAC5c+xkjyATGezRp/PTwsZoKuj7vgRsswV
-# KwEw9l1/9poT8P3j+2kmJMy24eBvJ+mmtQxrO6Q5W6L0uPCOMgolBGAHME4rvWfv
-# DMLiaSKdTMx5a2kF19qtkLdT
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSyzXyO
+# YIA62kvj3R8h9tG6QM0iOzANBgkqhkiG9w0BAQEFAASBgHNkXozv1NxrzoyKONnN
+# IKIuGCbEetaUfm3Xv33wEOcIzS21iPxE7ZsNu8PdmPpvz6U1dXgVhHeqzfgkkELk
+# DzZI8KufDdwwrnE/6NShDqKvdcv//us1RCALSqGzoklkNXFJ2L+7K3TCNmDU4r4M
+# 9axmMq1dW5lJ1GU+ELbkxpRw
 # SIG # End signature block
