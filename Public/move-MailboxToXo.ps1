@@ -9,6 +9,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    * 11:24 AM 9/16/2021 encoded eml
     # 10:46 AM 6/2/2021 sub'd verb-logging for v-trans
     * 1:54 PM 5/19/2021 expanded get-hybridcred to use both esvc & sid userroles
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
@@ -153,7 +154,7 @@ function move-MailboxToXo{
     $smtpSubj+= "$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
     #$smtpTo=$TORMeta['NotificationAddr1'] ;
     #$smtpTo=$TORMeta['NotificationDlUs'] ;
-    $smtpToFailThru="todd.kadrie@toro.com"
+    $smtpToFailThru="dG9kZC5rYWRyaWVAdG9yby5jb20="| convertFrom-Base64String ; 
     # one bene of looping: no module dependancy, works before modloads occur
     # pull the notifc smtpto from the xxxMeta.NotificationDlUs value
     # non-looping - $TenOrg is an input param, does't need modules to work yet
