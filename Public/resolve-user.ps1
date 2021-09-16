@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 4:33 PM 9/16/2021 fixed typo in get-AzureAdUser call, reworked output (aadu into markdown delimited wide layout), moved user detaiil reporting to below aadu, and output the federated AD remote DN, (proxied through AADU ext prop)
     * 10:56 AM 9/9/2021 force-resolve xoMailbox, added AADUser pop to the msoluser pop block; added test-xxMapiConnectivity as well; expanded ADU outputs - description, when*, Enabled, to look for terms/recent-hires/disabled accts
     * 3:05 PM 9/3/2021 fixed bugs introduced trying to user MaxResults (msol|aad), which come back param not recog'd when actually used - had to implement as postfiltering to assert open set return limits. ; Also implemented $xxxMeta.rgxOPFederatedDom check to resolve obj primarysmtpaddress to federating AD or AAD.
     * 11:20 AM 8/30/2021 added $MaxResults (shutdown return-all recips in addr space, on failure to match oprcp or xorcp ; fixed a couple of typos; minior testing/logic improvements. Still needs genercized 7pswlt support.
@@ -169,12 +170,45 @@ function resolve-user {
             $aaduprops = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
             $aaduFedProps = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
             $RcpPropsTbl = 'Alias','PrimarySmtpAddress','RecipientType','RecipientTypeDetails' ; 
+            # line1-X AADU outputs
+            #$xMProps='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','IsDirSynced','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
+            <# full size
+            $propsADL1 = 'UserPrincipalName','DisplayName','GivenName','Surname','Title' ;
+            $propsADL2 = 'Company','Department','PhysicalDeliveryOfficeName' ; 
+            $propsADL3 = 'StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone' ; 
+            # non-ADU props
+            #$propsADL4 = 'DirSyncEnabled','ImmutableId','LastDirSyncTime','UsageLocation' ; 
+            #$propsADL5 = 'ObjectType','UserType' ; 
+            #> 
+            # abbreviated:
+            $propsADL1 = @{Name='UPN';Expression={$_.UserPrincipalName }}, @{Name='DName';Expression={$_.DisplayName }}, @{Name='FName';Expression={$_.GivenName }},@{Name='LName';Expression={$_.Surname }},@{Name='Title';Expression={$_.Title }};
+            $propsADL2 = @{Name='Company';Expression={$_.Company }},@{Name='Dept';Expression={$_.Department }},@{Name='Ofc';Expression={$_.PhysicalDeliveryOfficeName }} ; 
+            $propsADL3 = @{Name='Street';Expression={$_.StreetAddress }}, 'City','State',@{Name='Zip';Expression={$_.PostalCode }}, @{Name='Phone';Expression={$_.TelephoneNumber }}, @{Name='Mobile';Expression={$_.MobilePhone }} ; 
+            #$propsADL4 = @{Name='Dsync';Expression={$_.DirSyncEnabled }}, @{Name='ImutID';Expression={$_.ImmutableId }}, @{Name='LastDSync';Expression={$_.LastDirSyncTime }}, @{Name='UseLoc';Expression={$_.UsageLocation }};
+            #$propsADL5 = 'ObjectType','UserType' ; 
+
+            # line1-5 AADU outputs
+            <# full size
+            $propsAADL1 = 'UserPrincipalName','DisplayName','GivenName','Surname','JobTitle' ;
+            $propsAADL2 = 'CompanyName','Department','PhysicalDeliveryOfficeName' ; 
+            $propsAADL3 = 'StreetAddress','City','State','PostalCode','TelephoneNumber','Mobile' ; 
+            $propsAADL4 = 'DirSyncEnabled','ImmutableId','LastDirSyncTime','UsageLocation' ; 
+            $propsAADL5 = 'ObjectType','UserType' ; 
+            #>
+            # abbreviated:
+            $propsAADL1 = @{Name='UPN';Expression={$_.UserPrincipalName }}, @{Name='DName';Expression={$_.DisplayName }}, @{Name='FName';Expression={$_.GivenName }},@{Name='LName';Expression={$_.Surname }},@{Name='Title';Expression={$_.JobTitle }};
+            $propsAADL2 = @{Name='Company';Expression={$_.CompanyName }},@{Name='Dept';Expression={$_.Department }},@{Name='Ofc';Expression={$_.PhysicalDeliveryOfficeName }} ; 
+            $propsAADL3 = @{Name='Street';Expression={$_.StreetAddress }}, 'City','State',@{Name='Zip';Expression={$_.PostalCode }}, @{Name='Phone';Expression={$_.TelephoneNumber }}, 'Mobile' ;
+            $propsAADL4 = @{Name='Dsync';Expression={$_.DirSyncEnabled }}, @{Name='ImutID';Expression={$_.ImmutableId }}, @{Name='LastDSync';Expression={$_.LastDirSyncTime }}, @{Name='UseLoc';Expression={$_.UsageLocation }};
+            $propsAADL5 = 'ObjectType','UserType' ; 
 
             $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ; 
             $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ; 
             write-host -foreground yellow "get-Rmbx/xMbx: " -nonewline;
 
+
             # $isEml=$isDname=$isSamAcct=$false ; 
+            $MDtbl=[ordered]@{NoDashRow=$true } ; # out-markdowntable splat
             $pltgM=[ordered]@{
                 ResultSize = $MaxRecips ; 
             } ; 
@@ -584,7 +618,7 @@ function resolve-user {
             # but causes a fault with no $error[0], doesn't seem to be functional param, post-filter
             $pltgMU=@{UserPrincipalName=$null ; ErrorAction= 'STOP' } ; 
             if($hSum.ADUser){$pltgMU.UserPrincipalName = $hSum.ADUser.UserPrincipalName } 
-            elseif($hSum.xoMailbox){$pltgMU.UserPrincipalName = $hSum.txMbx.UserPrincipalName }
+            elseif($hSum.xoMailbox){$pltgMU.UserPrincipalName = $hsum.xoMailbox.UserPrincipalName }
             elseif($hSum.xoMUser){$pltgMU.UserPrincipalName = $hSum.xoMUser.UserPrincipalName }
             elseif($hSum.txGuest){$pltgMU.UserPrincipalName = $hSum.txGuest.userprincipalname } 
             else{} ; 
@@ -608,20 +642,31 @@ function resolve-user {
                 if(-not($hSum.AADUser)){
                     #write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ; 
                     #$hSum.AADUser  = get-AzureAdUser  -objectid $hSum.xoMUser.userPrincipalName -Top $MaxRecips ;
-                    write-host -foregroundcolor yellow "=get-AADuser $($pltgMU.UserPrincipalName):(licences)>:" ;
+                    write-host -foregroundcolor yellow "=get-AADuser $($pltgMU.UserPrincipalName)>:" ;
                     TRY{
                         caad  -Verbose:$false -silent ;
                         write-verbose "get-AzureAdUser  -objectid $($pltgMU.UserPrincipalName)" ; 
                         # have to postfilter, if want specific count -maxresults catch's with no $error[0]
                         $hSum.AADUser  = get-AzureAdUser  -objectid $pltgMU.UserPrincipalName  | select -first $MaxRecips;  ;
+                        <# for remote federated, AADU brings in summary of remote ADUser:
+                            $hsum.aaduser.ExtensionProperty
+                            Key                                                       Value
+                            ---                                                       -----
+                            odata.metadata                                            https://graph.windows.net/549366ae-e80a-44b9-8adc-52d0c29ba08b/$metadata#directoryObjects/@Element
+                            odata.type                                                Microsoft.DirectoryServices.User
+                            createdDateTime                                           1/13/2021 4:14:48 PM
+                            employeeId
+                            onPremisesDistinguishedName                               CN=Chester Summers,OU=Ditch Witch,OU=User Accounts,OU=People,OU=_TTC_Sync_CMW_NoSync,DC=ditchwitch,DC=cmw,DC=internal
+                            thumbnailPhoto@odata.mediaEditLink                        directoryObjects/9a5e333a-23b8-40e4-bdf9-6b51affca812/Microsoft.DirectoryServices.User/thumbnailPhoto
+                            thumbnailPhoto@odata.mediaContentType                     image/Jpeg
+                            userIdentities                                            []
+                            extension_9d88b2c96135413e88afff067058e860_employeeNumber 8621
+                             $hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName
+                            CN=Chester Summers,OU=Ditch Witch,OU=User Accounts,OU=People,OU=_TTC_Sync_CMW_NoSync,DC=ditchwitch,DC=cmw,DC=internal
+                        #>
                         #write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser|out-string).trim())" ;
                         # ObjectId                             DisplayName   UserPrincipalName      UserType
-                        if(-not($hSum.ADUser)){
-                            $smsg = "$(($hSum.OPRemoteMailbox |fl $xMProps|out-string).trim())"
-                            "$(($hSum.ADUser |fl $xMProps|out-string).trim())"
-                        } else { 
-                            write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser| ft -auto ObjectId,DisplayName,UserPrincipalName,UserType |out-string).trim())" ;
-                        } ; 
+                        
                     } CATCH {
                         $ErrTrapd=$Error[0] ;
                         $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
@@ -631,6 +676,48 @@ function resolve-user {
                     } ; 
 
                 } ;
+                # display user info:
+                if(-not($hSum.ADUser)){
+                    # remote fed, use AADU to proxy remote AD hybrid info:
+                    $smsg = "===`$hSum.AADUser:`n$(($hSum.AADUser| select $propsAADL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                    $smsg += "`n$(($hSum.AADUser|select $propsAADL2 |out-markdowntable @MDtbl|out-string).trim())" ; 
+                    $smsg += "`n$(($hSum.AADUser|select $propsAADL3 |out-markdowntable @MDtbl|out-string).trim())" ; 
+                    $smsg += "`n$(($hSum.AADUser|select $propsAADL4 |out-markdowntable @MDtbl|out-string).trim())" ; 
+                    $smsg += "`n$(($hSum.AADUser|select $propsAADL5 |out-markdowntable @MDtbl|out-string).trim())" ; 
+                    #$hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName
+                    if($hSum.Federator -ne 'ad.toro.com'){
+                        $smsg += "`n$($hSum.Federator):Remote ADUser.DN:`n$(($hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName|out-string).trim())" ; 
+                    }  ; 
+                            
+                    write-host $smsg 
+
+                    # assert the real names from the user obj                
+                    $hSum.dname = $hSum.AADUser.DisplayName ;
+                    $hSum.fname = $hSum.AADUser.GivenName ;
+                    $hSum.lname = $hSum.AADUser.Surname ;
+
+                } else { 
+                    #write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser| ft -auto ObjectId,DisplayName,UserPrincipalName,UserType |out-string).trim())" ;
+                    # defer to ADUser details
+                    #"$(($hSum.ADUser |fl $xMProps |out-markdowntable @MDtbl|out-string).trim())"
+                    <#$propsADL1 = 'UserPrincipalName','DisplayName','GivenName','Surname','Title' ;
+                    $propsADL2 = 'Company','Department','PhysicalDeliveryOfficeName' ; 
+                    $propsADL3 = 'StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone' ;
+                    #>
+                    $smsg = "===`$hSum.ADUser:`n$(($hSum.ADUser| select $propsADL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                    $smsg += "`n$(($hSum.ADUser|select $propsADL2 |out-markdowntable @MDtbl|out-string).trim())" ; 
+                    $smsg += "`n$(($hSum.ADUser|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ; 
+                    #$smsg += "`n$(($hSum.ADUser|select $propsADL4 |out-markdowntable @MDtbl|out-string).trim())" ; 
+                    #$smsg += "`n$(($hSum.ADUser|select $propsADL5 |out-markdowntable @MDtbl|out-string).trim())" ; 
+
+                    $smsg += "`n`$ADUser.DN:`n$(($hsum.aduser.DistinguishedName|out-string).trim())" ; 
+                    write-host $smsg ;
+
+                    # assert the real names from the user obj                
+                    $hSum.dname = $hSum.ADUser.DisplayName ;
+                    $hSum.fname = $hSum.ADUser.GivenName ;
+                    $hSum.lname = $hSum.ADUser.Surname ;
+                } ; 
 
                 $smsg = "$(($hSum.MsolUser|fl $lProps|out-string).trim())`n" ;
                 $smsg += "Licenses Assigned:$(($hSum.MsolUser.licenses.AccountSkuId -join '; '|out-string).trim())" ; 
@@ -663,7 +750,7 @@ function resolve-user {
             $oput |  write-output ;
         } ; 
         
-     }
- }
+     } ; 
+ } ; 
 
 #*------^ resolve-user.ps1 ^------
