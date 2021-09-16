@@ -21,6 +21,7 @@ Function connect-EXO2old {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 11:22 AM 9/16/2021 string
     # 8:34 AM 3/31/2021 added verbose suppress to all import-mods
     * 2:01 PM 11/10/2020 swap connect-exo2 to connect-exo2old (uses connect-ExchangeOnline), also ren'd CommandPrefix parm -> Prefix (matches EXOModule spec)
     * 4:41 PM 10/8/2020 implemented AcceptedDomain caching, in connect-EXO2old to match rxo2
@@ -51,7 +52,7 @@ Function connect-EXO2old {
     .PARAMETER  Prefix
     [verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-Prefix tag]
     .PARAMETER  Credential
-    Credential to use for this connection [-credential 's-todd.kadrie@toro.com']
+    Credential to use for this connection [-credential 'SOMEACCT@DOMAIN.COM']
     .PARAMETER
     ConnectionUri
     Connection Uri for the Remote PowerShell endpoint [-ConnectionUri 'https://outlook.office365.com/powershell-liveid/']

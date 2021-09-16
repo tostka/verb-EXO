@@ -17,6 +17,7 @@ function Connect-IPPSSessionTargetedPurge{
     AddedCredit : Microsoft (edited version of published commands in the module)
     AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
     REVISIONS
+    * 11:38 AM 9/16/2021 string
     * 8:34 AM 11/9/2020 init
     .DESCRIPTION
     Connect-IPPSSessionTargetedPurge.ps1 - Extract organization name from UserPrincipalName ; localized verb-EXO vers of non-'$global:' helper funct from ExchangeOnlineManagement. The globals export fine, these don't and appear to need to be loaded manually
@@ -121,7 +122,7 @@ function Connect-IPPSSessionTargetedPurge{
         if(!$ExoPowershellModulePath){
             $ExoPowershellModulePath = [System.IO.Path]::Combine($EOMgmtModulePath, $ExoPowershellModule) ;
         } ;
-        # full path: C:\Users\kadritss\Documents\WindowsPowerShell\Modules\ExchangeOnlineManagement\1.0.1\Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll
+        # full path: C:\Users\LOGON\Documents\WindowsPowerShell\Modules\ExchangeOnlineManagement\1.0.1\Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll
         # Name: Microsoft.Exchange.Management.ExoPowershellGalleryModule
         if(-not(get-module Microsoft.Exchange.Management.ExoPowershellGalleryModule)){
             Import-Module $ExoPowershellModulePath -verbose:$false ;

@@ -21,6 +21,7 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 11:21 AM 9/16/2021 string clean
     * 1:20 PM 7/21/2021 enabled TOR titlebar tagging with TenOrg (prompt tagging by scraping TitleBar values)
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     * 11:43 AM 4/2/2021 updated added wlt & recstat support, updated catch blocks
@@ -58,7 +59,7 @@ Function Connect-EXO {
     .PARAMETER  CommandPrefix
     [verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-CommandPrefix tag]
     .PARAMETER  Credential
-    Credential to use for this connection [-credential 's-todd.kadrie@toro.com']
+    Credential to use for this connection [-credential 'SOMEACCT@DOMAIN.COM']
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS

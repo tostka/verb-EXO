@@ -21,6 +21,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    # 11:23 AM 9/16/2021 string
     # 1:31 PM 7/21/2021 revised Add-PSTitleBar $sTitleBarTag with TenOrg spec (for prompt designators)
     * 11:53 AM 4/2/2021 updated with rlt & recstat support, updated catch blocks
     # 8:34 AM 3/31/2021 added verbose suppress to all import-mods
@@ -58,7 +59,7 @@ Function Connect-EXO2 {
     .PARAMETER  Prefix
     [verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-Prefix tag]
     .PARAMETER  Credential
-    Credential to use for this connection [-credential 's-todd.kadrie@toro.com']
+    Credential to use for this connection [-credential 'SOMEACCT@DOMAIN.COM']
     .PARAMETER UserPrincipalName
     User Principal Name or email address of the user
     .PARAMETER

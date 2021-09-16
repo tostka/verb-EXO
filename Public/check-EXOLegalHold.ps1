@@ -15,6 +15,7 @@ Function check-EXOLegalHold {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,Legal
     REVISIONS   :
+    * 11:23 AM 9/16/2021 string
     * 8:24 AM 8/27/2021 cleanedup 
     * 1:23 PM 5/14/2021 init version, roughed in, completely untested (was prev a largely unmodified dupe of disconnect-exo)
     .DESCRIPTION
@@ -77,7 +78,7 @@ Function check-EXOLegalHold {
     .PARAMETER  CommandPrefix
     [verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-CommandPrefix tag]
     .PARAMETER  Credential
-    Credential to use for this connection [-credential 's-todd.kadrie@toro.com']
+    Credential to use for this connection [-credential 'SOMEACCT@DOMAIN.COM']
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
