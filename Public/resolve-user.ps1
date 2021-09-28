@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:04 PM 9/28/2021 added:$AADUserManager lookup and dump of UPN, OpDN & mail (for correlating what email pol a user should have -> the one their manager does)
     * 1:52 PM 9/17/2021 moved $props to top ; test enabled/acctenabled, licRecon & mapi test results and use ww on issues ; flipped caad's to -silent (match cmsol 1st echo's to confirm tenant, rest silent); ren $xMProps -> $propsMailx, $XMFedProps-> $propsXMFed, $lProps -> $propsLic,$adprops -> $propsADU, $aaduprops -> $propsAADU, $aaduFedProps -> $propsAADUfed, $RcpPropsTbl -> $propsRcpTbl, $pltgM-> $pltGMailObj, $pltgMU -> $pltgMsoUsr
     * 4:33 PM 9/16/2021 fixed typo in get-AzureAdUser call, reworked output (aadu into markdown delimited wide layout), moved user detaiil reporting to below aadu, and output the federated AD remote DN, (proxied through AADU ext prop)
     * 10:56 AM 9/9/2021 force-resolve xoMailbox, added AADUser pop to the msoluser pop block; added test-xxMapiConnectivity as well; expanded ADU outputs - description, when*, Enabled, to look for terms/recent-hires/disabled accts
@@ -132,6 +133,12 @@ function resolve-user {
         $propsAADL4 = @{Name='Dsync';Expression={$_.DirSyncEnabled }}, @{Name='ImutID';Expression={$_.ImmutableId }}, @{Name='LastDSync';Expression={$_.LastDirSyncTime }}, @{Name='UseLoc';Expression={$_.UsageLocation }};
         $propsAADL5 = 'ObjectType','UserType', @{Name='Enabled';Expression={$_.AccountEnabled }} ;
 
+        #$propsAADMgr = 'UserPrincipalName','Mail',@{Name='OpDN';Expression={$_.ExtensionProperty.onPremisesDistinguishedName }} ;
+        # get mgr OU, not DN: ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1 ) -join ','
+        $propsAADMgr = 'UserPrincipalName','Mail',@{Name='OpOU';Expression={($_.ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;
+        $propsAADMgrL1 = 'UserPrincipalName','Mail' ;
+        $propsAADMgrL2 = @{Name='OpOU';Expression={($_.ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;
+
         $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
 
@@ -178,6 +185,7 @@ function resolve-user {
                 xoMapiTest = $null ;
                 MsolUser = $null ;
                 AADUser = $null ; # added for MailUser variant
+                AADUserMgr = $null ; 
                 LicenseGroup = $null ;
             } ;
             $procd++ ;
@@ -709,6 +717,28 @@ function resolve-user {
                     } ;
 
                 } ;
+                
+                if(-not($hSum.AADUserMgr) -AND $hSum.AADUser ){
+                    write-host -foregroundcolor yellow "=get-AADuserManager $($hSum.AADUser.UserPrincipalName)>:" ;
+                    TRY{
+                        caad  -Verbose:$false -silent ;
+                        write-verbose "get-AzureAdUserManager  -objectid $($hSum.AADUser.UserPrincipalName)" ;
+                        # have to postfilter, if want specific count -maxresults catch's with no $error[0]
+                        $hSum.AADUserMgr  = get-AzureAdUserManager  -objectid $hSum.AADUser.UserPrincipalName  | select -first $MaxRecips;  ;
+                        #write-verbose "`$hSum.AADUserMgr:`n$(($hSum.AADUserMgr|out-string).trim())" ;
+                        # (returns a full AADUser obj for the mgr)
+                        # we can output the DN: $hSum.AADUserMgr.ExtensionProperty.onPremisesDistinguishedName
+                        # useful for determining what 'org' user should be for email address assigns - they get same addr dom as their mgr
+                        # |ft -a  $propsaadmgr
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Continue ;
+                    } ;
+
+                } ;
                 # display user info:
                 if(-not($hSum.ADUser)){
                     # remote fed, use AADU to proxy remote AD hybrid info:
@@ -785,7 +815,19 @@ function resolve-user {
                 else{$smsg = "LicenseGroup:(unresolved, direct-assigned other?)" } ;
                 write-host $smsg ;
 
-
+                if($hSum.AADUserMgr){
+                    #($hSum.AADUserMgr) |ft -a  $propsaadmgr
+                    #$smsg += "`nAADUserMgr:`n$(($hSum.AADUserMgr|select $propsAadMgr |out-markdowntable @MDtbl|out-string).trim())" ;
+                    # $propsAADMgrL1, $propsAADMgrL2
+                    write-host -foreground yellow "===`$hSum.AADUserMgr: " #-nonewline;
+                    $smsg = "$(($hSum.AADUserMgr| select $propsAADMgrL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                    #$smsg += "`n$(($hSum.AADUserMgr|select $propsAADMgrL2 |out-markdowntable @MDtbl|out-string).trim())" ;
+                    $smsg += "`n$(($hSum.AADUserMgr|fl $propsAADMgrL2|out-string).trim())" ;
+                    #$smsg += "`n$(($hSum.AADUserMgr|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
+                } else {
+                    $smsg += "(AADUserMgr was blank, or unresolved)" ; 
+                } ;  
+                write-host $smsg ;
 
             } ;
 
@@ -875,6 +917,6 @@ function resolve-user {
         } ;
 
      } ;
- } ;
+ }
 
 #*------^ resolve-user.ps1 ^------
