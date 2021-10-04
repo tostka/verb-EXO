@@ -1,4 +1,4 @@
-﻿#*------v Function new-DgTor v------
+﻿#*------v new-DgTor.ps1 v------
 function new-DgTor {
     <#
     .SYNOPSIS
@@ -15,6 +15,13 @@ function new-DgTor {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,DistributionGroup,DistributionList,Hybrid
     REVISIONS
+    * 4:54 PM 9/30/2021 updated CloudFirst code, and used to create functional 
+    exoDG, also added code to dynamically create onprem unreplicated MailContacts 
+    for CloudFirst, to represent an onprem AddrBook object ; flipped members & 
+    ManagedBy to [string[]]; added UG->DG conversion example,
+    with splat; swapped undependable $scriptbasename w $cmdletname (tends to show
+    module as name); updated cloudfirst variant code, switched recipient &
+    managedby's to raw smtpaddresses ; finally validated hybrid OnPrem DG creation as well. 
     * 4:28 PM 9/14/2021 ren: new-DL-Tor -> new-DgTor ;; debugged -CloudFirst - working as intended ; fixed pipeline bug coming out of Start-IseTranscript , properly returns newdg object to pipeline;  converted to function, add to verb-exo (once it includes proper hybrid, most approp place); -CloudFirst still undebugged
     *2:56 PM 9/13/2021 rewrote for modern modules & template, -outputObject default. Tested ExOP version, haven't done -CloudFirst debugging yet.
     # 11:05 AM 6/13/2019 updated get-admininitials()
@@ -102,11 +109,79 @@ function new-DgTor {
     SystemObject
     [| get-member the output to see what .NET obj TypeName is returned, to use here]
     .EXAMPLE
-    PS> .\new-DgTor.ps1 -SiteOverride ENT -DNameBase "DL Base DisplayName" -ManagedBy MANAGERID -Members 'MEMBER1@DOMAIN.com','MEMBER2@DOMAIN.com' -HiddenFromAddressLists -showDebug -verbose -Ticket 99999 -whatif;
+    PS> new-DgTor -SiteOverride ENT -DNameBase "DL Base DisplayName" -ManagedBy MANAGERID -Members 'MEMBER1@DOMAIN.com','MEMBER2@DOMAIN.com' -HiddenFromAddressLists -showDebug -verbose -Ticket 99999 -whatif;
     Create a DL with a siteoverride (spec'ing as ENT-name, rather than alt site)
     .EXAMPLE
-    PS> $ndg = .\new-DgTor.ps1 -TenOrg TOR -DNameBase "DL BASE DISPLAYNAME" -ManagedBy MANAGERID -Members 'MEMBER1@DOMAIN.com','MEMBER2@DOMAIN.com' -HiddenFromAddressLists -showDebug -verbose -Ticket 99999 -outobject;
+    PS> $ndg = new-DgTor -TenOrg TOR -DNameBase "DL BASE DISPLAYNAME" -ManagedBy MANAGERID -Members 'MEMBER1@DOMAIN.com','MEMBER2@DOMAIN.com' -HiddenFromAddressLists -showDebug -verbose -Ticket 99999 -outobject;
     Create a DG with SiteOverride and return resulting new DG as an object, assigned to $ndg
+    .EXAMPLE
+    $whatif=$true ; 
+    reconnect-exo ; 
+    TRY{
+        $tugn = 'TeamsUGNamwe_GUID' ;
+        $tug = Get-exoUnifiedGroup -Identity $tugn ;
+        $tugmbrs = Get-exoUnifiedGroupLinks -Id $tug.name -LinkType Members ;
+        $pltNDg=[ordered]@{   TenOrg='TOR' ;
+            CloudFirst=$true ;
+            DNameBase="IS-$($tug.displayname)" ;
+            ManagedBy=($tug.managedby | get-exorecipient -ea STOP | select -expand primarysmtpaddress) ;
+            Members=($tugmbrs.primarysmtpaddress| get-exorecipient -ea STOP | select -expand primarysmtpaddress) ;
+            HiddenFromAddressLists=$false;
+            showDebug=$true;
+            verbose=$true;
+            Ticket='99999' ;
+            outobject=$true;
+            whatif=$($whatif);
+          } ;
+         write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):new-DgTor w`n$(($pltNDg|out-string).trim())" ;
+         $ndg = new-DgTor @pltNDg;
+         $ndg ;
+    } CATCH {
+    Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+    break ;
+    } ;
+    # Traditionally the UG would then be set Hidden from Address Books, in deference to the DG
+    Set-exoUnifiedGroup -Id $tug.name -HiddenFromAddressListsEnabled $true
+    
+    Demo conversion of a Teams Unified Group membership (which permits unsubscribes, and silent loss of mail) into a standard DG. 
+    .EXAMPLE
+    $whatif=$true ;
+    reconnect-exo ;
+    reconnect-ex2010 ;
+    TRY{
+        $tugn = 'TeamsUGNamwe_GUID' ;
+        $tug = Get-exoUnifiedGroup -Identity $tugn ;
+        $tugmbrs = Get-exoUnifiedGroupLinks -Id $tug.name -LinkType Members ;
+        $pltNDg=[ordered]@{   TenOrg='TOR' ;
+          CloudFirst=$false ;
+          SiteOverride = 'ENT' ;
+          DNameBase="IS-$($tug.displayname)" ;
+          ManagedBy=($tug.managedby | get-exorecipient -ea continue | select -expand primarysmtpaddress | select -unique | get-recipient -ea continue | select -expand primarysmtpaddress | select -unique) ;
+          Members=($tugmbrs.primarysmtpaddress| get-recipient -ea continue | select -expand primarysmtpaddress) ;
+          HiddenFromAddressLists=$false;
+          showDebug=$true;
+          verbose=$true;
+          Ticket='99999' ;
+          outobject=$true;
+          whatif=$($whatif);
+         } ;
+        write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):new-DgTor w`n$(($pltNDg|out-string).trim())" ;
+        $ndg = new-DgTor @pltNDg;
+        $ndg ;
+    } CATCH {
+        Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+        break ;
+    } ;
+    # Traditionally the UG would then be set Hidden from Address Books, in deference to the DG
+    Set-exoUnifiedGroup -Id $tug.name -HiddenFromAddressListsEnabled $true
+    
+    Demo conversion of a Teams Unified Group membership (which permits unsubscribes, and silent loss of mail) into a standard on-prem hybrid replicated DG, 
+    with the prefix/SiteCode overridden to use 'ENT' over the ManagedBy's home SiteCode. 
+    
+    Note:An onprem DG can have MailContacts in the membership (and in the ManagedBy as well), with the same primarysmtpaddress as remote-hybrid cloud mailboxes. 
+    (e.g. EXO mailboxes that aren't Hybrid/AD'd locally to the DG-hosting OnPrem mail org)
+    Upon ADC replication of a MailContact member (or ManagedBy) to AzureAD, any MailContact set in either property, will be auto-replaced during replication, 
+    with the matching EXO mailbox object. A neat way of maintaining hybrid onPrem-deliverable DG's, containing non-locally-replicated EXO mailboxes.
     .LINK
     https://github.com/tostka/verb-exo        
     #>
@@ -124,14 +199,14 @@ function new-DgTor {
         [Parameter(Mandatory=$true,HelpMessage="Base Name string, for DL Name construction. [SIT-DL] will be automatically appended[Base Name String]")]
         [string]$DNameBase,
         [Parameter(Position=0,HelpMessage="ITSM Request/Incident Number [nnnnnn]")]
-        [ValidatePattern("^\d{5,6}$")]
+        #[ValidatePattern("^\d{5,6}$")]
         [string]$Ticket,
         [Parameter(Mandatory=$true,HelpMessage="Specify the userid to be responsible for access-grant-approvals[name,emailaddr,alias]")]
-        [string]$ManagedBy,
+        [string[]]$ManagedBy,
         [Parameter(HelpMessage="Specify a 3-letter Site Code. Used to force DL name/placement to vary from ManageBy's current site[3-letter Site code]")]
         [string]$SiteOverride,
         [Parameter(HelpMessage="Comma-delimited string of potential users to be granted access[name,emailaddr,alias]")]
-        [string]$Members,
+        [string[]]$Members,
         [Parameter(HelpMessage="Can receive from external senders [-InetReceive:`$true]")]
         [switch]$InetReceive,
         [Parameter(HelpMessage="Switch to configure -HiddenFromAddressListsEnabled `$true [-HiddenFromAddressLists]")]
@@ -742,6 +817,7 @@ $($smtpBody)
     } ; 
 
     #*======V CONFIGURE DEFAULT LOGGING FROM PARENT SCRIPT NAME v======
+    <# old code
     #$pltSL=@{ NoTimeStamp=$true ; Tag="($TenOrg)-LASTPASS" ; showdebug=$($showdebug) ; whatif=$($whatif) ; Verbose=$($VerbosePreference -eq 'Continue') ; } ;
     $pltSL=@{ NoTimeStamp=$FALSE ; Tag="($Ticket)" ; showdebug=$($showdebug) ; whatif=$($whatif) ; Verbose=$($VerbosePreference -eq 'Continue') ; } ;
     if($PSCommandPath){   $logspec = start-Log -Path $PSCommandPath @pltSL ;
@@ -755,6 +831,70 @@ $($smtpBody)
             start-transcript -Path $transcript ;
         } ;
     } else {throw "Unable to configure logging!" } ;
+    #>
+    if(!(get-variable LogPathDrives -ea 0)){$LogPathDrives = 'd','c' };
+    foreach($budrv in $LogPathDrives){if(test-path -path "$($budrv):\scripts" -ea 0 ){break} } ;
+    if(!(get-variable rgxPSAllUsersScope -ea 0)){
+        $rgxPSAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps(((d|m))*)1|dll)$" ;
+    } ;
+    if(!(get-variable rgxPSCurrUserScope -ea 0)){
+        $rgxPSCurrUserScope="^$([regex]::escape([Environment]::GetFolderPath('MyDocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps((d|m)*)1|dll)$" ;
+    } ;
+    $pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag=$null ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($whatif) ;} ;
+    $pltSL.Tag = ($ticket,$DNameBase -join '-') ;
+    if($script:PSCommandPath){
+        if(($script:PSCommandPath -match $rgxPSAllUsersScope) -OR ($script:PSCommandPath -match $rgxPSCurrUserScope)){
+            $bDivertLog = $true ;
+            switch -regex ($script:PSCommandPath){
+                $rgxPSAllUsersScope{$smsg = "AllUsers"}
+                $rgxPSCurrUserScope{$smsg = "CurrentUser"}
+            } ;
+            $smsg += " context script/module, divert logging into [$budrv]:\scripts"
+            write-verbose $smsg  ;
+            if($bDivertLog){
+                if((split-path $script:PSCommandPath -leaf) -ne $cmdletname){
+                    # function in a module/script installed to allusers|cu - defer name to Cmdlet/Function name
+                    $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
+                } else {
+                    # installed allusers|CU script, use the hosting script name
+                    $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $script:PSCommandPath -leaf)) ;
+                }
+            } ;
+        } else {
+            $pltSL.Path = $script:PSCommandPath ;
+        } ;
+    } else {
+        if(($MyInvocation.MyCommand.Definition -match $rgxPSAllUsersScope) -OR ($MyInvocation.MyCommand.Definition -match $rgxPSCurrUserScope) ){
+             $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $script:PSCommandPath -leaf)) ;
+        } elseif(test-path $MyInvocation.MyCommand.Definition) {
+            $pltSL.Path = $MyInvocation.MyCommand.Definition ;
+        } elseif($cmdletname){
+            $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
+        } else {
+            $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$CMDLETNAME, FROM WHICH TO BUILD A START-LOG.PATH!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            BREAK ;
+        } ;
+    } ;
+    write-verbose "start-Log w`n$(($pltSL|out-string).trim())" ;
+    $logspec = start-Log @pltSL ;
+    $error.clear() ;
+    TRY {
+        if($logspec){
+            $logging=$logspec.logging ;
+            $logfile=$logspec.logfile ;
+            $transcript=$logspec.transcript ;
+            $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+            start-Transcript -path $transcript ;
+        } else {throw "Unable to configure logging!" } ;
+    } CATCH {
+        $ErrTrapd=$Error[0] ;
+        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    } ;
+
     #*======^ CONFIGURE DEFAULT LOGGING FROM PARENT SCRIPT NAME ^======
 
     # -----------
@@ -778,15 +918,30 @@ $($smtpBody)
             $smtpTo=$smtpToFailThru ;
         } ;
     }
-    $smtpFrom = (($scriptBaseName.replace(".","-")) + "@$( (Get-Variable  -name "$($TenOrg)Meta").value.o365_OPDomain )") ;
+    <# 
+    if($bDivertLog){ # scriptbasename will likely be a module name, use diverted start-log values
+        $smtpFrom = ((split-path $pltsl.path -leaf).replace('.','-') + "@$( (Get-Variable  -name "$($TenOrg)Meta").value.o365_OPDomain )")
+    } else {
+        $smtpFrom = (($scriptBaseName.replace(".","-")) + "@$( (Get-Variable  -name "$($TenOrg)Meta").value.o365_OPDomain )") ;
+    } ; 
+    #>
+    # shift to cmdletname, more dependable
+    $smtpFrom = (($CmdletName.replace(".","-")) + "@$( (Get-Variable  -name "$($TenOrg)Meta").value.o365_OPDomain )") ;
     $smtpSubj= "Proc Rpt:"
     if($whatif) {
         $smtpSubj+="WHATIF:" ;
     } else {
         $smtpSubj+="PROD:" ;
     } ;
-    $smtpSubj+= "$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
-
+    <#
+    if($bDivertLog){ # scriptbasename will likely be a module name, use diverted start-log values
+        $smtpSubj+= "$((split-path $pltsl.path -leaf)):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
+    } else {
+        $smtpSubj+= "$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
+    } ; 
+    #>
+    # shift to cmdletname, more dependable
+    $smtpSubj+= "$($CmdletName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
     if(!($bodyAsHtml)){
         # if not inline attachment in body, need to load report as attachment
         $smtpAttachment=$rptfile ;
@@ -978,7 +1133,17 @@ $($smtpBody)
     $error.clear() ;
     TRY {
         #if($ManagedBy){$oManagedBy = $ManagedBy | foreach-object {ps1GetxRcp -id $_ -ResultSize 1 -ea 'STOP' } | select -expand primarysmtpaddress  | select -unique ;} ; 
-        if($ManagedBy){$oManagedBy = ps1GetxRcp -id $ManagedBy -ResultSize 1 -ea 'STOP' } ; 
+        if($ManagedBy){
+            if($isCloud1st){
+                #$oManagedBy = ps1GetxRcp -id $ManagedBy -ResultSize 1 -ea 'Continue' 
+                #$oManagedBy = ps1GetxRcp -id $ManagedBy -ResultSize 25 -ea 'Continue' 
+                $oManagedBy = $ManagedBy  | ps1GetxRcp -ResultSize 25 -ea 'Continue' 
+            } else { 
+                # resolving exo smtpaddresss could yield missing recips, pull -ea
+                #$oManagedBy = get-recipient -id $ManagedBy -ResultSize 25 #-ea -ea 'Continue' 
+                $oManagedBy = $ManagedBy | get-recipient  -ResultSize 25 -ea 'Continue' 
+            } ;
+        } ; 
     } CATCH {
         $ErrTrapd=$Error[0] ;
         $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
@@ -998,14 +1163,14 @@ $($smtpBody)
     if($isCloud1st){
         $DName=("ENT" + "-DL-" + $InputSplat.DNameBase) ;
     }else {
-        $InputSplat.Add("Domain",$($oManagedBy.identity.tostring().split("/")[0]) ) ; 
-
-        $InputSplat.SiteCode=($oManagedBy.identity.tostring().split('/')[1]) ;
+        $InputSplat.Add("Domain",$($oManagedBy[0].identity.tostring().split("/")[0]) ) ; 
+        # force 1st ManagedBy's OU (if it's an array)
+        $InputSplat.SiteCode=($oManagedBy[0].identity.tostring().split('/')[1]) ;
         if($domaincontroller){
             $InputSplat.Add("DomainController",$domaincontroller) ; 
         } ; 
-        $pltNewDG.Add("DomainController",$InputSplat.DomainController) ; 
-        $pltSetDG.Add("DomainController",$InputSplat.DomainController) ; 
+        $pltNewDG.Add("DomainController",$domaincontroller) ; 
+        $pltSetDG.Add("DomainController",$domaincontroller) ; 
 
         if($InputSplat.SiteOverride){
             $SiteCode=$InputSplat.SiteOverride;
@@ -1015,9 +1180,9 @@ $($smtpBody)
         } ;
 
         if($SiteOverride -eq 'ENT'){
-            # ent-named OU, but park it in the ManagedBy's OU - no park it in LYN OU
+            # ent-named OU, but park it in the ManagedBy's OU - no park it in LYN OU - less confusing if all ENT's are in one place
             $FindOU="^OU=Distribution\sGroups,";
-            #$tmpSite = ($oManagedBy.identity.tostring().split('/')[1]) ;
+            #$tmpSite = ($oManagedBy[0].identity.tostring().split('/')[1]) ;
             $tmpSite = 'LYN'
             if( ($pltNewDG.OrganizationalUnit = ((Get-ADObject -filter { ObjectClass -eq 'organizationalunit' } -ea continue | ?{($_.distinguishedname -match "$($FindOU).*OU=$($tmpSite),.*") } | select distinguishedname).distinguishedname.tostring()) )) { } else { _cleanup ; Exit ;} 
             $InputSplat.Add("SiteName", $SiteCode) ;
@@ -1051,7 +1216,7 @@ $($smtpBody)
     } ; 
     $pltNewDG.Type = "Distribution";
     $pltNewDG.ManagedBy =$oManagedBy.primarysmtpaddress | select -unique  ;
-    $pltNewDG.Notes+=" for $($pltNewDG.ManagedBy ) -$($admininitials)" ;
+    $pltNewDG.Notes+=" for $($pltNewDG.ManagedBy -join ',' ) -$($admininitials)" ;
 
     if($members){
         $pltNewDG.members = $members | ps1GetxRcp -ErrorAction Continue | select -expand primarysmtpaddress  | select -unique ;
@@ -1064,11 +1229,11 @@ $($smtpBody)
     if($isCloud1st){
         $oDL = (ps1GetxDistGrp -identity $pltNewDG.Alias -ea silentlycontinue)
     } else { 
-        $oDL = (ps1GetxDistGrp -identity $pltNewDG.Alias -domaincontroller $($InputSplat.DomainController) -ea silentlycontinue)
+        $oDL = (ps1GetxDistGrp -identity $pltNewDG.Alias -domaincontroller $($domaincontroller) -ea silentlycontinue)
     } ; 
 
     if($oDL){
-        write-verbose "Existing found: `$oDL:$($oDL.SamAccountname)" ;
+        write-verbose "Existing found: `$oDL:$($oDL.primarysmtpaddress)" ;
         write-verbose "`$oDL.DN:$($oDL.DistinguishedName)" ;
     } else {
     
@@ -1099,7 +1264,7 @@ $($smtpBody)
             if($isCloud1st){
                 do {Write-Host "." -NoNewLine;Start-Sleep -s 1} until ($odl = ps1GetxDistGrp $oDL.primarysmtpaddress -ea silentlycontinue -resultsize 1)  ;
             } else { 
-                do {Write-Host "." -NoNewLine;Start-Sleep -s 1} until ($odl = ps1GetxDistGrp $oDL.primarysmtpaddress -domaincontroller $InputSplat.DomainController -resultsize 1) ;
+                do {Write-Host "." -NoNewLine;Start-Sleep -s 1} until ($odl = ps1GetxDistGrp $oDL.primarysmtpaddress -domaincontroller $domaincontroller -resultsize 1) ;
             } ; 
             $smsg = "`$oDL:$($oDL.primarysmtpaddress)" ;
             $smsg += "`n`$oDL.DN:$($oDL.DistinguishedName)" ;
@@ -1112,7 +1277,7 @@ $($smtpBody)
     if($oDL){
         $pltSetDG.Identity=$($oDL.alias) ;
         if($isCloud1st){
-            $ExistMbrs = ps1GetxDistGrpMbr -Identity $pltNewDG.SamAccountName -ErrorAction 'Stop' | select -expand primarysmtpaddress ; 
+            $ExistMbrs = ps1GetxDistGrpMbr -Identity $oDL.primarysmtpaddress -ErrorAction 'Stop' | select -expand primarysmtpaddress ; 
         } else { 
             $ExistMbrs = ps1GetxDistGrpMbr -Identity $odl.SamAccountName -DomainController $domaincontroller -ErrorAction 'Stop' | select -expand primarysmtpaddress ; 
         } ; 
@@ -1186,17 +1351,17 @@ $($smtpBody)
             if($isCloud1st){
                 $oDL=ps1GetxDistGrp -id $odl.Alias -ErrorAction stop ;
             } else { 
-                $oDL=ps1GetxDistGrp -id $odl.Alias -domaincontroller $InputSplat.DomainController -ErrorAction stop ;
+                $oDL=ps1GetxDistGrp -id $odl.Alias -domaincontroller $domaincontroller -ErrorAction stop ;
             } ; 
             # 10:19 AM 4/4/2017 add RequireSenderAuthenticationEnabled
             $propsDG = "DisplayName","Alias","WindowsEmailAddress","ManagedBy","RequireSenderAuthenticationEnabled","HiddenFromAddressListsEnabled" ; 
-            $smsg = "`n$(($oDL| fl propsDG |out-string).trim())" ; 
+            $smsg = "`n$(($oDL| fl $propsDG |out-string).trim())" ; 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             if($isCloud1st){
                 $oDLMbrs = ps1GetxDistGrpMbr -identity $oDL.alias  -ea 0 | select primarysmtpaddress ; 
             } else { 
-                $oDLMbrs = ps1GetxDistGrpMbr -identity $oDL.alias -domaincontroller $($InputSplat.DomainController) -ea 0 | select distinguishedname;
+                $oDLMbrs = ps1GetxDistGrpMbr -identity $oDL.alias -domaincontroller $($domaincontroller) -ea 0 | select distinguishedname;
             } ; 
             $smsg = "`n$(($oDL| fl $propsDG |out-string).trim())" ; 
             $smsg += "`nMembers:`n$(($oDLMbrs|out-string).trim())" ; 
@@ -1207,7 +1372,76 @@ $($smtpBody)
                 $bRet=Read-Host "Enter Y to Refresh Review (replication latency)." ;
             } ; 
         } until ($bRet -ne "Y" -OR $OutObject);
-        
+        # 1:07 PM 9/30/2021 rem-out the mailcontact creation code, needs debugging. 
+        if($isCloud1st -and -not($whatif)){
+            # check for onprem recipient on smtpaddr, if none, offer to build a MailContact in unreplicated ($($TenOrg)meta.UnreplicatedOU)
+            if($UseOP){
+                Reconnect-Ex2010 @pltRX10 ; 
+                if($existRcp = get-recipient -id $odl.primarysmtpaddress -domaincontroller $domaincontroller -ErrorAction 0){
+                    $smsg = "(existing recipient object for $($odl.primarysmtpaddress) found:$($existRcp.recipienttypedetails) - skipping MContact creation)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } else {
+                    $smsg = "No conflicting OnPrem recipient found with: $($odl.primarysmtpaddress)" ; 
+                    $smsg += "`nDo you want to create an *unreplicated* OnPrem MailContact to point at the EXO object?" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #*======v PS Simple YYY Confirm Prompt - psb-PSPrompt.cbp v======
+                    $bRet=Read-Host "Enter YYY to continue. Anything else will exit" 
+                    if ($bRet.ToUpper() -eq "YYY") {
+                         Write-host "Moving on"
+                            
+                            # new-mailcontact -DisplayName -Name -LastName -DomainController -WhatIf -ExternalEmailAddress -Alias -PrimarySmtpAddress -OrganizationalUnit
+                            $pltNewMC=[ordered]@{
+                                DisplayName = "$($odl.name)-MC" ;
+                                Name = "$($odl.name)-MC" ;
+                                LastName = "$($odl.name)-MC";
+                                DomainController = $domaincontroller;
+                                ExternalEmailAddress = $odl.primarysmtpaddress;
+                                Alias =  "$($odl.name.replace(' ',''))_$((new-guid).tostring().split('-')[-1])";
+                                OrganizationalUnit = "OU=Unreplicated Contacts,$( (Get-Variable  -name "$($TenOrg)Meta").value.UnreplicatedOU )"
+                                ErrorAction = 'STOP';
+                                WhatIf = $($whatif);
+                            } ; 
+                            $smsg = "New-MailContact w`n$(($pltNewMC|out-string).trim())" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                            $error.clear() ;
+                            TRY {
+                                $nmc = new-mailcontact @pltNewMC ; 
+                                $propsMC = 'name','alias','recipienttype','primarysmtpaddress' ;
+                                $smsg = "`n$(($nmc|ft -a $propsMC|out-string).trim())" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            } CATCH {
+                                $ErrTrapd=$Error[0] ;
+                                $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #-=-record a STATUSWARN=-=-=-=-=-=-=
+                                $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                                if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                                if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                                #-=-=-=-=-=-=-=-=
+                                $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                            } ; 
+
+                    } else {
+                         Write-Host "Invalid response. Skipping Contact creation"
+                         # exit <asserted exit error #>
+                         ;;exit 1
+
+                    } # if-block end
+
+                }; 
+            } ; 
+        } ; 
+        #
+
     } else {
         if(!($Whatif)){
             $smsg =   ("FIND/CREATION FAILURE: $($InputSplat.DNameBase) not found.`n") ;
@@ -1237,5 +1471,6 @@ $($smtpBody)
     } ; 
     
     #write-host "xxx"
-} ; 
-#*------^ END Function  ^------
+}
+
+#*------^ new-DgTor.ps1 ^------
