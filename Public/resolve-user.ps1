@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 10:30 AM 11/8/2021 fixed CBH/HelpMessage tagging on -outobject
     * 3:30 PM 10/12/2021 added new Name:ObjName_guid support (new hires turn up with aduser named this way); added some marginal multi xoRcp & xoMailbox handling (loops outputs on the above, and the mapiTest), but doesn't do full AzureAD,Msoluser,MailUser,Guest lookups for these. It's really about error-suppression, and notifying the issue more than returning the full picture
     * 1:04 PM 9/28/2021 added:$AADUserManager lookup and dump of UPN, OpDN & mail (for correlating what email pol a user should have -> the one their manager does)
     * 1:52 PM 9/17/2021 moved $props to top ; test enabled/acctenabled, licRecon & mapi test results and use ww on issues ; flipped caad's to -silent (match cmsol 1st echo's to confirm tenant, rest silent); ren $xMProps -> $propsMailx, $XMFedProps-> $propsXMFed, $lProps -> $propsLic,$adprops -> $propsADU, $aaduprops -> $propsAADU, $aaduFedProps -> $propsAADUfed, $RcpPropsTbl -> $propsRcpTbl, $pltgM-> $pltGMailObj, $pltgMU -> $pltgMsoUsr
@@ -36,10 +37,12 @@ function resolve-user {
     Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)
     .PARAMETER useEXOv2
     Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
+    .PARAMETER outObject
+    switch to return a system.object summary to the pipeline[-outObject]
     .INPUTS
     None. Does not accepted piped input.(.NET types, can add description)
     .OUTPUTS
-    Returns report to pipeline
+    System.Object - returns summary report to pipeline
     .EXAMPLE
     PS> resolve-user
     Default, attempts to parse a user descriptor from clipboard
@@ -76,7 +79,7 @@ function resolve-user {
         [array]$users,
         [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
         [switch] $useEXOv2,
-        [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
+        [Parameter(HelpMessage="switch to return a system.object summary to the pipeline[-outObject]")]
         [switch] $outObject
 
     ) ;
