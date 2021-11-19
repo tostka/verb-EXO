@@ -20,7 +20,7 @@ function get-EXOMsgTraceDetailed {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 3:39 PM 11/19/2021 added -days ; updated logic testing for dates/days against MS 10d limit (stored as new constant) ; checks out functional; needs 7pswlt rplcments of write-*
+    * 4:04 PM 11/19/2021 flipped wh,wv,ww to wlt - added -days ; updated logic testing for dates/days against MS 10d limit (stored as new constant) ; checks out functional; needs 7pswlt rplcments of write-*
     * 12:40 PM 11/15/2021 - expanded subject -match/-like to post test and use the opposing option where the detected failed to yield filtered msgs. 
     * 3:46 pm 11/12/2021 - added -Subject test-IsRegexPattern() and autoflip tween -match & -like post filtering. 
     * 2:37 PM 11/5/2021 init
@@ -168,7 +168,11 @@ function get-EXOMsgTraceDetailed {
             $ScriptBaseName = (Split-Path -Leaf ((& { $myInvocation }).ScriptName))  ;
             $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName) ;
         } ;
-        if ($showDebug) { write-debug -verbose:$true "`$ScriptDir:$($ScriptDir)`n`$ScriptBaseName:$($ScriptBaseName)`n`$ScriptNameNoExt:$($ScriptNameNoExt)`n`$PSScriptRoot:$($PSScriptRoot)`n`$PSCommandPath:$($PSCommandPath)" ; } ;
+        if ($showDebug) { 
+            $smsg = "`$ScriptDir:$($ScriptDir)`n`$ScriptBaseName:$($ScriptBaseName)`n`$ScriptNameNoExt:$($ScriptNameNoExt)`n`$PSScriptRoot:$($PSScriptRoot)`n`$PSCommandPath:$($PSCommandPath)" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } ;
         $ComputerName = $env:COMPUTERNAME ;
         $NoProf = [bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); # if($NoProf){# do this};
         # silently stop any running transcripts
@@ -196,7 +200,8 @@ function get-EXOMsgTraceDetailed {
                     $rgxPSCurrUserScope{$smsg = "CurrentUser"}
                 } ;
                 $smsg += " context script/module, divert logging into [$budrv]:\scripts"
-                write-verbose $smsg  ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 if($bDivertLog){
                     if((split-path $script:PSCommandPath -leaf) -ne $cmdletname){
                         # function in a module/script installed to allusers|cu - defer name to Cmdlet/Function name
@@ -224,7 +229,9 @@ function get-EXOMsgTraceDetailed {
                 BREAK ;
             } ;
         } ;
-        write-verbose "start-Log w`n$(($pltSL|out-string).trim())" ;
+        $smsg = "start-Log w`n$(($pltSL|out-string).trim())" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
         $logspec = start-Log @pltSL ;
         $error.clear() ;
         TRY {
@@ -257,7 +264,7 @@ function get-EXOMsgTraceDetailed {
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ; 
         } ;
-
+        
         $smsg = "`$StartDate:$(get-date -Date $StartDate -format 'yyyyMMdd-HHmmtt')" ;
         $smsg += "`n`$EndDate:$(get-date -Date $EndDate -format 'yyyyMMdd-HHmmtt')" ;
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -305,20 +312,28 @@ function get-EXOMsgTraceDetailed {
         rxo ;
         $error.clear() ;
         TRY {
-            write-host -foregroundcolor green "Get-exoMessageTrace  w`n$(($pltMsgT|out-string).trim())" ;
+            $smsg = "Get-exoMessageTrace  w`n$(($pltMsgT|out-string).trim())" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
             $Page = 1  ;
             $Msgs=$null ;
             do {
-                write-host "Collecting - Page $($Page)..."  ;
+                $smsg = "Collecting - Page $($Page)..."  ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 $pltMsgT.Page=$Page ;
                 $PageMsgs = Get-exoMessageTrace @pltMsgT |  ?{$_.SenderAddress -notlike '*micro*' -or $_.SenderAddress -notlike '*root*' }  ;
                 $Page++  ;
                 $Msgs += @($PageMsgs)  ;
             } until ($PageMsgs -eq $null) ;
             $Msgs=$Msgs| Sort Received ;
-            write-host "Raw sender/recipient Msgs:$(($Msgs|measure).Count)" ;
+            $smsg = "Raw sender/recipient Msgs:$(($Msgs|measure).Count)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
             if($subject){
-                write-host "Post-Filtering on Subject:$($subject)" ;
+                $smsg = "Post-Filtering on Subject:$($subject)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 # detect whether to filter on -match (regex) or -like (asterisk, or default non-regex)
                 if(test-IsRegexPattern -string $subject -verbose:$($VerbosePreference -eq "Continue")){
                     $smsg = "(detected -subject as regex - using -match comparisonn)" ; 
@@ -343,7 +358,9 @@ function get-EXOMsgTraceDetailed {
                         $MsgsFltrd = $Msgs | ?{$_.Subject -match $subject} 
                     } ; 
                 } ; 
-                write-host "Post Subj filter matches:$(($MsgsFltrd|measure).Count)" ;
+                $smsg = "Post Subj filter matches:$(($MsgsFltrd|measure).Count)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 $msgs = $MsgsFltrd ; 
             } ;
             $ofile+= "-r$(get-date -format 'yyyyMMdd-HHmmtt').csv" ;
@@ -353,29 +370,56 @@ function get-EXOMsgTraceDetailed {
             if($Msgs){
                 $Msgs | select $propsMT | export-csv -notype -path $ofile  ;
                 $hReports.add('MTMessages',$msgs) ; 
-                write-host -fore yellow "Status Distrib:" ;
-                write-host -fore white "`n#*------v MOST RECENT MATCH v------" ;
-                write-host "$(($msgs[-1]| fl $propsMsgDump |out-string).trim())";
-                write-host -fore white "`n#*------^ MOST RECENT MATCH ^------" ;
-                write-host -fore blue "`n#*------v Status DISTRIB v------" ;
-                write-host "$(($Msgs | select -expand Status | group | sort count,count -desc | select count,name|out-string).trim())" ;
-                write-host -fore blue "`n#*------^ Status DISTRIB ^------" ;
+                $smsg = "Status Distrib:" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $smsg = "`n#*------v MOST RECENT MATCH v------" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $smsg = "$(($msgs[-1]| fl $propsMsgDump |out-string).trim())";
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $smsg = "`n#*------^ MOST RECENT MATCH ^------" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $smsg = "`n#*------v Status DISTRIB v------" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor blue "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $smsg = "$(($Msgs | select -expand Status | group | sort count,count -desc | select count,name|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $smsg = "`n#*------^ Status DISTRIB ^------" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor blue "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 if(test-path -path $ofile){
-                   write-host "(log file confirmed)" ;
-                   Resolve-Path -Path $ofile | select -expand Path | out-clipboard ;
-                   write-host "$($Msgs.count) matches output to:`n'$($ofile)'`n(copied to CB)" ;
+                    $smsg = "(log file confirmed)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    Resolve-Path -Path $ofile | select -expand Path | out-clipboard ;
+                    $smsg = "$($Msgs.count) matches output to:`n'$($ofile)'`n(copied to CB)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 } else { "MISSING MsgTrc LOG FILE!" } ;
                 if($doMTD){
                     if($msgs.count -gt $MessageTraceDetailLimit){
-                        write-warning "$($msgs.count) EXCEEDS `$MessageTraceDetailLimit:$($MessageTraceDetailLimit)!.`nget-MTD'ing only most recent $($MessageTraceDetailLimit) msgs...!"
+                        $smsg = "$($msgs.count) EXCEEDS `$MessageTraceDetailLimit:$($MessageTraceDetailLimit)!.`nget-MTD'ing only most recent $($MessageTraceDetailLimit) msgs...!"
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                         $mtdmsgs = $msgs | select -last $MessageTraceDetailLimit ; 
                     } else { $mtdmsgs = $msgs }  ; 
-                    write-host -foregroundcolor green "`n[$(($msgs|measure).count)msgs]|=>Get-exoMessageTraceDetail:" ;
+                    $smsg = "`n[$(($msgs|measure).count)msgs]|=>Get-exoMessageTraceDetail:" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
                     $mtds = $mtdmsgs | Get-exoMessageTraceDetail ;
                     $mtdRpt = @() ; 
                     if($doMTDReportRuleHits){
                         $TRules = get-exotransportrule  ; 
-                        write-host "Checking for `$mtds|`?{$_.Event -eq 'Transport rule'}:" ; 
+                        $smsg = "Checking for `$mtds|`?{$_.Event -eq 'Transport rule'}:" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                     } ; 
                     foreach($mtd in $mtds){
                         $mtdsummary = [ordered]@{
@@ -388,17 +432,21 @@ function get-EXOMsgTraceDetailed {
                         } ; 
                         if($doMTDReportRuleHits){
                             if ($mtd| ?{$_.Event -eq 'Transport rule'}){
-                                # write-host "`n$(($mtd | fl Date,Event,Action,Detail |out-string).trim())" ; 
+                                # $smsg = "`n$(($mtd | fl Date,Event,Action,Detail |out-string).trim())" ; 
                                 if($mtd.detail -match "Transport\srule:\s'',\sID:\s\('(\w{8}-\w{4}-\w{4}-\w{4}-\w{12})'\)"){
-                                    #write-host "$(($trules|?{$_.guid -eq $matches[1]}  | format-list Name,State,Priority|out-string).trim())" ; 
+                                    #$smsg = "$(($trules|?{$_.guid -eq $matches[1]}  | format-list Name,State,Priority|out-string).trim())" ; 
                                     $ruledetail = $trules|?{$_.guid -eq $matches[1]}  | select Name,Guid,State,Priority ; 
                                     $mtdsummary.TRuleName = $ruledetail.Name ; 
                                     $mtdsummary.TRuleDetails = $ruledetail ; 
                                 } ; 
-                                write-host "`n$(($mtdsummary| fl Date,Event,Action,Detail,TRuleName |out-string).trim())" ; 
+                                $smsg = "`n$(($mtdsummary| fl Date,Event,Action,Detail,TRuleName |out-string).trim())" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                             } ; 
                         } else {
-                            write-host "`n$(($mtdsummary| fl Date,Event,Action,Detail|out-string).trim())" ; 
+                            $smsg = "`n$(($mtdsummary| fl Date,Event,Action,Detail|out-string).trim())" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                            else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                         }  ;
                         $mtdRpt += [pscustomobject]$mtdsummary ; 
                     } ; 
@@ -407,20 +455,32 @@ function get-EXOMsgTraceDetailed {
                         $ofileMTD = $ofile.replace('-MsgTrc','-MTD') ;
                         $mtds | select $propsMTD | export-csv -notype -path $ofileMTD  ;
                         if(test-path -path $ofileMTD){
-                            write-host "(log file confirmed)" ;
-                            write-host "$($mtds.count) MTD matches output to:`n'$($ofileMTD)" ;
+                            $smsg = "(log file confirmed)" ;
+                            $smsg += "`n$($mtds.count) MTD matches output to:`n'$($ofileMTD)" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                            else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                         } else { write-warning "MISSING MTD LOG FILE!" } ;
                         $hReports.add('MTDetails',$mtds) ; 
                         $hReports.add('MTDReport',$mtdRpt) ; 
                         $ofileMTDRpt = $ofile.replace('-MsgTrc','-MTDRpt') ;
                         $mtdRpt | export-csv -notype -path $ofileMTDRpt  ;
                         if(test-path -path $ofileMTD){
-                            write-host "(log file confirmed)" ;
-                            write-host "$($mtdRpt.count) MTDReport matches output to:`n'$($ofileMTDRpt)" ;
-                        } else { write-warning "MISSING MTD LOG FILE!" } ;
+                            $smsg = "(log file confirmed)" ;
+                            $smsg += "`n$($mtdRpt.count) MTDReport matches output to:`n'$($ofileMTDRpt)" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                            else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        } else { 
+                            $smsg = "MISSING MTD LOG FILE!" 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        } ;
                    } ;
                 } ;
-            } else {write-host "NO MATCHES FOUND from::`n$(($pltMsgT|out-string).trim()|out-default)`n(with any relevant ConnectorId postfilter)" } ;
+            } else {
+                $smsg = "NO MATCHES FOUND from::`n$(($pltMsgT|out-string).trim()|out-default)`n(with any relevant ConnectorId postfilter)" 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+            } ;
         } CATCH {
             $ErrTrapd=$Error[0] ;
             $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
@@ -430,7 +490,9 @@ function get-EXOMsgTraceDetailed {
         } ;
     } ;  # PROC-E
     END {
-        write-host "(Returning summary object to pipeline)" ; 
+        $smsg = "(Returning summary object to pipeline)" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
         $hReports | Write-Output ; 
     } ; 
 } ; 
