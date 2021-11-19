@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.107.0
+  Version     : 1.0.111.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -4265,7 +4265,7 @@ function get-xoHistSearch {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 12:49 PM 9/28/2021 init; added MsgID support
+    * 12:49 PM 9/28/2021 init; added MsgID support; added MsgID example
     .DESCRIPTION
     get-xoHistSearch.ps1 - wrapper/automation for EXO's get-HistoricalSearch cmdlet, Assembles ReportTitle & models an export-csv filename, around recipient, sender, reportType etc params specified for get-historicalsearch, also dawdle loops monitoring & alerting the progress of the associated PSJob created by the search submission.
     .PARAMETER Requester
@@ -4302,13 +4302,28 @@ function get-xoHistSearch {
          } ;
     write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):get-xoHistSearch w`n$(($pltHS|out-string).trim())" ;
     get-xoHistSearch @pltHS ;
+    Demo splatted-params search against Days and Sender
+    .EXAMPLE
+    PS> $pltHS = [ordered]@{ Ticket = 'toddvac';
+            Requester = 'uid@domain.com' ;;
+            Days = 25 ;
+            Recipient = $null ;
+            Sender = sender@domain.com' ;
+            NotifyAddress = 'notify@domain.com' ;
+            MessageId = '<xxxxxx...@CH0PR04MB8147.namprd04.prod.outlook.com>' ;
+            verbose = $true ;
+            showdebug = $true ;
+        } ;
+        write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):get-xoHistSearch w`n$(($pltHS|out-string).trim())" ;
+        get-xoHistSearch @pltHS ;
+        Demo splatted-params MessageID HistoricalSearch
     .LINK
     https://docs.microsoft.com/en-us/powershell/module/exchange/get-historicalsearch
     .LINK
     https://github.com/tostka/verb-exo
     #>
     ###Requires -Version 5
-    #Requires -Modules ExchangeOnlineManagement,verb-Auth, verb-EXO, verb-IO, verb-logging, verb-Text
+    #Requires -Modules ExchangeOnlineManagement,verb-Auth, verb-IO, verb-logging, verb-Text
     ###Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Text
     #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
@@ -6604,6 +6619,13 @@ function new-DgTor {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,DistributionGroup,DistributionList,Hybrid
     REVISIONS
+    * 4:54 PM 9/30/2021 updated CloudFirst code, and used to create functional 
+    exoDG, also added code to dynamically create onprem unreplicated MailContacts 
+    for CloudFirst, to represent an onprem AddrBook object ; flipped members & 
+    ManagedBy to [string[]]; added UG->DG conversion example,
+    with splat; swapped undependable $scriptbasename w $cmdletname (tends to show
+    module as name); updated cloudfirst variant code, switched recipient &
+    managedby's to raw smtpaddresses ; finally validated hybrid OnPrem DG creation as well. 
     * 4:28 PM 9/14/2021 ren: new-DL-Tor -> new-DgTor ;; debugged -CloudFirst - working as intended ; fixed pipeline bug coming out of Start-IseTranscript , properly returns newdg object to pipeline;  converted to function, add to verb-exo (once it includes proper hybrid, most approp place); -CloudFirst still undebugged
     *2:56 PM 9/13/2021 rewrote for modern modules & template, -outputObject default. Tested ExOP version, haven't done -CloudFirst debugging yet.
     # 11:05 AM 6/13/2019 updated get-admininitials()
@@ -6691,11 +6713,79 @@ function new-DgTor {
     SystemObject
     [| get-member the output to see what .NET obj TypeName is returned, to use here]
     .EXAMPLE
-    PS> .\new-DgTor.ps1 -SiteOverride ENT -DNameBase "DL Base DisplayName" -ManagedBy MANAGERID -Members 'MEMBER1@DOMAIN.com','MEMBER2@DOMAIN.com' -HiddenFromAddressLists -showDebug -verbose -Ticket 99999 -whatif;
+    PS> new-DgTor -SiteOverride ENT -DNameBase "DL Base DisplayName" -ManagedBy MANAGERID -Members 'MEMBER1@DOMAIN.com','MEMBER2@DOMAIN.com' -HiddenFromAddressLists -showDebug -verbose -Ticket 99999 -whatif;
     Create a DL with a siteoverride (spec'ing as ENT-name, rather than alt site)
     .EXAMPLE
-    PS> $ndg = .\new-DgTor.ps1 -TenOrg TOR -DNameBase "DL BASE DISPLAYNAME" -ManagedBy MANAGERID -Members 'MEMBER1@DOMAIN.com','MEMBER2@DOMAIN.com' -HiddenFromAddressLists -showDebug -verbose -Ticket 99999 -outobject;
+    PS> $ndg = new-DgTor -TenOrg TOR -DNameBase "DL BASE DISPLAYNAME" -ManagedBy MANAGERID -Members 'MEMBER1@DOMAIN.com','MEMBER2@DOMAIN.com' -HiddenFromAddressLists -showDebug -verbose -Ticket 99999 -outobject;
     Create a DG with SiteOverride and return resulting new DG as an object, assigned to $ndg
+    .EXAMPLE
+    $whatif=$true ; 
+    reconnect-exo ; 
+    TRY{
+        $tugn = 'TeamsUGNamwe_GUID' ;
+        $tug = Get-exoUnifiedGroup -Identity $tugn ;
+        $tugmbrs = Get-exoUnifiedGroupLinks -Id $tug.name -LinkType Members ;
+        $pltNDg=[ordered]@{   TenOrg='TOR' ;
+            CloudFirst=$true ;
+            DNameBase="IS-$($tug.displayname)" ;
+            ManagedBy=($tug.managedby | get-exorecipient -ea STOP | select -expand primarysmtpaddress) ;
+            Members=($tugmbrs.primarysmtpaddress| get-exorecipient -ea STOP | select -expand primarysmtpaddress) ;
+            HiddenFromAddressLists=$false;
+            showDebug=$true;
+            verbose=$true;
+            Ticket='99999' ;
+            outobject=$true;
+            whatif=$($whatif);
+          } ;
+         write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):new-DgTor w`n$(($pltNDg|out-string).trim())" ;
+         $ndg = new-DgTor @pltNDg;
+         $ndg ;
+    } CATCH {
+    Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+    break ;
+    } ;
+    # Traditionally the UG would then be set Hidden from Address Books, in deference to the DG
+    Set-exoUnifiedGroup -Id $tug.name -HiddenFromAddressListsEnabled $true
+    
+    Demo conversion of a Teams Unified Group membership (which permits unsubscribes, and silent loss of mail) into a standard DG. 
+    .EXAMPLE
+    $whatif=$true ;
+    reconnect-exo ;
+    reconnect-ex2010 ;
+    TRY{
+        $tugn = 'TeamsUGNamwe_GUID' ;
+        $tug = Get-exoUnifiedGroup -Identity $tugn ;
+        $tugmbrs = Get-exoUnifiedGroupLinks -Id $tug.name -LinkType Members ;
+        $pltNDg=[ordered]@{   TenOrg='TOR' ;
+          CloudFirst=$false ;
+          SiteOverride = 'ENT' ;
+          DNameBase="IS-$($tug.displayname)" ;
+          ManagedBy=($tug.managedby | get-exorecipient -ea continue | select -expand primarysmtpaddress | select -unique | get-recipient -ea continue | select -expand primarysmtpaddress | select -unique) ;
+          Members=($tugmbrs.primarysmtpaddress| get-recipient -ea continue | select -expand primarysmtpaddress) ;
+          HiddenFromAddressLists=$false;
+          showDebug=$true;
+          verbose=$true;
+          Ticket='99999' ;
+          outobject=$true;
+          whatif=$($whatif);
+         } ;
+        write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):new-DgTor w`n$(($pltNDg|out-string).trim())" ;
+        $ndg = new-DgTor @pltNDg;
+        $ndg ;
+    } CATCH {
+        Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+        break ;
+    } ;
+    # Traditionally the UG would then be set Hidden from Address Books, in deference to the DG
+    Set-exoUnifiedGroup -Id $tug.name -HiddenFromAddressListsEnabled $true
+    
+    Demo conversion of a Teams Unified Group membership (which permits unsubscribes, and silent loss of mail) into a standard on-prem hybrid replicated DG, 
+    with the prefix/SiteCode overridden to use 'ENT' over the ManagedBy's home SiteCode. 
+    
+    Note:An onprem DG can have MailContacts in the membership (and in the ManagedBy as well), with the same primarysmtpaddress as remote-hybrid cloud mailboxes. 
+    (e.g. EXO mailboxes that aren't Hybrid/AD'd locally to the DG-hosting OnPrem mail org)
+    Upon ADC replication of a MailContact member (or ManagedBy) to AzureAD, any MailContact set in either property, will be auto-replaced during replication, 
+    with the matching EXO mailbox object. A neat way of maintaining hybrid onPrem-deliverable DG's, containing non-locally-replicated EXO mailboxes.
     .LINK
     https://github.com/tostka/verb-exo        
     #>
@@ -6713,14 +6803,14 @@ function new-DgTor {
         [Parameter(Mandatory=$true,HelpMessage="Base Name string, for DL Name construction. [SIT-DL] will be automatically appended[Base Name String]")]
         [string]$DNameBase,
         [Parameter(Position=0,HelpMessage="ITSM Request/Incident Number [nnnnnn]")]
-        [ValidatePattern("^\d{5,6}$")]
+        #[ValidatePattern("^\d{5,6}$")]
         [string]$Ticket,
         [Parameter(Mandatory=$true,HelpMessage="Specify the userid to be responsible for access-grant-approvals[name,emailaddr,alias]")]
-        [string]$ManagedBy,
+        [string[]]$ManagedBy,
         [Parameter(HelpMessage="Specify a 3-letter Site Code. Used to force DL name/placement to vary from ManageBy's current site[3-letter Site code]")]
         [string]$SiteOverride,
         [Parameter(HelpMessage="Comma-delimited string of potential users to be granted access[name,emailaddr,alias]")]
-        [string]$Members,
+        [string[]]$Members,
         [Parameter(HelpMessage="Can receive from external senders [-InetReceive:`$true]")]
         [switch]$InetReceive,
         [Parameter(HelpMessage="Switch to configure -HiddenFromAddressListsEnabled `$true [-HiddenFromAddressLists]")]
@@ -7331,6 +7421,7 @@ $($smtpBody)
     } ; 
 
     #*======V CONFIGURE DEFAULT LOGGING FROM PARENT SCRIPT NAME v======
+    <# old code
     #$pltSL=@{ NoTimeStamp=$true ; Tag="($TenOrg)-LASTPASS" ; showdebug=$($showdebug) ; whatif=$($whatif) ; Verbose=$($VerbosePreference -eq 'Continue') ; } ;
     $pltSL=@{ NoTimeStamp=$FALSE ; Tag="($Ticket)" ; showdebug=$($showdebug) ; whatif=$($whatif) ; Verbose=$($VerbosePreference -eq 'Continue') ; } ;
     if($PSCommandPath){   $logspec = start-Log -Path $PSCommandPath @pltSL ;
@@ -7344,6 +7435,70 @@ $($smtpBody)
             start-transcript -Path $transcript ;
         } ;
     } else {throw "Unable to configure logging!" } ;
+    #>
+    if(!(get-variable LogPathDrives -ea 0)){$LogPathDrives = 'd','c' };
+    foreach($budrv in $LogPathDrives){if(test-path -path "$($budrv):\scripts" -ea 0 ){break} } ;
+    if(!(get-variable rgxPSAllUsersScope -ea 0)){
+        $rgxPSAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps(((d|m))*)1|dll)$" ;
+    } ;
+    if(!(get-variable rgxPSCurrUserScope -ea 0)){
+        $rgxPSCurrUserScope="^$([regex]::escape([Environment]::GetFolderPath('MyDocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps((d|m)*)1|dll)$" ;
+    } ;
+    $pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag=$null ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($whatif) ;} ;
+    $pltSL.Tag = ($ticket,$DNameBase -join '-') ;
+    if($script:PSCommandPath){
+        if(($script:PSCommandPath -match $rgxPSAllUsersScope) -OR ($script:PSCommandPath -match $rgxPSCurrUserScope)){
+            $bDivertLog = $true ;
+            switch -regex ($script:PSCommandPath){
+                $rgxPSAllUsersScope{$smsg = "AllUsers"}
+                $rgxPSCurrUserScope{$smsg = "CurrentUser"}
+            } ;
+            $smsg += " context script/module, divert logging into [$budrv]:\scripts"
+            write-verbose $smsg  ;
+            if($bDivertLog){
+                if((split-path $script:PSCommandPath -leaf) -ne $cmdletname){
+                    # function in a module/script installed to allusers|cu - defer name to Cmdlet/Function name
+                    $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
+                } else {
+                    # installed allusers|CU script, use the hosting script name
+                    $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $script:PSCommandPath -leaf)) ;
+                }
+            } ;
+        } else {
+            $pltSL.Path = $script:PSCommandPath ;
+        } ;
+    } else {
+        if(($MyInvocation.MyCommand.Definition -match $rgxPSAllUsersScope) -OR ($MyInvocation.MyCommand.Definition -match $rgxPSCurrUserScope) ){
+             $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $script:PSCommandPath -leaf)) ;
+        } elseif(test-path $MyInvocation.MyCommand.Definition) {
+            $pltSL.Path = $MyInvocation.MyCommand.Definition ;
+        } elseif($cmdletname){
+            $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
+        } else {
+            $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$CMDLETNAME, FROM WHICH TO BUILD A START-LOG.PATH!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            BREAK ;
+        } ;
+    } ;
+    write-verbose "start-Log w`n$(($pltSL|out-string).trim())" ;
+    $logspec = start-Log @pltSL ;
+    $error.clear() ;
+    TRY {
+        if($logspec){
+            $logging=$logspec.logging ;
+            $logfile=$logspec.logfile ;
+            $transcript=$logspec.transcript ;
+            $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+            start-Transcript -path $transcript ;
+        } else {throw "Unable to configure logging!" } ;
+    } CATCH {
+        $ErrTrapd=$Error[0] ;
+        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    } ;
+
     #*======^ CONFIGURE DEFAULT LOGGING FROM PARENT SCRIPT NAME ^======
 
     # -----------
@@ -7367,15 +7522,30 @@ $($smtpBody)
             $smtpTo=$smtpToFailThru ;
         } ;
     }
-    $smtpFrom = (($scriptBaseName.replace(".","-")) + "@$( (Get-Variable  -name "$($TenOrg)Meta").value.o365_OPDomain )") ;
+    <# 
+    if($bDivertLog){ # scriptbasename will likely be a module name, use diverted start-log values
+        $smtpFrom = ((split-path $pltsl.path -leaf).replace('.','-') + "@$( (Get-Variable  -name "$($TenOrg)Meta").value.o365_OPDomain )")
+    } else {
+        $smtpFrom = (($scriptBaseName.replace(".","-")) + "@$( (Get-Variable  -name "$($TenOrg)Meta").value.o365_OPDomain )") ;
+    } ; 
+    #>
+    # shift to cmdletname, more dependable
+    $smtpFrom = (($CmdletName.replace(".","-")) + "@$( (Get-Variable  -name "$($TenOrg)Meta").value.o365_OPDomain )") ;
     $smtpSubj= "Proc Rpt:"
     if($whatif) {
         $smtpSubj+="WHATIF:" ;
     } else {
         $smtpSubj+="PROD:" ;
     } ;
-    $smtpSubj+= "$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
-
+    <#
+    if($bDivertLog){ # scriptbasename will likely be a module name, use diverted start-log values
+        $smtpSubj+= "$((split-path $pltsl.path -leaf)):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
+    } else {
+        $smtpSubj+= "$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
+    } ; 
+    #>
+    # shift to cmdletname, more dependable
+    $smtpSubj+= "$($CmdletName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
     if(!($bodyAsHtml)){
         # if not inline attachment in body, need to load report as attachment
         $smtpAttachment=$rptfile ;
@@ -7567,7 +7737,17 @@ $($smtpBody)
     $error.clear() ;
     TRY {
         #if($ManagedBy){$oManagedBy = $ManagedBy | foreach-object {ps1GetxRcp -id $_ -ResultSize 1 -ea 'STOP' } | select -expand primarysmtpaddress  | select -unique ;} ; 
-        if($ManagedBy){$oManagedBy = ps1GetxRcp -id $ManagedBy -ResultSize 1 -ea 'STOP' } ; 
+        if($ManagedBy){
+            if($isCloud1st){
+                #$oManagedBy = ps1GetxRcp -id $ManagedBy -ResultSize 1 -ea 'Continue' 
+                #$oManagedBy = ps1GetxRcp -id $ManagedBy -ResultSize 25 -ea 'Continue' 
+                $oManagedBy = $ManagedBy  | ps1GetxRcp -ResultSize 25 -ea 'Continue' 
+            } else { 
+                # resolving exo smtpaddresss could yield missing recips, pull -ea
+                #$oManagedBy = get-recipient -id $ManagedBy -ResultSize 25 #-ea -ea 'Continue' 
+                $oManagedBy = $ManagedBy | get-recipient  -ResultSize 25 -ea 'Continue' 
+            } ;
+        } ; 
     } CATCH {
         $ErrTrapd=$Error[0] ;
         $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
@@ -7587,14 +7767,14 @@ $($smtpBody)
     if($isCloud1st){
         $DName=("ENT" + "-DL-" + $InputSplat.DNameBase) ;
     }else {
-        $InputSplat.Add("Domain",$($oManagedBy.identity.tostring().split("/")[0]) ) ; 
-
-        $InputSplat.SiteCode=($oManagedBy.identity.tostring().split('/')[1]) ;
+        $InputSplat.Add("Domain",$($oManagedBy[0].identity.tostring().split("/")[0]) ) ; 
+        # force 1st ManagedBy's OU (if it's an array)
+        $InputSplat.SiteCode=($oManagedBy[0].identity.tostring().split('/')[1]) ;
         if($domaincontroller){
             $InputSplat.Add("DomainController",$domaincontroller) ; 
         } ; 
-        $pltNewDG.Add("DomainController",$InputSplat.DomainController) ; 
-        $pltSetDG.Add("DomainController",$InputSplat.DomainController) ; 
+        $pltNewDG.Add("DomainController",$domaincontroller) ; 
+        $pltSetDG.Add("DomainController",$domaincontroller) ; 
 
         if($InputSplat.SiteOverride){
             $SiteCode=$InputSplat.SiteOverride;
@@ -7604,9 +7784,9 @@ $($smtpBody)
         } ;
 
         if($SiteOverride -eq 'ENT'){
-            # ent-named OU, but park it in the ManagedBy's OU - no park it in LYN OU
+            # ent-named OU, but park it in the ManagedBy's OU - no park it in LYN OU - less confusing if all ENT's are in one place
             $FindOU="^OU=Distribution\sGroups,";
-            #$tmpSite = ($oManagedBy.identity.tostring().split('/')[1]) ;
+            #$tmpSite = ($oManagedBy[0].identity.tostring().split('/')[1]) ;
             $tmpSite = 'LYN'
             if( ($pltNewDG.OrganizationalUnit = ((Get-ADObject -filter { ObjectClass -eq 'organizationalunit' } -ea continue | ?{($_.distinguishedname -match "$($FindOU).*OU=$($tmpSite),.*") } | select distinguishedname).distinguishedname.tostring()) )) { } else { _cleanup ; Exit ;} 
             $InputSplat.Add("SiteName", $SiteCode) ;
@@ -7640,7 +7820,7 @@ $($smtpBody)
     } ; 
     $pltNewDG.Type = "Distribution";
     $pltNewDG.ManagedBy =$oManagedBy.primarysmtpaddress | select -unique  ;
-    $pltNewDG.Notes+=" for $($pltNewDG.ManagedBy ) -$($admininitials)" ;
+    $pltNewDG.Notes+=" for $($pltNewDG.ManagedBy -join ',' ) -$($admininitials)" ;
 
     if($members){
         $pltNewDG.members = $members | ps1GetxRcp -ErrorAction Continue | select -expand primarysmtpaddress  | select -unique ;
@@ -7653,11 +7833,11 @@ $($smtpBody)
     if($isCloud1st){
         $oDL = (ps1GetxDistGrp -identity $pltNewDG.Alias -ea silentlycontinue)
     } else { 
-        $oDL = (ps1GetxDistGrp -identity $pltNewDG.Alias -domaincontroller $($InputSplat.DomainController) -ea silentlycontinue)
+        $oDL = (ps1GetxDistGrp -identity $pltNewDG.Alias -domaincontroller $($domaincontroller) -ea silentlycontinue)
     } ; 
 
     if($oDL){
-        write-verbose "Existing found: `$oDL:$($oDL.SamAccountname)" ;
+        write-verbose "Existing found: `$oDL:$($oDL.primarysmtpaddress)" ;
         write-verbose "`$oDL.DN:$($oDL.DistinguishedName)" ;
     } else {
     
@@ -7688,7 +7868,7 @@ $($smtpBody)
             if($isCloud1st){
                 do {Write-Host "." -NoNewLine;Start-Sleep -s 1} until ($odl = ps1GetxDistGrp $oDL.primarysmtpaddress -ea silentlycontinue -resultsize 1)  ;
             } else { 
-                do {Write-Host "." -NoNewLine;Start-Sleep -s 1} until ($odl = ps1GetxDistGrp $oDL.primarysmtpaddress -domaincontroller $InputSplat.DomainController -resultsize 1) ;
+                do {Write-Host "." -NoNewLine;Start-Sleep -s 1} until ($odl = ps1GetxDistGrp $oDL.primarysmtpaddress -domaincontroller $domaincontroller -resultsize 1) ;
             } ; 
             $smsg = "`$oDL:$($oDL.primarysmtpaddress)" ;
             $smsg += "`n`$oDL.DN:$($oDL.DistinguishedName)" ;
@@ -7701,7 +7881,7 @@ $($smtpBody)
     if($oDL){
         $pltSetDG.Identity=$($oDL.alias) ;
         if($isCloud1st){
-            $ExistMbrs = ps1GetxDistGrpMbr -Identity $pltNewDG.SamAccountName -ErrorAction 'Stop' | select -expand primarysmtpaddress ; 
+            $ExistMbrs = ps1GetxDistGrpMbr -Identity $oDL.primarysmtpaddress -ErrorAction 'Stop' | select -expand primarysmtpaddress ; 
         } else { 
             $ExistMbrs = ps1GetxDistGrpMbr -Identity $odl.SamAccountName -DomainController $domaincontroller -ErrorAction 'Stop' | select -expand primarysmtpaddress ; 
         } ; 
@@ -7775,17 +7955,17 @@ $($smtpBody)
             if($isCloud1st){
                 $oDL=ps1GetxDistGrp -id $odl.Alias -ErrorAction stop ;
             } else { 
-                $oDL=ps1GetxDistGrp -id $odl.Alias -domaincontroller $InputSplat.DomainController -ErrorAction stop ;
+                $oDL=ps1GetxDistGrp -id $odl.Alias -domaincontroller $domaincontroller -ErrorAction stop ;
             } ; 
             # 10:19 AM 4/4/2017 add RequireSenderAuthenticationEnabled
             $propsDG = "DisplayName","Alias","WindowsEmailAddress","ManagedBy","RequireSenderAuthenticationEnabled","HiddenFromAddressListsEnabled" ; 
-            $smsg = "`n$(($oDL| fl propsDG |out-string).trim())" ; 
+            $smsg = "`n$(($oDL| fl $propsDG |out-string).trim())" ; 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             if($isCloud1st){
                 $oDLMbrs = ps1GetxDistGrpMbr -identity $oDL.alias  -ea 0 | select primarysmtpaddress ; 
             } else { 
-                $oDLMbrs = ps1GetxDistGrpMbr -identity $oDL.alias -domaincontroller $($InputSplat.DomainController) -ea 0 | select distinguishedname;
+                $oDLMbrs = ps1GetxDistGrpMbr -identity $oDL.alias -domaincontroller $($domaincontroller) -ea 0 | select distinguishedname;
             } ; 
             $smsg = "`n$(($oDL| fl $propsDG |out-string).trim())" ; 
             $smsg += "`nMembers:`n$(($oDLMbrs|out-string).trim())" ; 
@@ -7796,7 +7976,76 @@ $($smtpBody)
                 $bRet=Read-Host "Enter Y to Refresh Review (replication latency)." ;
             } ; 
         } until ($bRet -ne "Y" -OR $OutObject);
-        
+        # 1:07 PM 9/30/2021 rem-out the mailcontact creation code, needs debugging. 
+        if($isCloud1st -and -not($whatif)){
+            # check for onprem recipient on smtpaddr, if none, offer to build a MailContact in unreplicated ($($TenOrg)meta.UnreplicatedOU)
+            if($UseOP){
+                Reconnect-Ex2010 @pltRX10 ; 
+                if($existRcp = get-recipient -id $odl.primarysmtpaddress -domaincontroller $domaincontroller -ErrorAction 0){
+                    $smsg = "(existing recipient object for $($odl.primarysmtpaddress) found:$($existRcp.recipienttypedetails) - skipping MContact creation)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } else {
+                    $smsg = "No conflicting OnPrem recipient found with: $($odl.primarysmtpaddress)" ; 
+                    $smsg += "`nDo you want to create an *unreplicated* OnPrem MailContact to point at the EXO object?" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #*======v PS Simple YYY Confirm Prompt - psb-PSPrompt.cbp v======
+                    $bRet=Read-Host "Enter YYY to continue. Anything else will exit" 
+                    if ($bRet.ToUpper() -eq "YYY") {
+                         Write-host "Moving on"
+                            
+                            # new-mailcontact -DisplayName -Name -LastName -DomainController -WhatIf -ExternalEmailAddress -Alias -PrimarySmtpAddress -OrganizationalUnit
+                            $pltNewMC=[ordered]@{
+                                DisplayName = "$($odl.name)-MC" ;
+                                Name = "$($odl.name)-MC" ;
+                                LastName = "$($odl.name)-MC";
+                                DomainController = $domaincontroller;
+                                ExternalEmailAddress = $odl.primarysmtpaddress;
+                                Alias =  "$($odl.name.replace(' ',''))_$((new-guid).tostring().split('-')[-1])";
+                                OrganizationalUnit = "OU=Unreplicated Contacts,$( (Get-Variable  -name "$($TenOrg)Meta").value.UnreplicatedOU )"
+                                ErrorAction = 'STOP';
+                                WhatIf = $($whatif);
+                            } ; 
+                            $smsg = "New-MailContact w`n$(($pltNewMC|out-string).trim())" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                            $error.clear() ;
+                            TRY {
+                                $nmc = new-mailcontact @pltNewMC ; 
+                                $propsMC = 'name','alias','recipienttype','primarysmtpaddress' ;
+                                $smsg = "`n$(($nmc|ft -a $propsMC|out-string).trim())" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            } CATCH {
+                                $ErrTrapd=$Error[0] ;
+                                $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #-=-record a STATUSWARN=-=-=-=-=-=-=
+                                $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                                if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                                if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                                #-=-=-=-=-=-=-=-=
+                                $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                            } ; 
+
+                    } else {
+                         Write-Host "Invalid response. Skipping Contact creation"
+                         # exit <asserted exit error #>
+                         ;;exit 1
+
+                    } # if-block end
+
+                }; 
+            } ; 
+        } ; 
+        #
+
     } else {
         if(!($Whatif)){
             $smsg =   ("FIND/CREATION FAILURE: $($InputSplat.DNameBase) not found.`n") ;
@@ -9350,6 +9599,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:30 PM 10/12/2021 added new Name:ObjName_guid support (new hires turn up with aduser named this way); added some marginal multi xoRcp & xoMailbox handling (loops outputs on the above, and the mapiTest), but doesn't do full AzureAD,Msoluser,MailUser,Guest lookups for these. It's really about error-suppression, and notifying the issue more than returning the full picture
     * 1:04 PM 9/28/2021 added:$AADUserManager lookup and dump of UPN, OpDN & mail (for correlating what email pol a user should have -> the one their manager does)
     * 1:52 PM 9/17/2021 moved $props to top ; test enabled/acctenabled, licRecon & mapi test results and use ww on issues ; flipped caad's to -silent (match cmsol 1st echo's to confirm tenant, rest silent); ren $xMProps -> $propsMailx, $XMFedProps-> $propsXMFed, $lProps -> $propsLic,$adprops -> $propsADU, $aaduprops -> $propsAADU, $aaduFedProps -> $propsAADUfed, $RcpPropsTbl -> $propsRcpTbl, $pltgM-> $pltGMailObj, $pltgMU -> $pltgMsoUsr
     * 4:33 PM 9/16/2021 fixed typo in get-AzureAdUser call, reworked output (aadu into markdown delimited wide layout), moved user detaiil reporting to below aadu, and output the federated AD remote DN, (proxied through AADU ext prop)
@@ -9414,7 +9664,10 @@ function resolve-user {
     BEGIN{
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         $rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ;
-        $rgxDName = "^([a-zA-Z]{2,}\s[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
+        # added support for . fname lname delimiter (supports pasted in dirname of email addresses, as user)
+        $rgxDName = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
+        #"^([a-zA-Z]{2,}\s[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
+        $rgxObjNameNewHires = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)_[a-z0-9]{10}"  # Name:Fname LName_f4feebafdb (appending uniqueness guid chunk)
         $rgxSamAcctNameTOR = "^\w{2,20}$" ; # up to 20k, the limit prior to win2k
         #$rgxSamAcctName = "^[^\/\\\[\]:;|=,+?<>@?]+$" # no char limit ;
         $MaxRecips = 25 ; # max number of objects to permit on a return resultsize/,ResultSetSize, to prevent empty set return of everything in the addressspace
@@ -9496,7 +9749,8 @@ function resolve-user {
         [array]$Rpt =@() ;
         foreach ($usr in $users){
             #$fname = $lname = $dname = $OPRcp = $OPMailbox = $OPRemoteMailbox = $ADUser = $xoRcp = $xoMailbox = $xoUser = $xoMemberOf = $MsolUser = $LicenseGroup = $null ;
-            $isEml=$isDname=$isSamAcct=$false ;
+            $isEml=$isDname=$isSamAcct=$isXORcpMulti  = $false ;
+            
 
             $hSum = [ordered]@{
                 dname = $null ;
@@ -9528,17 +9782,32 @@ function resolve-user {
                     $hSum.dname = $usr ;
                     write-verbose "(detected user ($($usr)) as EmailAddr)" ;
                     $isEml = $true ;
+                    Break ; 
+                }
+                $rgxObjNameNewHires{
+                    write-verbose "(detected user ($($usr)) as ObjNameNewHires)" ;
+                    $hSum.fname,$hSum.lname = $usr.split('_')[0].split(' ');
+                    $hSum.dname = $usr.split('_')[0] ;
+                    write-verbose "(detected user ($($usr)) as DisplayName)" ;
+                    $isObjName = $true ;
+                    Break ; 
                 }
                 $rgxDName {
+                    if($usr.contains('.')){
+                        write-verbose "(replacing period in DName)" ;
+                        $usr = $usr.replace('.',' ') ;
+                    };
                     $hSum.fname,$hSum.lname = $usr.split(' ') ;
                     $hSum.dname = $usr ;
                     write-verbose "(detected user ($($usr)) as DisplayName)" ;
                     $isDname = $true ;
+                    Break ; 
                 }
                 $rgxSamAcctNameTOR {
                     $hSum.lname = $usr ;
                     write-verbose "(detected user ($($usr)) as SamAccountName)" ;
                     $isSamAcct  = $true ;
+                    Break ; 
                 }
                 default {
                     write-warning "$((get-date).ToString('HH:mm:ss')):No -user specified, nothing matching dname, emailaddress or samaccountname, found on clipboard. EXITING!" ;
@@ -9549,6 +9818,7 @@ function resolve-user {
             $sBnr="===v ($($Procd)/$($ttl)):Input: '$($usr)' | '$($hSum.fname)' | '$($hSum.lname)' v===" ;
             if($isEml){$sBnr+="(EML)"}
             elseif($isDname){$sBnr+="(DNAM)"}
+            elseif($isObjName){$sBnr+="(ONAM)"}
             elseif($isSamAcct){$sBnr+="(SAM)"}
             write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($sBnr)" ;
 
@@ -9564,6 +9834,13 @@ function resolve-user {
                 write-verbose "processing:'identity':$($usr)" ;
                 $pltGMailObj.add('identity',$usr) ;
             } ;
+            if($isObjName){
+                # filter on Name, (not dname)
+                $dname = $hSum.dname
+                $fltr = "name -like '$usr'" ;
+                write-verbose "processing:'filter':$($fltr)" ;
+                $pltGMailObj.add('filter',$fltr) ;
+            } ; 
             if($isDname){
                 # interestinb bug: switched to $hSum.dname: ISE is fine, but ConsoleHost fails to expand the $fltr properly.
                 # standard is: Variables: Enclose variables that need to be expanded in single quotation marks (for example, '$User'). Don't use curly-brackets (impedes expansion)
@@ -9635,7 +9912,12 @@ function resolve-user {
                 if($isDname){$smsg += " or *$($hsum.lname )*"} ;
                 write-host $smsg ;
             } else {
-                write-verbose "`$hSum.xoRcp:`n$(($hSum.xoRcp|out-string).trim())" ;
+                $smsg =  "`$hSum.xoRcp:`n$(($hSum.xoRcp|out-string).trim())" ;
+                write-verbose $smsg ; 
+                if($hSum.xoRcp -is [system.array]){
+                    write-warning "Multiple matching xoRcps!:$($smsg)`nTHIS WILL NOT RETURN FULL AADUSER ETC FOR BOTH OBJECTS!`nUSE TARGETED UPN ETC TO DUMP VARIANT OBJECTS!" ; 
+                    $isXORcpMulti = $true ; 
+                } ; 
             } ;
 
             if($hSum.OPRcp){
@@ -9748,14 +10030,27 @@ function resolve-user {
                                     } else {
                                         $Rpt += $hSum.xoMailbox.primarysmtpaddress ;
                                     } ;
-                                    write-verbose "'xoUserMailbox':Test-exoMAPIConnectivity $($hSum.xoMailbox.userprincipalname)"
-                                    $hSum.xoMapiTest = Test-exoMAPIConnectivity -identity $hSum.xoMailbox.userprincipalname ;
-                                    $smsg = "Outlook (xoMAPI) Access Test Result:$($hsum.xoMapiTest.result)" ;
-                                    if($hsum.xoMapiTest.result -eq 'Success'){
-                                        write-host -foregroundcolor green $smsg ;
-                                    } else {
-                                        write-WARNING $smsg ;
-                                    } ;
+                                    if($hSum.xoMailbox -is [system.array]){
+                                        write-warning "Multiple mailboxes matched!" ; 
+                                    } ; 
+                                    # accomodate array returned (multiple matches):
+                                    $ino = 0 ; 
+                                    foreach($xmbx in $hSum.xoMailbox){
+                                        $ino++ ; 
+                                        if($hSum.xoMailbox -isnot [system.array]){
+                                            $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ; 
+                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                        } ; 
+                                        write-verbose "'xoUserMailbox':Test-exoMAPIConnectivity $($xmbx.userprincipalname)"
+                                        $hSum.xoMapiTest = Test-exoMAPIConnectivity -identity $xmbx.userprincipalname ;
+                                        $smsg = "Outlook (xoMAPI) Access Test Result:$($hsum.xoMapiTest.result)" ;
+                                        if($hsum.xoMapiTest.result -eq 'Success'){
+                                            write-host -foregroundcolor green $smsg ;
+                                        } else {
+                                            write-WARNING $smsg ;
+                                        } ;
+                                    } ;  
                                     break ;
                                 } ;
                             }
@@ -9873,58 +10168,78 @@ function resolve-user {
                 } else {
                     $Rpt += $hSum.xoMailbox.primarysmtpaddress ;
                 } ;
-                if($hSum.xoMailbox.isdirsynced){
-                    # can be federated to VEN|CMW|Toro
-                    switch -regex ($hSum.xoMailbox.primarysmtpaddress.split('@')[1]){
-                        $CMWMeta.rgxOPFederatedDom {
-                            $smsg="(CMW USER, fed:cmw.internal)" ;
-                            $hSum.Federator = 'cmw.internal' ;
-                        }
-                        $TORMeta.rgxOPFederatedDom {
-                            $smsg="(TOR USER, fed:ad.toro.com)" ;
-                            $hSum.Federator = 'ad.toro.com' ;
-                        }
-                        $VENMeta.rgxOPFederatedDom {
-                            $smsg="(VEN USER, fed:ventrac)" ;
-                            $hSum.Federator = 'ventrac' ;
-                        }
+                $ino = 0 ; 
+                foreach($xmbx in $hSum.xoMailbox){
+                    $ino++; 
+                    if($hSum.xoMailbox -isnot [system.array]){
+                        $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ; 
+                    if($xmbx.isdirsynced){
+                        # can be federated to VEN|CMW|Toro
+                        switch -regex ($xmbx.primarysmtpaddress.split('@')[1]){
+                            $CMWMeta.rgxOPFederatedDom {
+                                $smsg="(CMW USER, fed:cmw.internal)" ;
+                                $hSum.Federator = 'cmw.internal' ;
+                            }
+                            $TORMeta.rgxOPFederatedDom {
+                                $smsg="(TOR USER, fed:ad.toro.com)" ;
+                                $hSum.Federator = 'ad.toro.com' ;
+                            }
+                            $VENMeta.rgxOPFederatedDom {
+                                $smsg="(VEN USER, fed:ventrac)" ;
+                                $hSum.Federator = 'ventrac' ;
+                            }
 
-                    } ;
-                } elseif($hSum.xoMuser.IsDirSynced){
-                    switch -regex ($hSum.xoMailbox.primarysmtpaddress.split('@')[1]){
-                        $CMWMeta.rgxOPFederatedDom {
-                            $smsg="(CMW USER, fed:cmw.internal)" ;
-                            $hSum.Federator = 'cmw.internal' ;
-                        }
-                        $TORMeta.rgxOPFederatedDom {
-                            $smsg="(TOR USER, fed:ad.toro.com)" ;
-                            $hSum.Federator = 'ad.toro.com' ;
-                        }
-                        $VENMeta.rgxOPFederatedDom {
-                            $smsg="(VEN USER, fed:ventrac)" ;
-                            $hSum.Federator = 'ventrac' ;
-                        }
-                    } ;
-                }else{
-                    if($hsum.xoRcp.primarysmtpaddress -match "@toroco\.onmicrosoft\.com"){
+                        } ;
+                    } elseif($hSum.xoMuser.IsDirSynced){
+                        switch -regex ($xmbx.primarysmtpaddress.split('@')[1]){
+                            $CMWMeta.rgxOPFederatedDom {
+                                $smsg="(CMW USER, fed:cmw.internal)" ;
+                                $hSum.Federator = 'cmw.internal' ;
+                            }
+                            $TORMeta.rgxOPFederatedDom {
+                                $smsg="(TOR USER, fed:ad.toro.com)" ;
+                                $hSum.Federator = 'ad.toro.com' ;
+                            }
+                            $VENMeta.rgxOPFederatedDom {
+                                $smsg="(VEN USER, fed:ventrac)" ;
+                                $hSum.Federator = 'ventrac' ;
+                            }
+                        } ;
+                    }else{
+                        if($hsum.xoRcp.primarysmtpaddress -match "@toroco\.onmicrosoft\.com"){
+                                $smsg="(CLOUD-1ST ACCT, unfederated)" ;
+                                $hSum.Federator = 'Toroco' ;
+
+                        } else {
                             $smsg="(CLOUD-1ST ACCT, unfederated)" ;
                             $hSum.Federator = 'Toroco' ;
-
-                    } else {
-                        $smsg="(CLOUD-1ST ACCT, unfederated)" ;
-                        $hSum.Federator = 'Toroco' ;
+                        } ;
                     } ;
-                } ;
+                } ;  # loop-E
                 write-host -Fore yellow $smsg ;
                 # skip user lookup if guest already pulled it
                 if(!$hSum.xoUser){
-                    write-verbose "get-exouser -id $($hSum.xoMailbox.UserPrincipalName)"
-                    $hSum.xoUser = get-exouser -id $hSum.xoMailbox.UserPrincipalName -ResultSize $MaxRecips ;
-                    write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
+                    $ino = 0 ; 
+                    foreach($xmbx in $hSum.xoMailbox){
+                        write-verbose "get-exouser -id $($xmbx.UserPrincipalName)"
+                        $hSum.xoUser += get-exouser -id $xmbx.UserPrincipalName -ResultSize $MaxRecips ;
+                        write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
+                    } ; 
                 }
                 if($hSum.xoMailbox){
-                    write-host -foreground yellow "=get-xMbx:> " -nonewline;
-                    write-host "$(($hSum.xoMailbox |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
+                    $ino = 0 ; 
+                    foreach($xmbx in $hSum.xoMailbox){
+                        $ino++ ; 
+                        if($hSum.xoMailbox -isnot [system.array]){
+                            $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ; 
+                            write-host $smsg ;
+                        } ; 
+                        write-host -foreground yellow "=get-xMbx:> " -nonewline;
+                        write-host "$(($hSum.xoMailbox |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
+                    } ; 
                 }elseif($hSum.xoMUser){
                     write-host "=get-xMUSR:>`n$(($hSum.xoMUser |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
                 }elseif($hSum.txGuest){
@@ -9971,18 +10286,31 @@ function resolve-user {
             } ; # don't break, doesn't continue loop
 
             # 10:42 AM 9/9/2021 force populate the xoMailbox, ALWAYS - need for xbrain ids
-            if($hSum.xoRcp.recipienttypedetails -eq 'UserMailbox' -AND -not($hSum.xoMailbox)){
+            #if($hSum.xoRcp.recipienttypedetails -eq 'UserMailbox' -AND -not($hSum.xoMailbox)){
+            # accomodate array xorcp
+            if(($hSum.xoRcp|?{$_.recipienttypedetails -eq 'UserMailbox'}) -AND -not($hSum.xoMailbox)){
                 write-verbose "get-exomailbox w`n$(($pltGMailObj|out-string).trim())" ;
                 if($hSum.xoMailbox=get-exomailbox @pltGMailObj -ea 0| select -first $MaxRecips ){
-                    write-verbose "`$hSum.xoMailbox:`n$(($hSum.xoMailbox|out-string).trim())" ;
-                    write-verbose "'xoUserMailbox':Test-exoMAPIConnectivity $($hSum.xoMailbox.userprincipalname)"
-                    $hSum.xoMapiTest = Test-exoMAPIConnectivity -identity $hSum.xoMailbox.userprincipalname ;
-                    $smsg = "Outlook (xoMAPI) Access Test Result:$($hsum.xoMapiTest.result)" ;
-                    if($hSum.xoMapiTest.result -eq 'Success'){
-                        write-host -foregroundcolor green $smsg ;
-                    } else {
-                        write-WARNING $smsg ;
-                    } ;
+                    $ino = 0 ; 
+                    $mapiResults = @() ; 
+                    foreach($xmbx in $hSum.xoMailbox){
+                        $ino++ ; 
+                        if($hSum.xoMailbox -is [system.array]){
+                            $msgprefix = "xmbx$($ino):" ; 
+                        } else { $msgprefix = $null } ; 
+                        $smsg = $msgprefix, "`$hSum.xoMailbox:`n$(($xmbx|out-string).trim())" -join ' ' ; 
+                        write-verbose $smsg ;
+                        $smsg = $msgprefix,"'xoUserMailbox':Test-exoMAPIConnectivity $($xmbx.userprincipalname)"  -join ' ' ; 
+                        write-verbose $smsg ;
+                       $mapiResults += Test-exoMAPIConnectivity -identity $xmbx.userprincipalname ;
+                        $smsg = "Outlook (xoMAPI) Access Test Result:$($mapiResults[$ino - 1].result)" ;
+                        if($mapiResults[$ino - 1].result -eq 'Success'){
+                            write-host -foregroundcolor green $smsg ;
+                        } else {
+                            write-WARNING $smsg ;
+                        } ;
+                    } ; 
+                    $hSum.xoMapiTest = $mapiResults ; 
                 } ;
             } ;
 
@@ -9991,7 +10319,7 @@ function resolve-user {
             # but causes a fault with no $error[0], doesn't seem to be functional param, post-filter
             $pltgMsoUsr=@{UserPrincipalName=$null ; ErrorAction= 'STOP' } ;
             if($hSum.ADUser){$pltgMsoUsr.UserPrincipalName = $hSum.ADUser.UserPrincipalName }
-            elseif($hSum.xoMailbox){$pltgMsoUsr.UserPrincipalName = $hsum.xoMailbox.UserPrincipalName }
+            elseif($hSum.xoMailbox){$pltgMsoUsr.UserPrincipalName += $hsum.xoMailbox.UserPrincipalName }
             elseif($hSum.xoMUser){$pltgMsoUsr.UserPrincipalName = $hSum.xoMUser.UserPrincipalName }
             elseif($hSum.txGuest){$pltgMsoUsr.UserPrincipalName = $hSum.txGuest.userprincipalname }
             else{} ;
@@ -12198,8 +12526,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUU7TBqh8vrH9gg4hzv1sUQllY
-# 2lOgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjndo+Vo3LRaVn+2xFNJo4afk
+# UmmgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -12214,9 +12542,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRoRsjt
-# QaPBUZtVM8b75mUtMneWsDANBgkqhkiG9w0BAQEFAASBgLITg/l84/v4VAFEQJjC
-# WYFIbrG8EFH1mPDFOF0C3X0yUhpfbf1Rto7UTzQnDhw8YhegUjjndwlrbbpmlCqB
-# FPQ9Ukf3Lm3wgJ5hgI4OPEnRPBQQ4+0yo5ZEqSFAILaVKS6AvnPAy/LXsXzn+N50
-# CTvO3dJBU2zjmwEzWQ/aFP5X
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQzyVgr
+# fpHxdf0InhWGlo+KnhOFsTANBgkqhkiG9w0BAQEFAASBgFwNwjFM+dnsTp3eyL2k
+# AuH47LbgmO4l/M8RpcoDrMxOm0MGgfA0b4tdL+k533WOWBj/OZyPLPf7RrYlUvkN
+# CtyOftKiufbkfJ18e6PemwEltvV1nSm/4tbxgIKU8qHZ69F0Q1XLRawl+MFMuNXC
+# p+HZF8hoQFZa4R2NmX7gpYrX
 # SIG # End signature block

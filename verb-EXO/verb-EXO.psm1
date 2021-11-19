@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.111.0
+  Version     : 1.0.112.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -9599,6 +9599,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 10:30 AM 11/8/2021 fixed CBH/HelpMessage tagging on -outobject
     * 3:30 PM 10/12/2021 added new Name:ObjName_guid support (new hires turn up with aduser named this way); added some marginal multi xoRcp & xoMailbox handling (loops outputs on the above, and the mapiTest), but doesn't do full AzureAD,Msoluser,MailUser,Guest lookups for these. It's really about error-suppression, and notifying the issue more than returning the full picture
     * 1:04 PM 9/28/2021 added:$AADUserManager lookup and dump of UPN, OpDN & mail (for correlating what email pol a user should have -> the one their manager does)
     * 1:52 PM 9/17/2021 moved $props to top ; test enabled/acctenabled, licRecon & mapi test results and use ww on issues ; flipped caad's to -silent (match cmsol 1st echo's to confirm tenant, rest silent); ren $xMProps -> $propsMailx, $XMFedProps-> $propsXMFed, $lProps -> $propsLic,$adprops -> $propsADU, $aaduprops -> $propsAADU, $aaduFedProps -> $propsAADUfed, $RcpPropsTbl -> $propsRcpTbl, $pltgM-> $pltGMailObj, $pltgMU -> $pltgMsoUsr
@@ -9617,10 +9618,12 @@ function resolve-user {
     Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)
     .PARAMETER useEXOv2
     Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
+    .PARAMETER outObject
+    switch to return a system.object summary to the pipeline[-outObject]
     .INPUTS
     None. Does not accepted piped input.(.NET types, can add description)
     .OUTPUTS
-    Returns report to pipeline
+    System.Object - returns summary report to pipeline
     .EXAMPLE
     PS> resolve-user
     Default, attempts to parse a user descriptor from clipboard
@@ -9657,7 +9660,7 @@ function resolve-user {
         [array]$users,
         [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
         [switch] $useEXOv2,
-        [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
+        [Parameter(HelpMessage="switch to return a system.object summary to the pipeline[-outObject]")]
         [switch] $outObject
 
     ) ;
@@ -12526,8 +12529,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjndo+Vo3LRaVn+2xFNJo4afk
-# UmmgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUoLDXlWu4Qtf+9k9XdbnAQS6J
+# sFCgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -12542,9 +12545,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQzyVgr
-# fpHxdf0InhWGlo+KnhOFsTANBgkqhkiG9w0BAQEFAASBgFwNwjFM+dnsTp3eyL2k
-# AuH47LbgmO4l/M8RpcoDrMxOm0MGgfA0b4tdL+k533WOWBj/OZyPLPf7RrYlUvkN
-# CtyOftKiufbkfJ18e6PemwEltvV1nSm/4tbxgIKU8qHZ69F0Q1XLRawl+MFMuNXC
-# p+HZF8hoQFZa4R2NmX7gpYrX
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQS77nE
+# TWEJeYYcYQpaxWrWYI4gjTANBgkqhkiG9w0BAQEFAASBgG7iD3Ybr13W3gvpYhor
+# xGOC4vUgREYCMDcj4dIJ3V6rgZokBGtmbWlbrCnRS6/hFdR5nBsN3IJCmKswOmgQ
+# OAJ+/KsepiCVTRaE/ObutU7RokSX+p79nDNZPivavU/AI1Xge+wUXzmQRzWe3cR4
+# pLenJnnoUXSmFSBz6GwjPc7T
 # SIG # End signature block
