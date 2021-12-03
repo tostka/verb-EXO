@@ -18,6 +18,8 @@ function Resolve-xoRcps {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 9:16 AM 12/3/2021 added pswlt support
+    * 8/30/21 init vers
     .DESCRIPTION
     Resolve-xoRcps.ps1 - run a get-exorecipient to re-resolve an array of Recipients into the matching primarysmtpaddress
     .PARAMETER Recipients
@@ -59,14 +61,19 @@ function Resolve-xoRcps {
             $nAName = ($cmdletMap.split(';')[0]) ; 
             if(!($nalias = get-alias -name $nAName -ea 0 )){
                 $nalias = set-alias -name $nAName -value ($cmdlet.name) -passthru ;
-                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                $smsg = "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
             } ;
         } else {
             if(!($cmdlet= Get-Command $cmdletMap.split(';')[1])){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
             $nAName = ($cmdletMap.split(';')[0]);
             if(!($nalias = get-alias -name $nAName -ea 0 )){
                 $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
-                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                $smsg = "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
             } ; 
         } ;
     } ;
@@ -84,7 +91,9 @@ function Resolve-xoRcps {
         } ; 
         $resolvedRecipients.primarysmtpaddress |write-output ;
     } else { 
-        write-host "No Recipients specified" ;
+        $smsg = "No Recipients specified" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $null | write-output ;
     } ; 
 } ; 

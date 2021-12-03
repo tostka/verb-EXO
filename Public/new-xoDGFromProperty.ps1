@@ -18,6 +18,7 @@ function new-xoDGFromProperty{
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 9:23 AM 12/3/2021 updated a few wv's to pswls support
     * 4:40 PM 9/14/2021 corrected synopsis/description
     * 9:45 AM 9/2/2021 rev: added CBH, fixed existing block: Add-DistributionGroupMember -> propr xo alias:ps1AddxDistGrpMbr
     .DESCRIPTION
@@ -75,14 +76,18 @@ function new-xoDGFromProperty{
             $nAName = ($cmdletMap.split(';')[0]) ;
             if(-not(get-alias -name $naname -ea 0 |?{$_.Definition -eq $cmdlet.name})){
                 $nalias = set-alias -name $nAName -value ($cmdlet.name) -passthru ;
-                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                $smsg = "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ;
         } else {
             if(!($cmdlet= Get-Command $cmdletMap.split(';')[1])){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
             $nAName = ($cmdletMap.split(';')[0]);
             if(-not(get-alias -name $naname -ea 0 |?{$_.Definition -eq $cmdlet.name})){
                 $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
-                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                $smsg = "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ;
         } ;
     } ; 
@@ -151,7 +156,9 @@ function new-xoDGFromProperty{
         ps1SetxDistGrp @pltSetDG ;
 
         $pdg =  ps1GetxDistGrp -id $pltSetDG.identity ;
-        write-verbose "Returning new DG object to pipeline" ; 
+        $smsg = "Returning new DG object to pipeline" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $pdg | write-output ; 
         
     } else {
