@@ -165,6 +165,24 @@ https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-
         # TSK:add a BEGIN block & stick THE ExchangOnlineManagement.psm1 'above-the mods' variable/load specs in here, with tests added
         # Import the REST module so that the EXO* cmdlets are present before Connect-ExchangeOnline in the powershell instance.
         
+        # defer to verb-text if avail
+        if(-not(get-command test-uri -ea 0)){
+          function Test-Uri {
+              [CmdletBinding()]
+              [OutputType([bool])]
+              Param
+              (
+                  # Uri to be validated
+                  [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName=$true, Position=0)]
+                  [string]
+                  $UriString
+              )
+              [Uri]$uri = $UriString -as [Uri]
+              $uri.AbsoluteUri -ne $null -and $uri.Scheme -eq 'https'
+            }
+        } ;
+        
+        
         if(-not($ExchangeOnlineMgmtPath)){
             $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list).Path ; 
         } ; 

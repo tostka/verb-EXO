@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.0.113.0
+  Version     : 2.0.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -422,6 +422,24 @@ https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-
     BEGIN {
         # TSK:add a BEGIN block & stick THE ExchangOnlineManagement.psm1 'above-the mods' variable/load specs in here, with tests added
         # Import the REST module so that the EXO* cmdlets are present before Connect-ExchangeOnline in the powershell instance.
+        
+        # defer to verb-text if avail
+        if(-not(get-command test-uri -ea 0)){
+          function Test-Uri {
+              [CmdletBinding()]
+              [OutputType([bool])]
+              Param
+              (
+                  # Uri to be validated
+                  [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName=$true, Position=0)]
+                  [string]
+                  $UriString
+              )
+              [Uri]$uri = $UriString -as [Uri]
+              $uri.AbsoluteUri -ne $null -and $uri.Scheme -eq 'https'
+            }
+        } ;
+        
         
         if(-not($ExchangeOnlineMgmtPath)){
             $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list).Path ; 
@@ -1017,6 +1035,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    # 2:17 PM 12/6/2021 duped test-uri back into local with fall back; moving test-uri into verb-text
     # 11:23 AM 9/16/2021 string
     # 1:31 PM 7/21/2021 revised Add-PSTitleBar $sTitleBarTag with TenOrg spec (for prompt designators)
     * 11:53 AM 4/2/2021 updated with rlt & recstat support, updated catch blocks
@@ -1121,6 +1140,23 @@ Function Connect-EXO2 {
         $verbose = ($VerbosePreference -eq "Continue") ;
         if (!$rgxExoPsHostName) { $rgxExoPsHostName = "^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
 
+        # defer to verb-text if avail
+        if(-not(get-command test-uri -ea 0)){
+          function Test-Uri {
+              [CmdletBinding()]
+              [OutputType([bool])]
+              Param
+              (
+                  # Uri to be validated
+                  [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName=$true, Position=0)]
+                  [string]
+                  $UriString
+              )
+              [Uri]$uri = $UriString -as [Uri]
+              $uri.AbsoluteUri -ne $null -and $uri.Scheme -eq 'https'
+            }
+        } ;
+        
         # validate params
         if($ConnectionUri -and $AzureADAuthorizationEndpointUri){
             throw "BOTH -Connectionuri & -AzureADAuthorizationEndpointUri specified, use ONE or the OTHER!";
@@ -8598,6 +8634,7 @@ function new-xoDGFromProperty{
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 9:23 AM 12/3/2021 updated a few wv's to pswls support
     * 4:40 PM 9/14/2021 corrected synopsis/description
     * 9:45 AM 9/2/2021 rev: added CBH, fixed existing block: Add-DistributionGroupMember -> propr xo alias:ps1AddxDistGrpMbr
     .DESCRIPTION
@@ -8655,14 +8692,18 @@ function new-xoDGFromProperty{
             $nAName = ($cmdletMap.split(';')[0]) ;
             if(-not(get-alias -name $naname -ea 0 |?{$_.Definition -eq $cmdlet.name})){
                 $nalias = set-alias -name $nAName -value ($cmdlet.name) -passthru ;
-                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                $smsg = "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ;
         } else {
             if(!($cmdlet= Get-Command $cmdletMap.split(';')[1])){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
             $nAName = ($cmdletMap.split(';')[0]);
             if(-not(get-alias -name $naname -ea 0 |?{$_.Definition -eq $cmdlet.name})){
                 $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
-                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                $smsg = "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ;
         } ;
     } ; 
@@ -8731,7 +8772,9 @@ function new-xoDGFromProperty{
         ps1SetxDistGrp @pltSetDG ;
 
         $pdg =  ps1GetxDistGrp -id $pltSetDG.identity ;
-        write-verbose "Returning new DG object to pipeline" ; 
+        $smsg = "Returning new DG object to pipeline" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $pdg | write-output ; 
         
     } else {
@@ -11103,6 +11146,8 @@ function Resolve-xoRcps {
     AddedWebsite:	URL
     AddedTwitter:	URL
     REVISIONS
+    * 9:16 AM 12/3/2021 added pswlt support
+    * 8/30/21 init vers
     .DESCRIPTION
     Resolve-xoRcps.ps1 - run a get-exorecipient to re-resolve an array of Recipients into the matching primarysmtpaddress
     .PARAMETER Recipients
@@ -11144,14 +11189,19 @@ function Resolve-xoRcps {
             $nAName = ($cmdletMap.split(';')[0]) ; 
             if(!($nalias = get-alias -name $nAName -ea 0 )){
                 $nalias = set-alias -name $nAName -value ($cmdlet.name) -passthru ;
-                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                $smsg = "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
             } ;
         } else {
             if(!($cmdlet= Get-Command $cmdletMap.split(';')[1])){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
             $nAName = ($cmdletMap.split(';')[0]);
             if(!($nalias = get-alias -name $nAName -ea 0 )){
                 $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
-                write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                $smsg = "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
             } ; 
         } ;
     } ;
@@ -11169,7 +11219,9 @@ function Resolve-xoRcps {
         } ; 
         $resolvedRecipients.primarysmtpaddress |write-output ;
     } else { 
-        write-host "No Recipients specified" ;
+        $smsg = "No Recipients specified" ;
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         $null | write-output ;
     } ; 
 }
@@ -11493,57 +11545,6 @@ function test-EXOToken {
 }
 
 #*------^ test-EXOToken.ps1 ^------
-
-#*------v Test-Uri.ps1 v------
-function Test-Uri{
-    <#
-    .SYNOPSIS
-    Test-Uri.ps1 - Validates a given Uri ; localized verb-EXO vers of non-'$global:' helper funct from ExchangeOnlineManagement. The globals export fine, these don't and appear to need to be loaded manually
-    .NOTES
-    Version     : 1.0.0
-    Author      : Todd Kadrie
-    Website     :	http://www.toddomation.com
-    Twitter     :	@tostka / http://twitter.com/tostka
-    CreatedDate : 20201109-0833AM
-    FileName    : Test-Uri.ps1
-    License     : [none specified]
-    Copyright   : [none specified]
-    Github      : https://github.com/tostka/verb-exo
-    Tags        : Powershell
-    AddedCredit : Microsoft (edited version of published commands in the module)
-    AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
-    REVISIONS
-    * 8:34 AM 11/9/2020 init
-    .DESCRIPTION
-    Test-Uri.ps1 - localized verb-EXO vers of non-'$global:' helper funct from ExchangeOnlineManagement. The globals export fine, these don't and appear to need to be loaded manually
-    .INPUTS
-    None. Does not accepted piped input.
-    .OUTPUTS
-    None. Returns no objects or output.
-    .EXAMPLE
-    Test-Uri
-    Stock call
-    .LINK
-    https://github.com/tostka/verb-EXO
-    .LINK
-    https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
-    #>
-    [CmdletBinding()]
-    [OutputType([bool])]
-    Param
-    (
-        # Uri to be validated
-        [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName=$true, Position=0)]
-        [string]
-        $UriString
-    )
-
-    [Uri]$uri = $UriString -as [Uri]
-
-    $uri.AbsoluteUri -ne $null -and $uri.Scheme -eq 'https'
-}
-
-#*------^ Test-Uri.ps1 ^------
 
 #*------v test-xoMailbox.ps1 v------
 Function test-xoMailbox {
@@ -13022,14 +13023,14 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-EXOMsgTraceDetailed,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,resolve-Name,resolve-user,Resolve-xoRcps,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,Test-Uri,test-xoMailbox,_cleanup -Alias *
+Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Test-Uri,Connect-EXO,Connect-EXO2,Test-Uri,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-EXOMsgTraceDetailed,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,resolve-Name,resolve-user,Resolve-xoRcps,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,test-xoMailbox,_cleanup -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUr9ZlSc1f4IT9qlP1oniT8hPq
-# BqKgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUGv2wpr1uzj1Wq98Cdb+2vfdx
+# VSygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -13044,9 +13045,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRudPWt
-# OjMsGV19DigjbfXbVcNH5jANBgkqhkiG9w0BAQEFAASBgBZeWvB371X8kCCpsoO1
-# I2bWksjAaIzO3P7yguLHapuWPE0sMDnAZRcNyf7FdPwNecdJggYLCEuz6BaXOCvl
-# uz8m9vw7pxI3qnKNSmNudrbng5xumiKaKw9NBYFTSHTqblwld7LLzkduxByP8f3M
-# bwaXwhbN5igSAD0AFmoEizqQ
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSHPIP7
+# qTL83/PvKOk7xC2QJxzGKzANBgkqhkiG9w0BAQEFAASBgK3et6P9GUyefBqmxAqV
+# hv3gY8L/trPK5XKSnGxbJ6Kucn2gMg/8LYxa3Os7YNKcjFnW9VufNh6Olfzl3wIl
+# PLNvwhRryLVG5EmRCKFeM0jCoIfsG3UyYcCQSd3VZ2r7tveKi2OafdL5WKWznF1N
+# Wc3c/cN6oNnzgtBszUpS0ojW
 # SIG # End signature block

@@ -21,6 +21,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    # 2:17 PM 12/6/2021 duped test-uri back into local with fall back; moving test-uri into verb-text
     # 11:23 AM 9/16/2021 string
     # 1:31 PM 7/21/2021 revised Add-PSTitleBar $sTitleBarTag with TenOrg spec (for prompt designators)
     * 11:53 AM 4/2/2021 updated with rlt & recstat support, updated catch blocks
@@ -125,6 +126,23 @@ Function Connect-EXO2 {
         $verbose = ($VerbosePreference -eq "Continue") ;
         if (!$rgxExoPsHostName) { $rgxExoPsHostName = "^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
 
+        # defer to verb-text if avail
+        if(-not(get-command test-uri -ea 0)){
+          function Test-Uri {
+              [CmdletBinding()]
+              [OutputType([bool])]
+              Param
+              (
+                  # Uri to be validated
+                  [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName=$true, Position=0)]
+                  [string]
+                  $UriString
+              )
+              [Uri]$uri = $UriString -as [Uri]
+              $uri.AbsoluteUri -ne $null -and $uri.Scheme -eq 'https'
+            }
+        } ;
+        
         # validate params
         if($ConnectionUri -and $AzureADAuthorizationEndpointUri){
             throw "BOTH -Connectionuri & -AzureADAuthorizationEndpointUri specified, use ONE or the OTHER!";
