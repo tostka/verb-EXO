@@ -18,6 +18,12 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 4:19 PM 12/9/2021 improved pipeline support; fixed pipeline param mbinding fails ; added supoort for resolving 
+        baddomain users or op.mailusers where need to resolve aadu.immutableid to 
+        aduser, to *ensure* we have a hardmatch of problem objects (resolving baddomain 
+        Ent-DL-AllToroco recipients to internal NoBrain etc. Still doesn't seem to be 
+        setting $hsum.NoBrain properly in outputs, but is dropping direct to pipe. May 
+        have borked single-indiceent xml object dumps tho.  
     * 10:30 AM 11/8/2021 fixed CBH/HelpMessage tagging on -outobject
     * 3:30 PM 10/12/2021 added new Name:ObjName_guid support (new hires turn up with aduser named this way); added some marginal multi xoRcp & xoMailbox handling (loops outputs on the above, and the mapiTest), but doesn't do full AzureAD,Msoluser,MailUser,Guest lookups for these. It's really about error-suppression, and notifying the issue more than returning the full picture
     * 1:04 PM 9/28/2021 added:$AADUserManager lookup and dump of UPN, OpDN & mail (for correlating what email pol a user should have -> the one their manager does)
@@ -73,7 +79,9 @@ function resolve-user {
     [CmdletBinding()]
     [Alias('ulu')]
     PARAM(
-        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)")]
+        #[Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)")]
+        # failing to map pipeline to $users, reduce to Value from Pipeline
+        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)")]
         #[ValidateNotNullOrEmpty()]
         #[Alias('ALIAS1', 'ALIAS2')]
         [array]$users,
@@ -149,6 +157,7 @@ function resolve-user {
         $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
 
+        <# if we want pipeline to work have to move the clipboard grab out or down into process{}, where pipeline binding will be actually populated
         if(!$users){
             $users= (get-clipboard).trim().replace("'",'').replace('"','') ;
             if($users){
@@ -160,15 +169,38 @@ function resolve-user {
         } else {
             write-verbose "($(($users|measure).count)) user(s) specified:`n'$($users -join "','")'" ;
         } ;
-
+        #>
         rx10 -Verbose:$false ; rxo  -Verbose:$false ; cmsol  -Verbose:$false ;
+        
+        # finally if we're using pipeline, and aggregating, we need to aggreg outside of the process{} block
+        if($PSCmdlet.MyInvocation.ExpectingInput){
+            # pipeline instantiate an aggregator here
+        } ; 
 
     }
     PROCESS{
         #$dname= 'Todd Kadrie' ;
         #$dname = 'Stacy Sotelo'
+
+        if(-not $users){
+            $users= (get-clipboard).trim().replace("'",'').replace('"','') ;
+            if($users){
+                write-verbose "No -users specified, detected value on clipboard:`n$($users)" ;
+            } else {
+                write-warning "No -users specified, nothing matching dname, emailaddress or samaccountname, found on clipboard. EXITING!" ;
+                Break ;
+            } ;
+        } else {
+            write-verbose "($(($users|measure).count)) user(s) specified:`n'$($users -join "','")'" ;
+        } ;
+
         $ttl = ($users|measure).count ; $Procd=0 ;
         [array]$Rpt =@() ;
+        # with pipeline input, the pipeline evals as either $_ (if unmapped to a param in binding), or iterating on the mapped value. 
+        #     the foreach loop below doesn't actually loop. Process{} is the loop with a pipeline-fed param, and the bound - $users - variable once per pipeline bound element - per array item on an array - 
+        #     is run with the $users value populated with each element in turn. IOW, the foreach is a single-run pass, and the Process{} block is the loop. 
+        # you need both a bound $users at the top - to handle explicit assigns resolve-user -users $variable. 
+        # with a process {} block to handle any pipeline passed input. The pipeline still maps to the bound param: $users, but the e3ntire process{} is run per element, rather than iteratign the internal $users foreach.
         foreach ($usr in $users){
             #$fname = $lname = $dname = $OPRcp = $OPMailbox = $OPRemoteMailbox = $ADUser = $xoRcp = $xoMailbox = $xoUser = $xoMemberOf = $MsolUser = $LicenseGroup = $null ;
             $isEml=$isDname=$isSamAcct=$isXORcpMulti  = $false ;
@@ -195,6 +227,9 @@ function resolve-user {
                 AADUser = $null ; # added for MailUser variant
                 AADUserMgr = $null ; 
                 LicenseGroup = $null ;
+                isNoBrain = $false ; 
+                isSplitBrain = $false; 
+                isUnlicensed = $false ; 
             } ;
             $procd++ ;
             write-verbose "processing:$($usr)" ;
@@ -289,6 +324,7 @@ function resolve-user {
                     'MailUser' {
                         $smsg = "MAILUSER WO RMBX DETECTED! - POSSIBLE NOBRAIN?"
                         write-warning $smsg
+                        #$hsum.isNoBrain = $true ; 
                     }
                     'MailUniversalDistributionGroup' {write-host "(DG)" -nonewline}
                     'DynamicDistributionGroup'  {write-host "(DDG)" -nonewline}
@@ -351,7 +387,7 @@ function resolve-user {
                             if($hSum.OPMailbox=get-mailbox $hSum.OPRcp.identity -resultsize $MaxRecips | select -first $MaxRecips ){ ;
                                 #write-verbose "`$hSum.OPMailbox:`n$(($hSum.OPMailbox|out-string).trim())" ;
                                 if($outObject){
-
+                                
                                 } else {
                                     $Rpt += $hSum.OPMailbox.primarysmtpaddress ;
                                 } ;
@@ -367,8 +403,22 @@ function resolve-user {
                         }
                         "MailUser" {
                             write-verbose "'MailUser':get-remotemailbox $($hSum.OPRcp.identity)"
-                            $hSum.OPRemoteMailbox=get-remotemailbox $hSum.OPRcp.identity -resultsize $MaxRecips | select -first $MaxRecips  ;
-                            write-verbose "`$hSum.OPRemoteMailbox:`n$(($hSum.OPRemoteMailbox|out-string).trim())" ;
+                            if($hSum.OPRemoteMailbox=get-remotemailbox $hSum.OPRcp.identity -resultsize $MaxRecips -ea 0 | select -first $MaxRecips){
+                                write-verbose "`$hSum.OPRemoteMailbox:`n$(($hSum.OPRemoteMailbox|out-string).trim())" ;
+                            }else{
+                                $smsg = "RecipientTypeDetails:MailUser with NO Rmbx! (NoBrain?)" ;
+                                write-warning $smsg ;
+                                if($hsum.xoRcp.ExternalDirectoryObjectId){
+                                    # of course has match to AADU  - always does - we're going to need the AADU before we can lookup the ADU
+                                    # $pltGadu.identity = $hSum.AADUser.ImmutableId | convert-ImmuntableIDToGUID | select -expand guid ;
+                                    caad  -Verbose:$false -silent ;
+                                    write-verbose "OPRcp:Mailuser, ensure GET-ADUSER pulls AADUser.matched object for cloud recipient:`nfallback:get-AzureAdUser  -objectid $($hsum.xoRcp.ExternalDirectoryObjectId)" ;
+                                    # have to postfilter, if want specific count -maxresults catch's with no $error[0]
+                                    $hSum.AADUser  = get-AzureAdUser  -objectid $hsum.xoRcp.ExternalDirectoryObjectId | select -first $MaxRecips;  ;
+                                } else { 
+                                    throw "Unsupported object, blank `$hsum.xoRcp.ExternalDirectoryObjectId!" ; 
+                                } ; 
+                            }
                             if($outObject){
 
                             } else {
@@ -393,7 +443,24 @@ function resolve-user {
                         $pltGadu.identity = $hSum.OPRemoteMailbox.samaccountname ;
                     }elseif($hSum.OPMailbox){
                         $pltGadu.identity = $hSum.OPMailbox.samaccountname ;
-                    } ;
+                    } else {
+                        # cloud-first or no brain, neither oprmbx or opmailbox;  should have populated $hSum.AADUser above, use immutable lookup
+                        if($hSum.AADUser.DirSyncEnabled){
+                            $smsg = "Falling back to AADU Immutable lookup to locate replicated adu source" ; 
+                            if($pltGadu.identity = $hSum.AADUser.ImmutableId | convert-ImmuntableIDToGUID | select -expand guid){
+                                $smsg = "(Resolved AADU.Immutable ->GUID:$($pltGadu.identity))" ; 
+                                write-verbose $smsg ; 
+                            }else {
+                                $smsg = "UNABLE TO RESOLVE ADU.IMMUTABLEID TO ADU GUID!"
+                                write-warning $smsg ;
+                                throw $smsg ;
+                            }
+                        } else { 
+                            $smsg = "$AADUsuer not DirSyncEnabled: CLOUD FIRST!"
+                            write-warning $smsg ;
+                            #throw $smsg ;
+                        } ; 
+                    };
                     if($pltGadu.identity){
                         <# this is throwing a blank fail
                         WARNING: 15:04:18:Failed processing .
@@ -754,6 +821,8 @@ function resolve-user {
                     # have to postfilter, if want specific count -maxresults catch's with no $error[0]
                     $hSum.MsolUser=get-msoluser @pltgMsoUsr | select -first $MaxRecips;  ;
                     write-verbose "`$hSum.MsolUser:`n$(($hSum.MsolUser|out-string).trim())" ;
+                    if($hSum.MsolUser.IsLicensed){$hsum.IsLicensed = $true }
+                    else {$hsum.IsLicensed = $false } ; 
                 } CATCH {
                     $ErrTrapd=$Error[0] ;
                     $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
@@ -945,12 +1014,17 @@ function resolve-user {
             # ($hSum.ADUser.sAMAccountType -eq '805306368')
             switch ($hSum.Federator) {
                 'ad.toro.com' {
-                    if(($hsum.xoRcp -match '(RemoteUserMailbox|UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
+                    #if(($hsum.xoRcp.RecipientTypeDetails -match '(RemoteUserMailbox|UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
+                    # there is no remmbx type in xo
+                    if(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
+                        <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
                         $smsg = "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!" ;
                         write-warning $smsg ;
-                    } elseif(($hsum.xoRcp -match '(RemoteUserMailbox|UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
+                        $hsum.IsSplitBrain = $true ; 
+                    } elseif(($hsum.xoRcp -match '(UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
                         $smsg = "NOBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd &  has *NEITHER* xoMbx OR opMbx!" ;
                         write-warning $smsg ;
+                        $hsum.IsNoBrain = $true ; 
                     } elseif($hSum.MsolUser.IsLicensed -eq $false){
                         $smsg = "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
                         write-warning $smsg ;
@@ -981,16 +1055,23 @@ function resolve-user {
             }
 
             if($outObject){
-                $Rpt += New-Object PSObject -Property $hSum ;
-            } ;
+                if($PSCmdlet.MyInvocation.ExpectingInput){
+                    write-verbose "(pipeline input, skipping aggregator, dropping into pipeline)" ; 
+                    New-Object PSObject -Property $hSum | write-output  ; 
+                } else { 
+                    $Rpt += New-Object PSObject -Property $hSum ;
+                } ;
+            } ; 
             write-host -foregroundcolor green $sBnr.replace('=v','=^').replace('v=','^=') ;
         } ;
 
     }
     END{
-        if($outObject){
+        if($outObject -AND -not ($PSCmdlet.MyInvocation.ExpectingInput)){
             $Rpt | write-output ;
             write-host "(-outObject: Output summary object to pipeline)"
+        }elseif($outObject -AND ($PSCmdlet.MyInvocation.ExpectingInput)){
+            write-verbose "(pipeline input, individual objects dropped into pipeline)" ; 
         } else {
             $oput = ($Rpt | select-object -unique) -join ',' ;
             $oput | out-clipboard ;
