@@ -1,4 +1,4 @@
-﻿+#*------v get-xoHistSearch.ps1 v------
+﻿#*------v get-xoHistSearch.ps1 v------
 function get-xoHistSearch {
     <#
     .SYNOPSIS
