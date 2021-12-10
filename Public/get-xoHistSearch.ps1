@@ -1,4 +1,4 @@
-﻿#*------v get-xoHistSearch.ps1 v------
+﻿+#*------v get-xoHistSearch.ps1 v------
 function get-xoHistSearch {
     <#
     .SYNOPSIS
@@ -18,6 +18,7 @@ function get-xoHistSearch {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:40 PM 12/10/2021 more cleanup 
     * 12:49 PM 9/28/2021 init; added MsgID support; added MsgID example
     .DESCRIPTION
     get-xoHistSearch.ps1 - wrapper/automation for EXO's get-HistoricalSearch cmdlet, Assembles ReportTitle & models an export-csv filename, around recipient, sender, reportType etc params specified for get-historicalsearch, also dawdle loops monitoring & alerting the progress of the associated PSJob created by the search submission.
@@ -79,7 +80,7 @@ function get-xoHistSearch {
     #Requires -Modules ExchangeOnlineManagement,verb-Auth, verb-IO, verb-logging, verb-Text
     ###Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Text
     #Requires -RunasAdministrator
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.COMPANY\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding(DefaultParameterSetName='Days')]
     #[CmdletBinding()]
@@ -175,7 +176,7 @@ function get-xoHistSearch {
         $smtpPriority="Normal";
         # SMTP port (default is 25)
         $smtpPort = 25 ;
-        $smtpToFailThru="todd.kadrie@toro.com"
+        $smtpToFailThru="dG9kZC5rYWRyaWVAdG9yby5jb20="| convertfrom-Base64String
         # pull the notifc smtpto from the xxxMeta.NotificationDlUs value
         if(!$showdebug){
             if((Get-Variable  -name "$($TenOrg)Meta").value.NotificationDlUs){
@@ -513,16 +514,6 @@ $($smtpBody)
             Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
             ###>
             $o365Cred=$null ;
-            <# $TenOrg is a mandetory param in this script, skip dyn resolution
-            switch -regex ($env:USERDOMAIN){
-                "(TORO|CMW)" {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
-                "TORO-LAB" {$TenOrg = 'TOL' }
-                default {
-                    throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ;
-                    Break ;
-                } ;
-            } ;
-            #>
             if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
                 # make it script scope, so we don't have to predetect & purge before using new-variable
                 if(get-Variable -Name cred$($tenorg) -scope Script){
@@ -952,5 +943,6 @@ $($smtpBody)
         _Cleanup
 
     } ;
-} ;
-#*------^ get-xoHistSearch.ps1 ^------lor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+}
+
+#*------^ get-xoHistSearch.ps1 ^------

@@ -15,6 +15,7 @@ function new-DgTor {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,DistributionGroup,DistributionList,Hybrid
     REVISIONS
+    * 2:40 PM 12/10/2021 more cleanup 
     * 4:54 PM 9/30/2021 updated CloudFirst code, and used to create functional 
     exoDG, also added code to dynamically create onprem unreplicated MailContacts 
     for CloudFirst, to represent an onprem AddrBook object ; flipped members & 
@@ -187,7 +188,7 @@ function new-DgTor {
     #>
     ###Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Text, verb-logging
     #Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-IO, verb-logging, verb-Text, verb-logging
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.DOMAIN\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
     PARAM(
@@ -578,16 +579,6 @@ $($smtpBody)
         Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
         ###>
         $o365Cred=$null ;
-        <# $TenOrg is a mandatory param in this script, skip dyn resolution
-        switch -regex ($env:USERDOMAIN){
-            "(TORO|CMW)" {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
-            "TORO-LAB" {$TenOrg = 'TOL' }
-            default {
-                throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; 
-                Break ; 
-            } ;
-        } ; 
-        #>
         if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
             # make it script scope, so we don't have to predetect & purge before using new-variable
             if(get-Variable -Name cred$($tenorg) -scope Script -ea 0 ){ remove-Variable -Name cred$($tenorg) -scope Script } ;

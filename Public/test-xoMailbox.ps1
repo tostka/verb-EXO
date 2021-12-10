@@ -15,7 +15,8 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
-    * 8:41 AM 8s/27a/n2021 cleanup comments
+    * 2:40 PM 12/10/2021 more cleanup 
+    * 8:41 AM 8/27/2021 cleanup comments
     * 1:51 PM 5/19/2021 expanded $pltGHOpCred= to include 'ESVC','SID'; verbose=$($verbose)} ;
     # 12:27 PM 5/11/2021 updated to cover Room|Shared|Equipment mbx types, along with UserMailbox
     # 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
@@ -116,10 +117,6 @@ Function test-xoMailbox {
         $ComputerName = $env:COMPUTERNAME ;
         $sQot = [char]34 ; $sQotS = [char]39 ;
         $NoProf = [bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); # if($NoProf){# do this};
-        $MyBox = "LYN-3V6KSY1", "TIN-BYTEIII", "TIN-BOX", "TINSTOY", "LYN-8DCZ1G2" ;
-        $DomainWork = "TORO";
-        $DomHome = "REDBANK";
-        $DomLab = "TORO-LAB";
         #$ProgInterval= 500 ; # write-progress wait interval in ms
         # 12:23 PM 2/20/2015 add gui vb prompt support
         #[System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic') | Out-Null ;
@@ -158,7 +155,7 @@ Function test-xoMailbox {
         #$rgxExcl = '.*\\(Recipient\sCache|PersonMetadata|Audits|Calendar\sLogging|Purges)$' ;
 
         $rgxSID = "^S-\d-\d+-(\d+-){1,14}\d+$" ;
-        $rgxEntLicGrps = "CN=ENT-APP-Office365-.*-DL,OU=ENTERPRISE,DC=global,DC=ad,DC=toro((lab)*),DC=com" ;
+        $rgxEntLicGrps = $TORMeta.rgxLicGrpDN ; 
 
         $propsXmbx = 'UserPrincipalName','Alias','ExchangeGuid','Database','ExternalDirectoryObjectId','RemoteRecipientType'
         $propsOPmbx = 'UserPrincipalName','SamAccountName','RecipientType','RecipientTypeDetails' ; 
@@ -326,16 +323,7 @@ Function test-xoMailbox {
             Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
             ###>
             $o365Cred=$null ;
-            <# $TenOrg is a mandetory param in this script, skip dyn resolution
-            switch -regex ($env:USERDOMAIN){
-                "(TORO|CMW)" {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
-                "TORO-LAB" {$TenOrg = 'TOL' }
-                default {
-                    throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; 
-                    Break ; 
-                } ;
-            } ; 
-            #>
+            
             if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
                 # make it script scope, so we don't have to predetect & purge before using new-variable
                 New-Variable -Name cred$($tenorg) -scope Script -Value $o365Cred.cred ;
@@ -508,7 +496,7 @@ Function test-xoMailbox {
 
         
         # 3:00 PM 9/12/2018 shift this to 1x in the script ; - this would need to be customized per tenant, not used (would normally be for forcing UPNs, but CMW uses brand UPN doms)
-        #$script:forestdom = ((get-adforest | select -expand upnsuffixes) | ? { $_ -eq 'toro.com' }) ;
+        
 
         # Clear error variable
         $Error.Clear() ;
@@ -676,7 +664,7 @@ Function test-xoMailbox {
                     $Exit = $Retries ;
                 }
                 Catch {
-                    # get fails go here with: The operation couldn't be performed because object 'Anthony.Magana@toro.com' couldn't be found on 'CY4PR04A008DC10.NAMPR04A008.PROD.OUTLOOK.COM'.
+                    # get fails go here with: The operation couldn't be performed because object 'ACCOUNT@DOMAIN.com' couldn't be found on 'CY4PR04A008DC10.NAMPR04A008.PROD.OUTLOOK.COM'.
                     $errTrpd=$_ ; 
                     if( $errtrpd -match "\scouldn't\sbe\sfound\son\s" ){
                         $smsg = "(no EXO recipient found)" ;
@@ -864,10 +852,10 @@ Function test-xoMailbox {
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                             <# Count Name                      Group
                             ----- ----                      -----
-                              448 Delivered                 {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<BN8PR12MB33158F1D07B3862078D758E6EB499@BN8PR12MB3315.namprd12.prod.o...
-                                1 Failed                    {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<5bc2055fed4d43d3827cf7f61d37a4c9@CH2PR04MB7062.namprd04.prod.outlook...
-                                1 Quarantined               {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<threatsim-5f0bc0101d-c200b2590d@app.emaildistro.com>; Received=4/28/...
-                                1 FilteredAsSpam            {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<SA0PR01MB61858E3C6111672E081373C1E45F9@SA0PR01MB6185.prod.exchangela...
+                              448 Delivered                 {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<BN8PR12MB33158F1D07B3862078D758E6EB499@BN8PR12MB3315.namprd12.prod.o...
+                                1 Failed                    {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<5bc2055fed4d43d3827cf7f61d37a4c9@CH2PR04MB7062.namprd04.prod.outlook...
+                                1 Quarantined               {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<threatsim-5f0bc0101d-c200b2590d@app.emaildistro.com>; Received=4/28/...
+                                1 FilteredAsSpam            {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<SA0PR01MB61858E3C6111672E081373C1E45F9@SA0PR01MB6185.prod.exchangela...
                             #>
                             $nonDelivStats = $msgs | ?{$_.status -ne 'Delivered'} | group status | select-object -expand name ; 
                             
@@ -952,7 +940,7 @@ Function test-xoMailbox {
                     $Exit = $Retries ;
                 }
                 Catch {
-                    # get fails go here with: The operation couldn't be performed because object 'Anthony.Magana@toro.com' couldn't be found on 'CY4PR04A008DC10.NAMPR04A008.PROD.OUTLOOK.COM'.
+                    # get fails go here with: The operation couldn't be performed because object 'ACCOUNT@DOMAIN.com' couldn't be found on 'CY4PR04A008DC10.NAMPR04A008.PROD.OUTLOOK.COM'.
                     $errTrpd=$_ ; 
                     if( $errtrpd -match "\scouldn't\sbe\sfound\son\s" ){
                         $smsg = "(no EXO mailbox found)" ;
@@ -994,7 +982,7 @@ Function test-xoMailbox {
                     $Exit = $Retries ;
                 }
                 Catch {
-                    # get fails go here with: The operation couldn't be performed because object 'blahblah' couldn't be found on 'BCCMS8100.global.ad.toro.com'.
+                    # get fails go here with: The operation couldn't be performed because object 'blahblah' couldn't be found on DC.domain.ccc
                     $errTrpd=$_ ; 
                     if( $errtrpd -match "\scouldn't\sbe\sfound\son\s" ){
                         $smsg = "(no EXOP remotemailbox found)" ;
@@ -1049,7 +1037,7 @@ Function test-xoMailbox {
 
                 }
                 Catch {
-                    # get fails go here with: The operation couldn't be performed because object 'blahblah' couldn't be found on 'BCCMS8100.global.ad.toro.com'.
+                    # get fails go here with: The operation couldn't be performed because object 'blahblah' couldn't be found on dc.domain...
                     $errTrpd=$_ ; 
                     if( $errtrpd -match "\scouldn't\sbe\sfound\son\s" ){
                         $smsg = "(no EXOP mailbox found)" ;
@@ -1092,7 +1080,7 @@ Function test-xoMailbox {
                     $Exit = $Retries ;
                 }
                 Catch {
-                    # get fails go here with: get-msoluser : User Not Found.  User: blah@toro.com.
+                    # get fails go here with: get-msoluser : User Not Found.  User: blah@DOMAIN.com.
                     $errTrpd=$_ ; 
                     if( $errtrpd -match "User\sNot\sFound" ){
                         $smsg = "(no EXOP mailbox found)" ;

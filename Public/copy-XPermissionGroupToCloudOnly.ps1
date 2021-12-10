@@ -18,6 +18,7 @@ function copy-XPermissionGroupToCloudOnly {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:40 PM 12/10/2021 more cleanup 
     * 3:51 PM 8/17/2021 added $MembersCloudOnly | select -unique - kept leaking in duplicates in the inputs.
     * 1:40 PM 8/11/2021 ADDED & debugged -Mailbox param (spec target of grants), and code to add-mailboxperm/add-(ad|recipient)permission to OP or EXO target mailbox, and more detailed follow up dump report. Ran against exo-mailbox wio issues. Need to dbug against a still onprem mbx next.
     * 2:19 PM 8/3/2021 step-debugged, looks functional ; init 
@@ -52,7 +53,7 @@ function copy-XPermissionGroupToCloudOnly {
     None. Does not accepted piped input.(.NET types, can add description)
     .EXAMPLE
     PS> $whatif = $true ;
-        [array]$tgroups = @("627192;LYN-SEC-Email-ToroMobilityTeam-G;ToroMobilityTeam@toro.com;dccoldiron@charlesmachine.works;member1@domain.com,dccoldiron@charlesmachine.works") ;
+        [array]$tgroups = @("627192;LYN-SEC-Email-COMPANYMobilityTeam-G;COMPANYMobilityTeam@COMPANY.com;dccoldiron@charlesmachine.works;member1@domain.com,dccoldiron@charlesmachine.works") ;
         [array]$tgroups += "123457;SIT-SEC-Email-GrantMailbox2-G;GrantMailbox2@domain.com;owner2@domain.com;member1@domain.com,member2@domain.com" ;
         foreach($tgrp in $tgroups){
             $pltCXPermGrp=[ordered]@{
@@ -76,7 +77,7 @@ function copy-XPermissionGroupToCloudOnly {
     ###Requires -Version 5
     #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010, verb-Text
     #Requires -RunasAdministrator
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.COMPANY\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
     ##[Alias('somealias')]

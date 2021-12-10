@@ -15,6 +15,7 @@ Function check-EXOLegalHold {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,Legal
     REVISIONS   :
+    * 2:40 PM 12/10/2021 more cleanup 
     * 11:23 AM 9/16/2021 string
     * 8:24 AM 8/27/2021 cleanedup 
     * 1:23 PM 5/14/2021 init version, roughed in, completely untested (was prev a largely unmodified dupe of disconnect-exo)
@@ -23,21 +24,21 @@ Function check-EXOLegalHold {
     
     # chk mbx-level holds
       Rxo ; 
-      ╚[SIDS]::[PS]:C:\u\w\e\scripts$ get-exomailbox USERUPN | FL LitigationHoldEnabled,InPlaceHolds
+      +[SIDS]::[PS]:C:\u\w\e\scripts$ get-exomailbox USERUPN | FL LitigationHoldEnabled,InPlaceHolds
       LitigationHoldEnabled : False
       InPlaceHolds          : {}
       # expand per arti
-      ╚[SIDS]::[PS]:C:\u\w\e\scripts$ get-exomailbox USERUPN  | Select-Object -ExpandProperty InPlaceHolds
+      +[SIDS]::[PS]:C:\u\w\e\scripts$ get-exomailbox USERUPN  | Select-Object -ExpandProperty InPlaceHolds
       # nothing
 
       # check for org hold
-      ╚[SIDS]::[PS]:C:\u\w\e\scripts$ Get-exoOrganizationConfig | FL InPlaceHolds
+      +[SIDS]::[PS]:C:\u\w\e\scripts$ Get-exoOrganizationConfig | FL InPlaceHolds
       InPlaceHolds : {}
       # expand spec
-      ╚[SIDS]::[PS]:C:\u\w\e\scripts$ Get-exoOrganizationConfig | select -expand InPlaceHolds
+      +[SIDS]::[PS]:C:\u\w\e\scripts$ Get-exoOrganizationConfig | select -expand InPlaceHolds
       # nothing
       # check compliancetaghold (per above)
-      ╚[SIDS]::[PS]:C:\u\w\e\scripts$ get-exomailbox USERUPN  |FL ComplianceTagHoldApplied
+      +[SIDS]::[PS]:C:\u\w\e\scripts$ get-exomailbox USERUPN  |FL ComplianceTagHoldApplied
       ComplianceTagHoldApplied : False
 
       No holds above.
@@ -53,7 +54,7 @@ Function check-EXOLegalHold {
       Get-ccRetentionCompliancePolicy <hold GUID without prefix or suffix> -DistributionDetail  | FL Name,*Location
 
       # check compliancetaghold in mbx:
-      ╚[SIDS]::[PS]:C:\u\w\e\scripts$ get-exomailbox USERUPN  |FL ComplianceTagHoldApplied
+      +[SIDS]::[PS]:C:\u\w\e\scripts$ get-exomailbox USERUPN  |FL ComplianceTagHoldApplied
       ComplianceTagHoldApplied : False
 
       Erm, did anyone *read* the following on holds in the above article?:
@@ -68,7 +69,7 @@ Function check-EXOLegalHold {
         To view the values for the DelayHoldApplied and DelayReleaseHoldApplied properties for a mailbox, run the following command in Exchange Online PowerShell.
 
       # checking the above:
-      ╚[SIDS]::[PS]:C:\u\w\e\scripts$ get-exomailbox USERUPN  | FL *HoldApplied*
+      +[SIDS]::[PS]:C:\u\w\e\scripts$ get-exomailbox USERUPN  | FL *HoldApplied*
       ComplianceTagHoldApplied : False
       DelayHoldApplied         : True
       DelayReleaseHoldApplied  : True
@@ -87,7 +88,7 @@ Function check-EXOLegalHold {
     check-EXOLegalHold
     Connect using defaults, and leverage any pre-set $global:credo365TORSID variable
     .EXAMPLE
-    check-EXOLegalHold -CommandPrefix exo -credential (Get-Credential -credential s-todd.kadrie@torolab.com)  ;
+    check-EXOLegalHold -CommandPrefix exo -credential (Get-Credential -credential user@domain.com)  ;
     Connect an explicit credential, and use 'exolab' as the cmdlet prefix
     .EXAMPLE
     $cred = get-credential -credential $o365_Torolab_SIDUpn ;
@@ -208,4 +209,5 @@ Function check-EXOLegalHold {
         $objReturn | write-output ; 
     } ;  # END-E
 }
+
 #*------^ check-EXOLegalHold.ps1 ^------

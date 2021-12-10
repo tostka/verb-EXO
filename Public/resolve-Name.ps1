@@ -15,6 +15,7 @@ Function resolve-Name {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell,ExchangeOnline,Exchange,MsolUser,AzureADUser,ADUser
     REVISIONS
+    * 2:40 PM 12/10/2021 more cleanup 
     * 1:17 PM 6/10/2021 added missing $exMProps add lic grp memberof check for aadu, for x-hyb users; add missing $rgxLicGrp, as $rgxLicGrpDN & $rgxLicGrpDName (aduser & aaduser respectively); pulled datestamps on echo's, simplified echo's (removed "$($smsg)")
     * 4:00 PM 6/9/2021 added alias 'nlu' (7nlu is still ahk macro) ; fixed typo; expanded echo for $lic;flipped -displayname to -identifier, and handle smtpaddr|alias|displayname lookups ; init; 
     .DESCRIPTION
@@ -68,16 +69,16 @@ Function resolve-Name {
         
         [regex]$rgxDname = "^[\w'\-,.][^0-9_!?????/\\+=@#$%?&*(){}|~<>;:[\]]{2,}$"
         # below doesn't encode cleanly, mainly black diamonds - better w alt font (non-lucida console)
-        #"^[a-zA-Z������acce����ei����ln����������uu��zz��c��������ACCEE��������ILN����������UU��ZZ��ǌ�C��?� ,.'-]+$"
+        #"^[a-zA-Z??????acce????ei????ln??????????uu??zz??c????????ACCEE????????ILN??????????UU??ZZ????C???? ,.'-]+$"
         [regex]$rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"
-        [regex]$rgxCMWDomain = 'DC=cmw,DC=internal$' ;
+        [regex]$rgxCMWDomain = $CMWMeta.rgxCMWDomain ;
         [regex]$rgxExAlias = "^[0-9a-zA-Z-._+&]{1,64}$" ;
         # used for adu.memberof
-        [regex]$rgxLicGrpDN = "^CN=ENT-APP-Office365-.*-DL,((OU=Enterprise\sApplications,)*)OU=ENTERPRISE,DC=global,DC=ad,DC=toro((lab)*),DC=com$" ;  ; 
+        [regex]$rgxLicGrpDN = $TorMeta.rgxLicGrpDN ;  ; 
         # used for taadu memberof
-        [regex]$rgxLicGrpDName = "^ENT-APP-Office365-.*-DL((\s)*)$" ;
-        #"^ENT-APP-Office365-.*-DL$" ;  
-        # cute, we've got cmw AAD grps with trailing spaces: 'ENT-APP-Office365-CMWUsers-E3-DL ', pull trailing $
+        [regex]$rgxLicGrpDName = $CMWMeta.rgxLicGrpDName ;
+        #XXXX" ;  
+        # cute, we've got cmw AAD grps with trailing spaces: 'XXX-XXX-E3-DL ', pull trailing $
 
         if(!$Identifier -AND (gcm get-clipboard) -AND (get-clipboard)){
             $Identifier = get-clipboard ;
@@ -183,7 +184,7 @@ Function resolve-Name {
         else{ write-host -foregroundcolor green $smsg } ;
         #>
         
-        # steer all onprem code on $XXXMeta.ExOPAccessFromToro & Ex10Server values
+        
         $UseOP=$true ; 
 
         $useEXO = $true ; # non-dyn setting, drives variant EXO reconnect & query code
@@ -201,16 +202,6 @@ Function resolve-Name {
             Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
             ###>
             $o365Cred=$null ;
-            <# $TenOrg is a mandetory param in this script, skip dyn resolution
-            switch -regex ($env:USERDOMAIN){
-                "(TORO|CMW)" {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
-                "TORO-LAB" {$TenOrg = 'TOL' }
-                default {
-                    throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; 
-                    Break ; 
-                } ;
-            } ; 
-            #>
             if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
                 # make it script scope, so we don't have to predetect & purge before using new-variable
                 if(get-Variable -Name cred$($tenorg) -scope Script -ea 0){remove-variable -Name cred$($tenorg) -scope Script} ; 
@@ -374,7 +365,7 @@ Function resolve-Name {
 
         
         # 3:00 PM 9/12/2018 shift this to 1x in the script ; - this would need to be customized per tenant, not used (would normally be for forcing UPNs, but CMW uses brand UPN doms)
-        #$script:forestdom = ((get-adforest | select -expand upnsuffixes) | ? { $_ -eq 'toro.com' }) ;
+        
 
         # Clear error variable
         $Error.Clear() ;
@@ -466,7 +457,7 @@ Function resolve-Name {
                         write-host "LicGrp(AD):(no ADUser.memberof matched pattern:`n$($rgxLicGrpDN.tostring())" ; 
                     } ; 
                 } else {
-                    write-host -fo yellow  "Unable to expand ADU, user is hybrid AD from CMW.internal domain`nproxying AzureADUser memberof" ; 
+                    write-host -fo yellow  "Unable to expand ADU, user is hybrid AD from $($CMWMeta.adforestname) domain`nproxying AzureADUser memberof" ; 
                     if($taadu){
                         $mbrof = $taadu | Get-AzureADUserMembership | select DisplayName,DirSyncEnabled,MailEnabled,SecurityEnabled,Mail,objectid ;
                         if($LicGrp = $mbrof.displayname -match $rgxLicGrpDName){

@@ -9,6 +9,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    * 2:40 PM 12/10/2021 more cleanup 
     * 11:24 AM 9/16/2021 encoded eml
     # 10:46 AM 6/2/2021 sub'd verb-logging for v-trans
     * 1:54 PM 5/19/2021 expanded get-hybridcred to use both esvc & sid userroles
@@ -88,10 +89,10 @@ function move-MailboxToXo{
     .OUTPUTS
     None. Returns no objects or output.
     .EXAMPLE
-    move-MailboxToXo.ps1 -TargetMailboxes GTC-Ventrac@toro.com -showDebug  -whatIf ;
+    move-MailboxToXo.ps1 -TargetMailboxes ACCOUNT@COMPANY.com -showDebug  -whatIf ;
     Perform immediate move of specified mailbox, with debug output & whtif pass
     .EXAMPLE
-    move-MailboxToXo.ps1 -TargetMailboxes GTC-Ventrac@toro.com -showDebug -notest -whatIf ;
+    move-MailboxToXo.ps1 -TargetMailboxes ACCOUNT@COMPANY.com -showDebug -notest -whatIf ;
     Perform immediate move of specified mailbox, suppress MEP tests (-NoTest), showdebug output & whatif pass
     .LINK
     #>
@@ -496,16 +497,6 @@ function move-MailboxToXo{
         Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
         ###>
         $o365Cred=$null ;
-        <# $TenOrg is a mandetory param in this script, skip dyn resolution
-        switch -regex ($env:USERDOMAIN){
-            "(TORO|CMW)" {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
-            "TORO-LAB" {$TenOrg = 'TOL' }
-            default {
-                throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ;
-                exit ;
-            } ;
-        } ;
-        #>
         if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
             # make it script scope, so we don't have to predetect & purge before using new-variable - except now it does [headcratch]
             $tvari = "cred$($tenorg)" ; if(get-Variable -Name $tvari -scope Script){Remove-Variable -Name $tvari -scope Script}

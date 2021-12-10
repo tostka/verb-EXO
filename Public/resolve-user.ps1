@@ -18,12 +18,22 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 4:19 PM 12/9/2021 improved pipeline support; fixed pipeline param mbinding fails ; added supoort for resolving 
-        baddomain users or op.mailusers where need to resolve aadu.immutableid to 
-        aduser, to *ensure* we have a hardmatch of problem objects (resolving baddomain 
-        Ent-DL-AllToroco recipients to internal NoBrain etc. Still doesn't seem to be 
-        setting $hsum.NoBrain properly in outputs, but is dropping direct to pipe. May 
-        have borked single-indiceent xml object dumps tho.  
+    * 2:40 PM 12/10/2021 more cleanup 
+    * 12:55 PM 12/10/2021 added $hsum.isDirSynced, for further bulk filter/profiling
+        flipped $hsum.isUnlicensed -> Islicensed & added msol.Islicensed test to pop ; 
+        appears to work in console - output a stack of filterable objects into collection variable.
+        further tweaking and nobrain t-shooting outputs ; added 
+        output switches: 
+        isNoBrain,isSplitBrain,isUnlicensed,IsDisabledOU,IsADDisabled,IsAADDisabled for 
+        postfiltering large collections in bulk, to identify patterns ; reformulated 
+        nobrain detec, to have an unlic'd block as well as a licensed - with deadwood 
+        offboard nobrains, they'll never have a lic. 
+    * 4:19 PM 12/9/2021 improved pipeline support; fixed pipeline param mbinding fails ; added supoort for resolving
+        baddomain users or op.mailusers where need to resolve aadu.immutableid to
+        aduser, to *ensure* we have a hardmatch of problem objects (resolving baddomain
+        DDG-DL-AllDOMAIN recipients to internal NoBrain etc. Still doesn't seem to be
+        setting $hsum.NoBrain properly in outputs, but is dropping direct to pipe. May
+        have borked single-indiceent xml object dumps tho.
     * 10:30 AM 11/8/2021 fixed CBH/HelpMessage tagging on -outobject
     * 3:30 PM 10/12/2021 added new Name:ObjName_guid support (new hires turn up with aduser named this way); added some marginal multi xoRcp & xoMailbox handling (loops outputs on the above, and the mapiTest), but doesn't do full AzureAD,Msoluser,MailUser,Guest lookups for these. It's really about error-suppression, and notifying the issue more than returning the full picture
     * 1:04 PM 9/28/2021 added:$AADUserManager lookup and dump of UPN, OpDN & mail (for correlating what email pol a user should have -> the one their manager does)
@@ -35,7 +45,7 @@ function resolve-user {
     * 1:30 PM 8/27/2021 new sniggle: CMW user that has EXOP mbx, remote: Added xoMailUser support, failed through DName lookups to try '*lname*' for near-missies. Could add trailing 'lnamne[0-=3]* searches, if not rcp/xrcps found...
     * 9:16 AM 8/18/2021 $xMProps: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
     * 12:40 PM 8/17/2021 added -outObject, outputs a full descriptive object for each resolved recipient ; added a $hSum hash and shifted all the varis into mountpoints in the hash, with -outObject, the entire hash is conv'd to an obj and appended to $Rpt ; renamed most of the varis/as objects very clearly for what they are, as sub-props of the output objects. Wo -outobject, the usual comma-delim'd string of addresses is output.
-    * 3:26 PM 7/29/2021 had sorta bug (AD context was adtorocom:, gadu failing throwing undefined error), but debugging added extensive verbose echos, and an AD-specific try/catch to trap AD notfound errors (notorious, they throw terminating fails, unlike other modules; which crashes out processing even when using -EA continue). So it hardens up the fail recovery process.
+    * 3:26 PM 7/29/2021 had sorta bug (AD context was xxxx:, gadu failing throwing undefined error), but debugging added extensive verbose echos, and an AD-specific try/catch to trap AD notfound errors (notorious, they throw terminating fails, unlike other modules; which crashes out processing even when using -EA continue). So it hardens up the fail recovery process.
     * 12:55 PM 7/19/2021 added guest & exo-mailcontact support (resolving missing ext-federated addresses), retolled logic down to grcp & gxrcp to drive balance of tests.
     * 12:05 PM 7/14/2021 rem'd requires: verb-exo  rem'd requires version 5 (gen'ing 'version' is specified more than once.); rem'd the $rgxSamAcctName, gen's parsing errors compiling into mod ;  added alias 'ulu'; added mailcontact excl on init grcp, to force those to exombx qry ; init vers
     .DESCRIPTION
@@ -67,6 +77,10 @@ function resolve-user {
     group results on federation sources,
     output summary of EXO mailboxes for the second federator
     then output the primary smtpaddress for all EXO mailboxes resolved to that federator
+    .EXAMPLE
+    $rptNNNNNN_FName_LName_Domain_com = ulu -o -users 'FName.LName@Domain.com' ;  $rpt655692_FName_LName_Domain_com | xxml .\logs\rpt655692_FName_LName_Domain_com.xml
+    Example (from ahk 7uluo! macro parser output) that creates a variable based on ticketnumber & email address (with underscores for alphanums), from the output, and then exports the variable content to xml. 
+    ves an immediately parsable inmem variable, along with the canned .xml that can be reloaded in future, or attached to a ticket.
     .LINK
     https://github.com/tostka/verb-exo
     .LINK
@@ -74,7 +88,7 @@ function resolve-user {
     ###Requires -Version 5
     #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
     #Requires -RunasAdministrator
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.DOMAIN\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
     [Alias('ulu')]
@@ -106,7 +120,7 @@ function resolve-user {
         # $propsMailx: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
         $propsMailx='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','IsDirSynced','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
         # pulls: 'ImmutableId',
-        $propsXMFed = 'samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ; 
+        $propsXMFed = 'samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
         $propsLic = @{Name='HasLic'; Expression={$_.IsLicensed }},@{Name='LicIssue'; Expression={$_.LicenseReconciliationNeeded }} ;
         $propsADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName','StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone','Enabled','DistinguishedName','Description','whenCreated','whenChanged'
         #'samaccountname','UserPrincipalName','distinguishedname','Description','title','whenCreated','whenChanged','Enabled','sAMAccountType','userAccountControl' ;
@@ -171,11 +185,11 @@ function resolve-user {
         } ;
         #>
         rx10 -Verbose:$false ; rxo  -Verbose:$false ; cmsol  -Verbose:$false ;
-        
+
         # finally if we're using pipeline, and aggregating, we need to aggreg outside of the process{} block
         if($PSCmdlet.MyInvocation.ExpectingInput){
             # pipeline instantiate an aggregator here
-        } ; 
+        } ;
 
     }
     PROCESS{
@@ -196,15 +210,15 @@ function resolve-user {
 
         $ttl = ($users|measure).count ; $Procd=0 ;
         [array]$Rpt =@() ;
-        # with pipeline input, the pipeline evals as either $_ (if unmapped to a param in binding), or iterating on the mapped value. 
-        #     the foreach loop below doesn't actually loop. Process{} is the loop with a pipeline-fed param, and the bound - $users - variable once per pipeline bound element - per array item on an array - 
-        #     is run with the $users value populated with each element in turn. IOW, the foreach is a single-run pass, and the Process{} block is the loop. 
-        # you need both a bound $users at the top - to handle explicit assigns resolve-user -users $variable. 
+        # with pipeline input, the pipeline evals as either $_ (if unmapped to a param in binding), or iterating on the mapped value.
+        #     the foreach loop below doesn't actually loop. Process{} is the loop with a pipeline-fed param, and the bound - $users - variable once per pipeline bound element - per array item on an array -
+        #     is run with the $users value populated with each element in turn. IOW, the foreach is a single-run pass, and the Process{} block is the loop.
+        # you need both a bound $users at the top - to handle explicit assigns resolve-user -users $variable.
         # with a process {} block to handle any pipeline passed input. The pipeline still maps to the bound param: $users, but the e3ntire process{} is run per element, rather than iteratign the internal $users foreach.
         foreach ($usr in $users){
             #$fname = $lname = $dname = $OPRcp = $OPMailbox = $OPRemoteMailbox = $ADUser = $xoRcp = $xoMailbox = $xoUser = $xoMemberOf = $MsolUser = $LicenseGroup = $null ;
             $isEml=$isDname=$isSamAcct=$isXORcpMulti  = $false ;
-            
+
 
             $hSum = [ordered]@{
                 dname = $null ;
@@ -225,11 +239,16 @@ function resolve-user {
                 xoMapiTest = $null ;
                 MsolUser = $null ;
                 AADUser = $null ; # added for MailUser variant
-                AADUserMgr = $null ; 
+                AADUserMgr = $null ;
                 LicenseGroup = $null ;
-                isNoBrain = $false ; 
-                isSplitBrain = $false; 
-                isUnlicensed = $false ; 
+                isDirSynced = $null 
+                isNoBrain = $false ;
+                isSplitBrain = $false;
+                #isUnlicensed = $false ;
+                IsLicensed = $false ; 
+                IsDisabledOU = $false ; 
+                IsADDisabled = $false ; 
+                IsAADDisabled = $false ; 
             } ;
             $procd++ ;
             write-verbose "processing:$($usr)" ;
@@ -239,7 +258,7 @@ function resolve-user {
                     $hSum.dname = $usr ;
                     write-verbose "(detected user ($($usr)) as EmailAddr)" ;
                     $isEml = $true ;
-                    Break ; 
+                    Break ;
                 }
                 $rgxObjNameNewHires{
                     write-verbose "(detected user ($($usr)) as ObjNameNewHires)" ;
@@ -247,7 +266,7 @@ function resolve-user {
                     $hSum.dname = $usr.split('_')[0] ;
                     write-verbose "(detected user ($($usr)) as DisplayName)" ;
                     $isObjName = $true ;
-                    Break ; 
+                    Break ;
                 }
                 $rgxDName {
                     if($usr.contains('.')){
@@ -258,13 +277,13 @@ function resolve-user {
                     $hSum.dname = $usr ;
                     write-verbose "(detected user ($($usr)) as DisplayName)" ;
                     $isDname = $true ;
-                    Break ; 
+                    Break ;
                 }
                 $rgxSamAcctNameTOR {
                     $hSum.lname = $usr ;
                     write-verbose "(detected user ($($usr)) as SamAccountName)" ;
                     $isSamAcct  = $true ;
-                    Break ; 
+                    Break ;
                 }
                 default {
                     write-warning "$((get-date).ToString('HH:mm:ss')):No -user specified, nothing matching dname, emailaddress or samaccountname, found on clipboard. EXITING!" ;
@@ -297,7 +316,7 @@ function resolve-user {
                 $fltr = "name -like '$usr'" ;
                 write-verbose "processing:'filter':$($fltr)" ;
                 $pltGMailObj.add('filter',$fltr) ;
-            } ; 
+            } ;
             if($isDname){
                 # interestinb bug: switched to $hSum.dname: ISE is fine, but ConsoleHost fails to expand the $fltr properly.
                 # standard is: Variables: Enclose variables that need to be expanded in single quotation marks (for example, '$User'). Don't use curly-brackets (impedes expansion)
@@ -324,7 +343,7 @@ function resolve-user {
                     'MailUser' {
                         $smsg = "MAILUSER WO RMBX DETECTED! - POSSIBLE NOBRAIN?"
                         write-warning $smsg
-                        #$hsum.isNoBrain = $true ; 
+                        #$hsum.isNoBrain = $true ;
                     }
                     'MailUniversalDistributionGroup' {write-host "(DG)" -nonewline}
                     'DynamicDistributionGroup'  {write-host "(DDG)" -nonewline}
@@ -371,11 +390,11 @@ function resolve-user {
                 write-host $smsg ;
             } else {
                 $smsg =  "`$hSum.xoRcp:`n$(($hSum.xoRcp|out-string).trim())" ;
-                write-verbose $smsg ; 
+                write-verbose $smsg ;
                 if($hSum.xoRcp -is [system.array]){
-                    write-warning "Multiple matching xoRcps!:$($smsg)`nTHIS WILL NOT RETURN FULL AADUSER ETC FOR BOTH OBJECTS!`nUSE TARGETED UPN ETC TO DUMP VARIANT OBJECTS!" ; 
-                    $isXORcpMulti = $true ; 
-                } ; 
+                    write-warning "Multiple matching xoRcps!:$($smsg)`nTHIS WILL NOT RETURN FULL AADUSER ETC FOR BOTH OBJECTS!`nUSE TARGETED UPN ETC TO DUMP VARIANT OBJECTS!" ;
+                    $isXORcpMulti = $true ;
+                } ;
             } ;
 
             if($hSum.OPRcp){
@@ -387,7 +406,7 @@ function resolve-user {
                             if($hSum.OPMailbox=get-mailbox $hSum.OPRcp.identity -resultsize $MaxRecips | select -first $MaxRecips ){ ;
                                 #write-verbose "`$hSum.OPMailbox:`n$(($hSum.OPMailbox|out-string).trim())" ;
                                 if($outObject){
-                                
+
                                 } else {
                                     $Rpt += $hSum.OPMailbox.primarysmtpaddress ;
                                 } ;
@@ -415,9 +434,9 @@ function resolve-user {
                                     write-verbose "OPRcp:Mailuser, ensure GET-ADUSER pulls AADUser.matched object for cloud recipient:`nfallback:get-AzureAdUser  -objectid $($hsum.xoRcp.ExternalDirectoryObjectId)" ;
                                     # have to postfilter, if want specific count -maxresults catch's with no $error[0]
                                     $hSum.AADUser  = get-AzureAdUser  -objectid $hsum.xoRcp.ExternalDirectoryObjectId | select -first $MaxRecips;  ;
-                                } else { 
-                                    throw "Unsupported object, blank `$hsum.xoRcp.ExternalDirectoryObjectId!" ; 
-                                } ; 
+                                } else {
+                                    throw "Unsupported object, blank `$hsum.xoRcp.ExternalDirectoryObjectId!" ;
+                                } ;
                             }
                             if($outObject){
 
@@ -446,20 +465,20 @@ function resolve-user {
                     } else {
                         # cloud-first or no brain, neither oprmbx or opmailbox;  should have populated $hSum.AADUser above, use immutable lookup
                         if($hSum.AADUser.DirSyncEnabled){
-                            $smsg = "Falling back to AADU Immutable lookup to locate replicated adu source" ; 
+                            $smsg = "Falling back to AADU Immutable lookup to locate replicated adu source" ;
                             if($pltGadu.identity = $hSum.AADUser.ImmutableId | convert-ImmuntableIDToGUID | select -expand guid){
-                                $smsg = "(Resolved AADU.Immutable ->GUID:$($pltGadu.identity))" ; 
-                                write-verbose $smsg ; 
+                                $smsg = "(Resolved AADU.Immutable ->GUID:$($pltGadu.identity))" ;
+                                write-verbose $smsg ;
                             }else {
                                 $smsg = "UNABLE TO RESOLVE ADU.IMMUTABLEID TO ADU GUID!"
                                 write-warning $smsg ;
                                 throw $smsg ;
                             }
-                        } else { 
+                        } else {
                             $smsg = "$AADUsuer not DirSyncEnabled: CLOUD FIRST!"
                             write-warning $smsg ;
                             #throw $smsg ;
-                        } ; 
+                        } ;
                     };
                     if($pltGadu.identity){
                         <# this is throwing a blank fail
@@ -467,7 +486,7 @@ function resolve-user {
                         Error Message:
                         Error Details:
                         # and dumping balance of processing
-                        issue: was in adms drive: :adtorocom, gadu was searching root domain only
+                        issue: was in adms drive: :xxxx, gadu was searching root domain only
                         so it was a search fail, throwing an error, but didn't return details. Still good idea to trap not found and echo it
                         #>
                         #$hSum.ADUser =Get-ADUser @pltGadu ;
@@ -487,8 +506,8 @@ function resolve-user {
                         } ;
 
                         write-verbose "`$hSum.ADUser:`n$(($hSum.ADUser|fl $propsADU| out-string).trim())" ;
-                        $smsg = "(TOR USER, fed:ad.toro.com)" ;
-                        $hSum.Federator = 'ad.toro.com' ;
+                        $smsg = "(TOR USER, fed:$($TORMeta.adforestname))" ;
+                        $hSum.Federator = $TORMeta.adforestname ;
                         write-host -Fore yellow $smsg ;
                         if($hSum.OPRemoteMailbox){
                             $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
@@ -520,17 +539,17 @@ function resolve-user {
                                         $Rpt += $hSum.xoMailbox.primarysmtpaddress ;
                                     } ;
                                     if($hSum.xoMailbox -is [system.array]){
-                                        write-warning "Multiple mailboxes matched!" ; 
-                                    } ; 
+                                        write-warning "Multiple mailboxes matched!" ;
+                                    } ;
                                     # accomodate array returned (multiple matches):
-                                    $ino = 0 ; 
+                                    $ino = 0 ;
                                     foreach($xmbx in $hSum.xoMailbox){
-                                        $ino++ ; 
+                                        $ino++ ;
                                         if($hSum.xoMailbox -isnot [system.array]){
-                                            $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ; 
-                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                            $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ;
+                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                        } ; 
+                                        } ;
                                         write-verbose "'xoUserMailbox':Test-exoMAPIConnectivity $($xmbx.userprincipalname)"
                                         $hSum.xoMapiTest = Test-exoMAPIConnectivity -identity $xmbx.userprincipalname ;
                                         $smsg = "Outlook (xoMAPI) Access Test Result:$($hsum.xoMapiTest.result)" ;
@@ -539,7 +558,7 @@ function resolve-user {
                                         } else {
                                             write-WARNING $smsg ;
                                         } ;
-                                    } ;  
+                                    } ;
                                     break ;
                                 } ;
                             }
@@ -630,8 +649,8 @@ function resolve-user {
                         } ;
 
                         write-verbose "`$hSum.ADUser:`n$(($hSum.ADUser|fl $propsADU | out-string).trim())" ;
-                        $smsg = "(TOR USER, fed:ad.toro.com)" ;
-                        $hSum.Federator = 'ad.toro.com' ;
+                        $smsg = "(TOR USER, fed:$($TORMeta.adforestname))" ;
+                        $hSum.Federator = $TORMeta.adforestname ;
                         write-host -Fore yellow $smsg ;
                         if($hSum.OPRemoteMailbox){
                             $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
@@ -657,78 +676,79 @@ function resolve-user {
                 } else {
                     $Rpt += $hSum.xoMailbox.primarysmtpaddress ;
                 } ;
-                $ino = 0 ; 
+                $ino = 0 ;
                 foreach($xmbx in $hSum.xoMailbox){
-                    $ino++; 
+                    $ino++;
                     if($hSum.xoMailbox -isnot [system.array]){
-                        $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    } ; 
+                    } ;
                     if($xmbx.isdirsynced){
                         # can be federated to VEN|CMW|Toro
                         switch -regex ($xmbx.primarysmtpaddress.split('@')[1]){
                             $CMWMeta.rgxOPFederatedDom {
-                                $smsg="(CMW USER, fed:cmw.internal)" ;
-                                $hSum.Federator = 'cmw.internal' ;
+                                $smsg="(CMW USER, fed:$($CMWMeta.adforestname))" ;
+                                $hSum.Federator = $CMWMeta.adforestname ;
                             }
                             $TORMeta.rgxOPFederatedDom {
-                                $smsg="(TOR USER, fed:ad.toro.com)" ;
-                                $hSum.Federator = 'ad.toro.com' ;
+                                $smsg="(TOR USER, fed:$($TORMeta.adforestname))" ;
+                                $hSum.Federator = $TORMeta.adforestname ;
                             }
                             $VENMeta.rgxOPFederatedDom {
-                                $smsg="(VEN USER, fed:ventrac)" ;
-                                $hSum.Federator = 'ventrac' ;
+                                $smsg="(VEN USER, fed:$($venmeta.o365_TenantLabel))" ;
+                                $hSum.Federator = $VENMETA.o365_TenantLabel ;
                             }
 
                         } ;
                     } elseif($hSum.xoMuser.IsDirSynced){
                         switch -regex ($xmbx.primarysmtpaddress.split('@')[1]){
                             $CMWMeta.rgxOPFederatedDom {
-                                $smsg="(CMW USER, fed:cmw.internal)" ;
-                                $hSum.Federator = 'cmw.internal' ;
+                                $smsg="(CMW USER, fed:$($CMWMeta.adforestname))" ;
+                                $hSum.Federator = $CMWMeta.adforestname ;
                             }
                             $TORMeta.rgxOPFederatedDom {
-                                $smsg="(TOR USER, fed:ad.toro.com)" ;
-                                $hSum.Federator = 'ad.toro.com' ;
+                                $smsg="(TOR USER, fed:$($TORMeta.adforestname))" ;
+                                $hSum.Federator = $TORMeta.adforestname ;
                             }
                             $VENMeta.rgxOPFederatedDom {
-                                $smsg="(VEN USER, fed:ventrac)" ;
-                                $hSum.Federator = 'ventrac' ;
+                                $smsg="(VEN USER, fed:$($venmeta.o365_TenantLabel))" ;
+                                $hSum.Federator = $VENMETA.o365_TenantLabel ;
                             }
                         } ;
                     }else{
-                        if($hsum.xoRcp.primarysmtpaddress -match "@toroco\.onmicrosoft\.com"){
+                        [regex]$rgxTenDom = [regex]::escape("@$($tormeta.o365_TenantDomain)")
+                        if($hsum.xoRcp.primarysmtpaddress -match $rgxTenDom){
                                 $smsg="(CLOUD-1ST ACCT, unfederated)" ;
-                                $hSum.Federator = 'Toroco' ;
+                                $hSum.Federator = $TORMeta.o365_TenantDom ;
 
                         } else {
                             $smsg="(CLOUD-1ST ACCT, unfederated)" ;
-                            $hSum.Federator = 'Toroco' ;
+                            $hSum.Federator = $TORMeta.o365_TenantDom ;
                         } ;
                     } ;
                 } ;  # loop-E
                 write-host -Fore yellow $smsg ;
                 # skip user lookup if guest already pulled it
                 if(!$hSum.xoUser){
-                    $ino = 0 ; 
+                    $ino = 0 ;
                     foreach($xmbx in $hSum.xoMailbox){
                         write-verbose "get-exouser -id $($xmbx.UserPrincipalName)"
                         $hSum.xoUser += get-exouser -id $xmbx.UserPrincipalName -ResultSize $MaxRecips ;
                         write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
-                    } ; 
+                    } ;
                 }
                 if($hSum.xoMailbox){
-                    $ino = 0 ; 
+                    $ino = 0 ;
                     foreach($xmbx in $hSum.xoMailbox){
-                        $ino++ ; 
+                        $ino++ ;
                         if($hSum.xoMailbox -isnot [system.array]){
-                            $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ; 
+                            $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ;
                             write-host $smsg ;
-                        } ; 
+                        } ;
                         write-host -foreground yellow "=get-xMbx:> " -nonewline;
                         write-host "$(($hSum.xoMailbox |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
-                    } ; 
+                    } ;
                 }elseif($hSum.xoMUser){
                     write-host "=get-xMUSR:>`n$(($hSum.xoMUser |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
                 }elseif($hSum.txGuest){
@@ -780,16 +800,16 @@ function resolve-user {
             if(($hSum.xoRcp|?{$_.recipienttypedetails -eq 'UserMailbox'}) -AND -not($hSum.xoMailbox)){
                 write-verbose "get-exomailbox w`n$(($pltGMailObj|out-string).trim())" ;
                 if($hSum.xoMailbox=get-exomailbox @pltGMailObj -ea 0| select -first $MaxRecips ){
-                    $ino = 0 ; 
-                    $mapiResults = @() ; 
+                    $ino = 0 ;
+                    $mapiResults = @() ;
                     foreach($xmbx in $hSum.xoMailbox){
-                        $ino++ ; 
+                        $ino++ ;
                         if($hSum.xoMailbox -is [system.array]){
-                            $msgprefix = "xmbx$($ino):" ; 
-                        } else { $msgprefix = $null } ; 
-                        $smsg = $msgprefix, "`$hSum.xoMailbox:`n$(($xmbx|out-string).trim())" -join ' ' ; 
+                            $msgprefix = "xmbx$($ino):" ;
+                        } else { $msgprefix = $null } ;
+                        $smsg = $msgprefix, "`$hSum.xoMailbox:`n$(($xmbx|out-string).trim())" -join ' ' ;
                         write-verbose $smsg ;
-                        $smsg = $msgprefix,"'xoUserMailbox':Test-exoMAPIConnectivity $($xmbx.userprincipalname)"  -join ' ' ; 
+                        $smsg = $msgprefix,"'xoUserMailbox':Test-exoMAPIConnectivity $($xmbx.userprincipalname)"  -join ' ' ;
                         write-verbose $smsg ;
                        $mapiResults += Test-exoMAPIConnectivity -identity $xmbx.userprincipalname ;
                         $smsg = "Outlook (xoMAPI) Access Test Result:$($mapiResults[$ino - 1].result)" ;
@@ -798,8 +818,8 @@ function resolve-user {
                         } else {
                             write-WARNING $smsg ;
                         } ;
-                    } ; 
-                    $hSum.xoMapiTest = $mapiResults ; 
+                    } ;
+                    $hSum.xoMapiTest = $mapiResults ;
                 } ;
             } ;
 
@@ -821,8 +841,8 @@ function resolve-user {
                     # have to postfilter, if want specific count -maxresults catch's with no $error[0]
                     $hSum.MsolUser=get-msoluser @pltgMsoUsr | select -first $MaxRecips;  ;
                     write-verbose "`$hSum.MsolUser:`n$(($hSum.MsolUser|out-string).trim())" ;
-                    if($hSum.MsolUser.IsLicensed){$hsum.IsLicensed = $true }
-                    else {$hsum.IsLicensed = $false } ; 
+                    if($hSum.MsolUser.IsLicensed){$hsum.IsLicensed = $true ;  }
+                    else {$hsum.IsLicensed = $false } ;
                 } CATCH {
                     $ErrTrapd=$Error[0] ;
                     $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
@@ -868,7 +888,7 @@ function resolve-user {
                     } ;
 
                 } ;
-                
+
                 if(-not($hSum.AADUserMgr) -AND $hSum.AADUser ){
                     write-host -foregroundcolor yellow "=get-AADuserManager $($hSum.AADUser.UserPrincipalName)>:" ;
                     TRY{
@@ -900,7 +920,7 @@ function resolve-user {
                     $smsg += "`n$(($hSum.AADUser|select $propsAADL4 |out-markdowntable @MDtbl|out-string).trim())" ;
                     $smsg += "`n$(($hSum.AADUser|select $propsAADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
                     #$hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName
-                    if($hSum.Federator -ne 'ad.toro.com'){
+                    if($hSum.Federator -ne $TORMeta.adforestname){
                         $smsg += "`n$($hSum.Federator):Remote ADUser.DN:`n$(($hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName|out-string).trim())" ;
                     }  ;
 
@@ -941,14 +961,14 @@ function resolve-user {
                     if($hSum.aduser.Enabled){} else {
                         $smsg = "ADUser:$($hSum.ADUser.userprincipalname) AD Account is *DISABLED!*"
                         write-warning $smsg ;
-                    } ; 
+                    } ;
                 } ;
                 # acct enabled/disabled: .aduser.Enbabled & .aaduser.AccountEnabled
                 if($hSum.AADUser){
                     if($hSum.aaduser.AccountEnabled){} else {
                         $smsg = "AADUser:$($hSum.AADUser.userprincipalname) AAD Account is *DISABLED!*"
                         write-warning $smsg ;
-                    } ; 
+                    } ;
                 } ;
                 if($hSum.ADUser){$hSum.LicenseGroup = $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
 
@@ -961,7 +981,7 @@ function resolve-user {
                 } ;
                 if($hSum.ADUser){$hSum.LicenseGroup = $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
                 elseif($hSum.xoMemberOf){$hSum.LicenseGroup = $hSum.xoMemberOf.Name |?{$_ -match $rgxXLic}}
-                if(!($hSum.LicenseGroup) -AND ($hSum.MsolUser.licenses.AccountSkuId -contains 'toroco:ENTERPRISEPACK')){$hSum.LicenseGroup = '(direct-assigned E3)'} ;
+                if(!($hSum.LicenseGroup) -AND ($hSum.MsolUser.licenses.AccountSkuId -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup = '(direct-assigned E3)'} ;
                 if($hSum.LicenseGroup){$smsg = "LicenseGroup:$($hSum.LicenseGroup)"}
                 else{$smsg = "LicenseGroup:(unresolved, direct-assigned other?)" } ;
                 write-host $smsg ;
@@ -976,8 +996,8 @@ function resolve-user {
                     $smsg += "`n$(($hSum.AADUserMgr|fl $propsAADMgrL2|out-string).trim())" ;
                     #$smsg += "`n$(($hSum.AADUserMgr|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                 } else {
-                    $smsg += "(AADUserMgr was blank, or unresolved)" ; 
-                } ;  
+                    $smsg += "(AADUserMgr was blank, or unresolved)" ;
+                } ;
                 write-host $smsg ;
 
             } ;
@@ -1012,66 +1032,116 @@ function resolve-user {
             } ;
             #>
             # ($hSum.ADUser.sAMAccountType -eq '805306368')
-            switch ($hSum.Federator) {
-                'ad.toro.com' {
-                    #if(($hsum.xoRcp.RecipientTypeDetails -match '(RemoteUserMailbox|UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
-                    # there is no remmbx type in xo
-                    if(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
-                        <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
-                        $smsg = "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!" ;
-                        write-warning $smsg ;
-                        $hsum.IsSplitBrain = $true ; 
-                    } elseif(($hsum.xoRcp -match '(UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
-                        $smsg = "NOBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd &  has *NEITHER* xoMbx OR opMbx!" ;
-                        write-warning $smsg ;
-                        $hsum.IsNoBrain = $true ; 
-                    } elseif($hSum.MsolUser.IsLicensed -eq $false){
-                        $smsg = "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
-                        write-warning $smsg ;
-                    } ELSE { } ;
 
+            if($hsum.ADUser){
+                if($hsum.ADUser.Enabled){
+                    $hsum.IsADDisabled = $false ;
+                } else {
+                    $hsum.IsADDisabled = $true ;
+                } ;
+             } else {
+                write-verbose "(no ADUser found)" ;
+            } ;
+            if($hsum.AADUser.AccountEnabled){
+                $hsum.IsADDisabled = $false ;
+            } else {
+                $hsum.IsADDisabled = $true ;
+            } ;
+
+            if($hSum.MsolUser){
+                $hsum.IsLicensed = [boolean]($hSum.MsolUser.IsLicensed -eq $true)
+            } ; 
+
+            if($hsum.AADUser){
+                $hsum.isDirSynced = [boolean]($hsum.AADUser.DirSyncEnabled  -eq $True)
+            } ; 
+
+            $smsg = "`n"
+            if(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
+                <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
+                $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!" ;
+                #write-warning $smsg ;
+                $hsum.IsSplitBrain = $true ;
+            }elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hSum.MsolUser.IsLicensed) -AND $hSum.xomailbox -AND $hSum.OPMailbox){
+                <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
+                $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!`nAND is *UNLICENSED!*" ;
+                #write-warning $smsg ;
+                $hsum.IsSplitBrain = $true ;
+            } elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
+                $smsg += "NOBRAIN! W LICENSE!:$($hSum.ADUser.userprincipalname).IsLic'd &  has *NEITHER* xoMbx OR opMbx!" ;
+                #write-warning $smsg ;
+                $hsum.IsNoBrain = $true ;
+            } elseif (($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hSum.MsolUser.IsLicensed) -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
+                $smsg += "NOBRAIN! *WO* LICENSE! (TERM?):$($hSum.ADUser.userprincipalname) NOT licensed'd &  has *NEITHER* xoMbx OR opMbx!" ;
+                $hsum.IsNoBrain = $true ;
+            } elseif($hSum.MsolUser.IsLicensed -eq $false){
+                $smsg += "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
+                write-warning $smsg ;
+                $hsum.IsLicensed = $false ;
+            } ELSE { } ;
+
+            if($hsum.IsNoBrain){
+                switch ($hSum.Federator) {
+                    $TORMeta.adforestname {$rgxTermOU = $TORMeta.rgxTermUserOUs }
+                    $CMWMeta.adforestname  {$rgxTermOU = $CMWMeta.rgxTermUserOUs }
+                    $VENMETA.o365_TenantLabel  {$rgxTermOU = $NULL }
+                    $TORMeta.o365_TenantDom   {$rgxTermOU = $NULL }
+                    default {
+                        write-warning "UNRECOGNIZED `$hsum.FEDERATOR!:$($hSum.Federator)" ;
+                    }
                 }
-                'cmw.internal' {
-                    if($hSum.MsolUser.IsLicensed -eq $false){
-                        $smsg = "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
-                        write-warning $smsg ;
-                    } ELSE { } ;
+
+                if($rgxTermOU -AND $hsum.ADUser){
+                    if($hsum.ADUser.distinguishedname -match $rgxTermOU){
+                        $hsum.IsDisabledOU = $true ;
+                        $smsg += "`n--ADUser:$($hsum.ADUser.samaccountname) is within a *DISABLED* OU (likely TERM)" ;
+                    } else {
+                        $hsum.IsDisabledOU = $false ;
+                        $smsg += "`n--ADUser:$($hsum.ADUser.samaccountname) is *NOT* in a DISABLED OU (improperly offboarded TERM?)" ;
+                    } ;
+                } else {
+                    $smsg +=  "`n--Cloud-only or other non-AD-resolvable host" ;
                 }
-                'ventrac'  {
-                    if($hSum.MsolUser.IsLicensed -eq $false){
-                        $smsg = "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
-                        write-warning $smsg ;
-                    } ELSE { } ;
-                }
-                'Toroco'  {
-                    if($hSum.MsolUser.IsLicensed -eq $false){
-                        $smsg = "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
-                        write-warning $smsg ;
-                    } ELSE { } ;
-                }
-                default {
-                    write-warning "UNRECOGNIZED `$hsum.FEDERATOR!:$($hSum.Federator)" ;
-                }
-            }
+                if($hsum.ADUser){
+                    $smsg += "`n----$($hsum.ADUser.distinguishedname)" ;
+                    $smsg += "`n--ADUser.Description:$($hsum.ADUser.Description)" ;
+                    if($hsum.IsADDisabled){
+                        $smsg += "`n--ADUser:$($hsum.ADUser.samaccountname) is *DISABLED* for logon (likely TERM)" ;
+                    } else {
+                        $smsg += "`n--ADUser:$($hsum.ADUser.samaccountname) is *UN-DISABLED* for logon (improperly offboarded TERM?)" ;
+                    } ;
+                } else {
+                    write-verbose "(no ADUser found)" ;
+                } ;
+                if($hsum.IsAADDisabled){
+                    $smsg += "`n--AADUser:$($hsum.AADUser.UserPrincipalName) is *DISABLED* for logon (likely TERM)" ;
+                } else {
+                    $smsg += "`n--AADUser:$($hsum.AADUser.UserPrincipalName) is *UN-DISABLED* for logon (improperly offboarded TERM?)" ;
+                } ;
+                $smsg += "`n"
+                write-warning $smsg ;
+            } ;
+
+
 
             if($outObject){
                 if($PSCmdlet.MyInvocation.ExpectingInput){
-                    write-verbose "(pipeline input, skipping aggregator, dropping into pipeline)" ; 
-                    New-Object PSObject -Property $hSum | write-output  ; 
-                } else { 
+                    write-verbose "(pipeline input, skipping aggregator, dropping into pipeline)" ;
+                    New-Object PSObject -Property $hSum | write-output  ;
+                } else {
                     $Rpt += New-Object PSObject -Property $hSum ;
                 } ;
-            } ; 
+            } ;
             write-host -foregroundcolor green $sBnr.replace('=v','=^').replace('v=','^=') ;
         } ;
 
-    }
+    } # PROC-E
     END{
         if($outObject -AND -not ($PSCmdlet.MyInvocation.ExpectingInput)){
             $Rpt | write-output ;
             write-host "(-outObject: Output summary object to pipeline)"
         }elseif($outObject -AND ($PSCmdlet.MyInvocation.ExpectingInput)){
-            write-verbose "(pipeline input, individual objects dropped into pipeline)" ; 
+            write-verbose "(pipeline input, individual objects dropped into pipeline)" ;
         } else {
             $oput = ($Rpt | select-object -unique) -join ',' ;
             $oput | out-clipboard ;

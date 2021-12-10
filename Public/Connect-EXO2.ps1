@@ -21,7 +21,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
-    # 2:17 PM 12/6/2021 duped test-uri back into local with fall back; moving test-uri into verb-text
+    * 2:40 PM 12/10/2021 more cleanup 
     # 11:23 AM 9/16/2021 string
     # 1:31 PM 7/21/2021 revised Add-PSTitleBar $sTitleBarTag with TenOrg spec (for prompt designators)
     * 11:53 AM 4/2/2021 updated with rlt & recstat support, updated catch blocks
@@ -84,7 +84,7 @@ Function Connect-EXO2 {
     Connect-EXO2 -cred $credO365TORSID ;
     Connect using defaults, and leverage any pre-set $global:credo365TORSID variable
     .EXAMPLE
-    Connect-EXO2 -Prefix exo -credential (Get-Credential -credential s-todd.kadrie@torolab.com)  ;
+    Connect-EXO2 -Prefix exo -credential (Get-Credential -credential user@domain.com)  ;
     Connect an explicit credential, and use 'exolab' as the cmdlet prefix
     .EXAMPLE
     $cred = get-credential -credential $o365_Torolab_SIDUpn ;
@@ -126,20 +126,20 @@ Function Connect-EXO2 {
         $verbose = ($VerbosePreference -eq "Continue") ;
         if (!$rgxExoPsHostName) { $rgxExoPsHostName = "^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
 
-        # defer to verb-text if avail
-        if(-not(get-command test-uri -ea 0)){
-          function Test-Uri {
-              [CmdletBinding()]
-              [OutputType([bool])]
-              Param
-              (
-                  # Uri to be validated
-                  [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName=$true, Position=0)]
-                  [string]
-                  $UriString
-              )
-              [Uri]$uri = $UriString -as [Uri]
-              $uri.AbsoluteUri -ne $null -and $uri.Scheme -eq 'https'
+          # defer to verb-text if avail
+          if(-not(get-command test-uri)){
+            function Test-Uri {
+                [CmdletBinding()]
+                [OutputType([bool])]
+                Param
+                (
+                    # Uri to be validated
+                    [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName=$true, Position=0)]
+                    [string]
+                    $UriString
+                )
+                [Uri]$uri = $UriString -as [Uri]
+                $uri.AbsoluteUri -ne $null -and $uri.Scheme -eq 'https'
             }
         } ;
         
@@ -276,7 +276,7 @@ Function Connect-EXO2 {
                     # validate that the connected EXO is to the $Credential tenant
                     write-verbose "(Existing EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ;
                     $bExistingEXOGood = $true ;
-                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
                 }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                     $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -526,7 +526,7 @@ Function Connect-EXO2 {
                 # validate that the connected EXO is to the $Credential tenant
                 write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring())),($($Credential.username))" ;
                 $bExistingEXOGood = $true ;
-            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
             }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                 $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
