@@ -18,7 +18,12 @@ function convert-HistoricalSearchCSV {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 10:46 AM 12/14/2021 fixed defaulted iscsv, modified param pipeline defaults; switched Files from typeless to string[]; found extended gui trace had date fields with diff names, added tests & support to suppress errors. ; updated Catch blocks to curr spec (errors not being echoed).
+    * 1:05 PM 12/14/2021 added full range of Expanded Rpt fields, tweaked the 
+        non-recip statuses to look like recips (using primary recip & recipStat for the 
+        record) ; fixed defaulted iscsv, modified param pipeline defaults; switched 
+        Files from typeless to string[]; found extended gui trace had date fields with 
+        diff names, added tests & support to suppress errors. ; updated Catch blocks to 
+        curr spec (errors not being echoed). 
     * 11:21 AM 9/15/2021 updated Example to demo pipline-input, and post-processing to group Status (like you could a MessageTrace); added $DotsInterval param.
     * 2:54 PM 4/23/2021 wrote as freestanding .ps1, decided to flip it into func in verb-EXO
     .DESCRIPTION
@@ -224,34 +229,68 @@ function convert-HistoricalSearchCSV {
                 EndDate
                 Index
                 #>
-                if($record.recipient_status.contains(";")){
-                    $rcpRecs = $record.recipient_status.split(';') ; # split recipients
+                
+                $TransSummary = [ordered]@{
+                    Received=$null ;
+                    ReceivedGMT=$null ;
+                    SenderAddress=$record.sender_address ;
+                    RecipientAddress= $record.recipient_address ; 
+                    Subject=$record.message_subject ;
+                    Size=$record.total_bytes ;
+                    MessageID=$record.message_id ;
+                    OriginalClientIP=$record.original_client_ip ;
+                    Directionality=$record.directionality ;
+                    ConnectorID=$record.connector_id ;
+                    DeliveryPriority=$record.delivery_priority ;
                 } ; 
+                #Received=([datetime]$record.origin_timestamp_utc).ToLocalTime() ; # converting HistSearch GMT to LocalTime
+                #ReceivedGMT=$record.origin_timestamp_utc ;
+                if($record.origin_timestamp_utc){
+                    $TransSummary.Received=([datetime]$record.origin_timestamp_utc).ToLocalTime() ; # converting HistSearch GMT to LocalTime
+                    $TransSummary.ReceivedGMT=$record.origin_timestamp_utc ;
+                } elseif($record.date_time_utc){
+                    $TransSummary.Received=([datetime]$record.date_time_utc).ToLocalTime() ; # converting HistSearch GMT to LocalTime
+                    $TransSummary.ReceivedGMT=$record.date_time_utc ;
+                    write-verbose "(Expanded Report fields detected, and adding...)" ; 
+                    # extended rpts include a raft of extra fields
+                    #date_time_utc
+                    $TransSummary.ADD('client_ip',$record.client_ip) ;
+                    $TransSummary.ADD('client_hostname',$record.client_hostname) ;
+                    $TransSummary.ADD('server_ip',$record.server_ip) ;
+                    $TransSummary.ADD('server_hostname',$record.server_hostname) ;
+                    $TransSummary.ADD('source_context',$record.source_context) ;
+                    #$TransSummary.ADD('connector_id',$record.connector_id) ;
+                    $TransSummary.ADD('source',$record.source) ;
+                    $TransSummary.ADD('event_id',$record.event_id) ;
+                    $TransSummary.ADD('internal_message_id',$record.internal_message_id) ;
+                    #$TransSummary.ADD('message_id',$record.message_id) ;
+                    $TransSummary.ADD('network_message_id',$record.network_message_id) ;
+                    #$TransSummary.ADD('recipient_address',$record.recipient_address) ;
+                    #$TransSummary.RecipientAddress = $record.recipient_address ; 
+                    #$TransSummary.ADD('recipient_status',$record.recipient_status) ;
+                    #$TransSummary.ADD('total_bytes',$record.total_bytes) ;
+                    $TransSummary.ADD('recipient_count',$record.recipient_count) ;
+                    $TransSummary.ADD('related_recipient_address',$record.related_recipient_address) ;
+                    $TransSummary.ADD('reference',$record.reference) ;
+                    #$TransSummary.ADD('message_subject',$record.message_subject) ;
+                    #$TransSummary.ADD('sender_address',$record.sender_address) ;
+                    #$TransSummary.SenderAddress = $record.sender_address
+                    $TransSummary.ADD('return_path',$record.return_path) ;
+                    $TransSummary.ADD('message_info',$record.message_info) ;
+                    #$TransSummary.ADD('directionality',$record.directionality) ;
+                    $TransSummary.ADD('tenant_id',$record.tenant_id) ;
+                    #$TransSummary.ADD('original_client_ip',$record.original_client_ip) ;
+                    $TransSummary.ADD('original_server_ip',$record.original_server_ip) ;
+                    $TransSummary.ADD('custom_data',$record.custom_data) ;
+                    
+
+                } ;
+
+                if($record.recipient_status.contains(";")){
+                    $rcpRecs = $record.recipient_status.split(';') ; # if semi-delim'd we have multi recipients & status, split them for processing below
+                } ; 
+                    
                 if($ToXML){
-                    $TransSummary = [ordered]@{
-                        Received=$null ;
-                        ReceivedGMT=$null ;
-                        SenderAddress=$record.sender_address ;
-                        RecipientAddress= $null ; 
-                        Subject=$record.message_subject ;
-                        Size=$record.total_bytes ;
-                        MessageID=$record.message_id ;
-                        OriginalClientIP=$record.original_client_ip ;
-                        Directionality=$record.directionality ;
-                        ConnectorID=$record.connector_id ;
-                        DeliveryPriority=$record.delivery_priority ;
-                    } ; 
-                    #Received=([datetime]$record.origin_timestamp_utc).ToLocalTime() ; # converting HistSearch GMT to LocalTime
-                    #ReceivedGMT=$record.origin_timestamp_utc ;
-                    
-                    if($record.origin_timestamp_utc){
-                        $TransSummary.Received=([datetime]$record.origin_timestamp_utc).ToLocalTime() ; # converting HistSearch GMT to LocalTime
-                        $TransSummary.ReceivedGMT=$record.origin_timestamp_utc ;
-                    } elseif($record.date_time_utc){
-                        $TransSummary.Received=([datetime]$record.date_time_utc).ToLocalTime() ; # converting HistSearch GMT to LocalTime
-                        $TransSummary.ReceivedGMT=$record.date_time_utc ;
-                    } ;
-                    
                     $RecipientStatuses=@() ; 
                     <# 9:47 AM 12/14/2021 finding in extended, there are expansion records that don't have below fmt, if then them:
                         # recipient status: 
@@ -272,6 +311,14 @@ function convert-HistoricalSearchCSV {
                         MailContact.Contact.Expansion.AddEntry.50'
                         
                     #>
+                    # the only one's that need expansion, are the one's delimited and with ##, all 
+                    # others have a RecipientAddress & Status pulled from $record.recipient_address & 
+                    # full $record.recipient_status value; 
+
+                     #looks like non ## recipient_statu's have an entry corresponding to the number of $record.recipient_address's: [recipientAddr]:UserMailbox.Forwardable.Resolver.CreateRecipientItems.40
+                    #split both and use/assign them in like order
+                    $rcpRecipientSplit = $record.recipient_address.split(';') ; 
+                    $rcpRecNo = 0 ; 
                     foreach($rcpRec in $rcpRecs){
                         $statusRpt = [ordered]@{
                             RecipientAddress = $null ; 
@@ -283,7 +330,10 @@ function convert-HistoricalSearchCSV {
                             $statusRpt.RecipientEvents = ($rcpRec -split '##')[1] -split ', ' ; 
                         } else {
                             write-verbose "(RecipientEvent)" ;
-                            #$statusRpt.RecipientAddress =  ($rcpRec -split '##')[0] ; 
+                            # fake the primary into the same format
+                            #$statusRpt.RecipientAddress =  $record.recipient_address ; 
+                            #$statusRpt.RecipientEvents = $record.recipient_status ; 
+                            $statusRpt.RecipientAddress = $rcpRecipientSplit[$rcpRecNo] ; 
                             $statusRpt.RecipientEvents = $rcpRec ; 
                         } ; 
                         $RecipientStatuses += New-Object PSObject -Property $statusRpt ; 
@@ -292,28 +342,10 @@ function convert-HistoricalSearchCSV {
                     $aggreg += New-Object PSObject -Property $TransSummary ; 
                 } elseif($ToCSV){
                     
-                    $TransSummary = [ordered]@{
-                        Received=$null ;
-                        ReceivedGMT=$null ; 
-                        SenderAddress=$record.sender_address ;
-                        RecipientAddress= $null ; 
-                        Subject=$record.message_subject ;
-                        Size=$record.total_bytes ;
-                        MessageID=$record.message_id ;
-                        OriginalClientIP=$record.original_client_ip ;
-                        Directionality=$record.directionality ;
-                        ConnectorID=$record.connector_id ;
-                        DeliveryPriority=$record.delivery_priority ;
-                        Status= $null ; 
-                    } ; 
-                    if($record.origin_timestamp_utc){
-                        $TransSummary.Received=([datetime]$record.origin_timestamp_utc).ToLocalTime() ; # converting HistSearch GMT to LocalTime
-                        $TransSummary.ReceivedGMT=$record.origin_timestamp_utc ;
-                    } elseif($record.date_time_utc){
-                        $TransSummary.Received=([datetime]$record.date_time_utc).ToLocalTime() ; # converting HistSearch GMT to LocalTime
-                        $TransSummary.ReceivedGMT=$record.date_time_utc ;
-                    } ;
-
+                    #looks like non ## recipient_statu's have an entry corresponding to the number of $record.recipient_address's
+                    #split both and use/assign them in like order
+                    $rcpRecipientSplit = $record.recipient_address.split(';') ; 
+                    $rcpRecNo = 0 ; 
                     foreach($rcpRec in $rcpRecs){
                         if($rcpRec.contains('##')){
                              write-verbose "(RecipientAddress event)" ;
@@ -324,9 +356,16 @@ function convert-HistoricalSearchCSV {
                             } ; 
                         } else {
                             write-verbose "(RecipientEvent)" ;
-                            $TransSummary.Status = $rcpRec ;
+                            #$TransSummary.Status = $rcpRec ;
+                            #$aggreg += New-Object PSObject -Property $TransSummary ; 
+                            # fake the primary into the same format as above
+                            #$TransSummary.RecipientAddress =  $record.recipient_address ; 
+                            #$TransSummary.Status = = $record.recipient_status ; 
+                            $TransSummary.RecipientAddress = $rcpRecipientSplit[$rcpRecNo] ; 
+                            $TransSummary.Status = $rcpRec ; 
                             $aggreg += New-Object PSObject -Property $TransSummary ; 
                         } ; 
+                        $rcpRecNo++ ; 
                     } ; 
                 } else { throw "neither ToCSV or ToXML specified!" } ; 
             } CATCH {
