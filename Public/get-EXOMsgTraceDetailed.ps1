@@ -1,6 +1,6 @@
 ﻿# get-EXOMsgTraceDetailed.ps1
 
-# cls ; get-EXOMsgTraceDetailed.ps1 -ticket 651268 -SenderAddress 'daryn.walters@exmark.com' -RecipientAddress 'Darla.Schmitz@toro.com' -StartDate '11/1/2021  4:35:39 PM' -Subject 'Accepted: Exmark/RLC Bring Up' -verbose ;
+#*------v get-EXOMsgTraceDetailed.ps1 v------
 function get-EXOMsgTraceDetailed {
     <#
     .SYNOPSIS
@@ -57,7 +57,7 @@ function get-EXOMsgTraceDetailed {
     .OUTPUTS
     None. Returns no objects or output (.NET types)
     .EXAMPLE
-    PS> get-EXOMsgTraceDetailed.ps1 -ticket 651268 -SenderAddress='daryn.walters@exmark.com' -RecipientAddress='Darla.Schmitz@toro.com' -StartDate='11/1/2021  4:35:39 PM' -Subject 'Accepted: Exmark/RLC Bring Up' -verbose ;
+    PS> get-EXOMsgTraceDetailed.ps1 -ticket 651268 -SenderAddress='daryn.walters@exmark.com' -RecipientAddress='user@domain.com' -StartDate='11/1/2021  4:35:39 PM' -Subject 'Accepted: Exmark/RLC Bring Up' -verbose ;
     Run a typical MessageTrace with default 100-message MessageTraceDetail report, with verbose output.
     .EXAMPLE
     .LINK
@@ -122,7 +122,7 @@ function get-EXOMsgTraceDetailed {
 #-=-=-=-=-=-=-=-=
 #>
     BEGIN{
-        # get-EXOMsgTraceDetailed.ps1 -ticket 651268 -SenderAddress='daryn.walters@exmark.com' -RecipientAddress='Darla.Schmitz@toro.com' -StartDate='11/1/2021  4:35:39 PM' -Subject 'Accepted: Exmark/RLC Bring Up';
+        # get-EXOMsgTraceDetailed.ps1 -ticket 651268 -SenderAddress='daryn.walters@exmark.com' -RecipientAddress='user@domain.com' -StartDate='11/1/2021  4:35:39 PM' -Subject 'Accepted: Exmark/RLC Bring Up';
         <#$ticket = '651268' ;
         $subject = 'Accepted: Exmark/RLC Bring Up' ;
         $MessageId=$null ; 
@@ -495,4 +495,6 @@ function get-EXOMsgTraceDetailed {
         else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
         $hReports | Write-Output ; 
     } ; 
-} ; 
+}
+
+#*------^ get-EXOMsgTraceDetailed.ps1 ^------
