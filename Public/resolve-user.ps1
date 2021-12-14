@@ -18,8 +18,8 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 2:40 PM 12/10/2021 more cleanup 
-    * 12:55 PM 12/10/2021 added $hsum.isDirSynced, for further bulk filter/profiling
+    * 11:02 AM 12/13/2021 #11111:had $hsum IsADDisabled, typo: to IsAADDisabled
+    * 2:40 PM 12/10/2021 more cleanup ; added $hsum.isDirSynced, for further bulk filter/profiling
         flipped $hsum.isUnlicensed -> Islicensed & added msol.Islicensed test to pop ; 
         appears to work in console - output a stack of filterable objects into collection variable.
         further tweaking and nobrain t-shooting outputs ; added 
@@ -70,13 +70,34 @@ function resolve-user {
     Process an array of descriptors
     .EXAMPLE
     PS> $results = resolve-user -outobject -users 'Test@domain.com','John Public','Alias','ExternalContact@emaildomain.com','confroom@tenant.onmicrosoft.com''  ;
-    PS> $feds = $results| group federator | select -expand name ;
-    PS> ($results| ?{$_.federator -eq $feds[1] }).xomailbox
-    PS> ($results| ?{$_.federator -eq $feds[1] }).xomailbox.primarysmtpaddress
-    Process array of users, specify return detailed object (-outobject), for post-processing & filtering,
-    group results on federation sources,
-    output summary of EXO mailboxes for the second federator
-    then output the primary smtpaddress for all EXO mailboxes resolved to that federator
+    $feds = $results| group federator | select -expand name ;
+    # echo filtered subsets
+    ($results| ?{$_.federator -eq $feds[1] }).xomailbox
+    ($results| ?{$_.federator -eq $feds[1] }).xomailbox.primarysmtpaddress
+    # profile results
+    $analysis = foreach ($data in $resolved_objects){
+        $Rpt = [ordered]@{
+            PrimarySmtpAddress = $data.xorcp.primarysmtpaddress ; 
+            ADUser_UPN = $data.aduser.userprincipalname ; 
+            AADUser_UPN = $data.aaduser.UserPrincipalName ; 
+            isDirSynced = $data.isDirSynced ; 
+            IsNoBrain = $data.IsNoBrain ; 
+            isSplitBrain = $data.isSplitBrain;
+            IsLicensed = $data.IsLicensed;
+            IsDisabledOU = $data.IsDisabledOU;
+            IsADDisabled = $data.IsADDisabled; 
+            IsAADDisabled = $data.IsAADDisabled;
+        } ; 
+        [pscustomobject]$Rpt ; 
+    } ; 
+    # output tabular results
+    $analysis | ft -auto ; 
+    - Process array of users, specify return detailed object (-outobject), for post-processing & filtering,
+    - Group results on federation sources,
+    - Output summary of EXO mailboxes for the second federator
+    - Then output the primary smtpaddress for all EXO mailboxes resolved to that federator
+    - Then create a summary object of the is* properties and UPN, primarySmtpAddress, 
+    - Finally display the summary as a console table
     .EXAMPLE
     $rptNNNNNN_FName_LName_Domain_com = ulu -o -users 'FName.LName@Domain.com' ;  $rpt655692_FName_LName_Domain_com | xxml .\logs\rpt655692_FName_LName_Domain_com.xml
     Example (from ahk 7uluo! macro parser output) that creates a variable based on ticketnumber & email address (with underscores for alphanums), from the output, and then exports the variable content to xml. 
@@ -1034,27 +1055,21 @@ function resolve-user {
             # ($hSum.ADUser.sAMAccountType -eq '805306368')
 
             if($hsum.ADUser){
-                if($hsum.ADUser.Enabled){
-                    $hsum.IsADDisabled = $false ;
-                } else {
-                    $hsum.IsADDisabled = $true ;
-                } ;
+                $hsum.IsADDisabled = [boolean]($hsum.ADUser.Enabled -eq $true) ; 
              } else {
                 write-verbose "(no ADUser found)" ;
             } ;
-            if($hsum.AADUser.AccountEnabled){
-                $hsum.IsADDisabled = $false ;
+            if($hsum.AADUser){
+                $hsum.IsAADDisabled = [boolean]($hsum.AADUser.AccountEnabled -eq $true) ; 
+                $hsum.isDirSynced = [boolean]($hsum.AADUser.DirSyncEnabled  -eq $True)
             } else {
-                $hsum.IsADDisabled = $true ;
+                write-verbose "(no AADUser found)" ;
             } ;
-
             if($hSum.MsolUser){
                 $hsum.IsLicensed = [boolean]($hSum.MsolUser.IsLicensed -eq $true)
-            } ; 
-
-            if($hsum.AADUser){
-                $hsum.isDirSynced = [boolean]($hsum.AADUser.DirSyncEnabled  -eq $True)
-            } ; 
+            } else {
+                write-verbose "(no MsolUser found)" ;
+            } ;
 
             $smsg = "`n"
             if(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
