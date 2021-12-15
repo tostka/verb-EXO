@@ -18,6 +18,7 @@ function convert-HistoricalSearchCSV {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:58 PM 12/15/2021 revised expan code, implemented split MTDetail/MTSummary processing; normalized fieldnames against the MessageTrace output (goal is to make HS look and process more like MT)
     * 1:05 PM 12/14/2021 added full range of Expanded Rpt fields, tweaked the 
         non-recip statuses to look like recips (using primary recip & recipStat for the 
         record) ; fixed defaulted iscsv, modified param pipeline defaults; switched 
@@ -139,6 +140,25 @@ function convert-HistoricalSearchCSV {
         $aggreg = @() ; 
         $procd = 0 ; $ttl = (($records|measure).count) ; $ino=0 ; 
         if($DoDots){write-host -foregroundcolor Red "[" -NoNewline } ; 
+
+        $isMTDetail = $false ; 
+        # MTSummary has 'origin_timestamp_utc'
+        # MTDetail has 'date_time_utc'
+        if(($records[0] | gm | ?{$_.membertype -eq 'NoteProperty'}).name -contains 'origin_timestamp_utc'){
+            $isMTDetail = $false ;
+            $smsg = "(MTSummary csv file detected)" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        }elseif(($records[0] | gm | ?{$_.membertype -eq 'NoteProperty'}).name -contains 'date_time_utc'){
+            $isMTDetail = $true ;
+            $smsg = "(MTDetail 'Extended' csv file detected)" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } else { 
+            throw "Unable to determine if source is an MTSummary or MTDetail csv!"
+            break ; 
+        } ;  
+
         foreach ($record in $records){
             $procd++ ; 
             # echo every $DotsInterval'th record
@@ -234,7 +254,8 @@ function convert-HistoricalSearchCSV {
                     Received=$null ;
                     ReceivedGMT=$null ;
                     SenderAddress=$record.sender_address ;
-                    RecipientAddress= $record.recipient_address ; 
+                    RecipientAddress= $null # $record.recipient_address ; only populated on MTDetail, imputed from recipinet_status for MTSummary
+                    Status = $null ; 
                     Subject=$record.message_subject ;
                     Size=$record.total_bytes ;
                     MessageID=$record.message_id ;
@@ -242,13 +263,16 @@ function convert-HistoricalSearchCSV {
                     Directionality=$record.directionality ;
                     ConnectorID=$record.connector_id ;
                     DeliveryPriority=$record.delivery_priority ;
+                    FromIP = $record.original_client_ip ; 
+                    #ToIP = $record. ; 
                 } ; 
-                #Received=([datetime]$record.origin_timestamp_utc).ToLocalTime() ; # converting HistSearch GMT to LocalTime
-                #ReceivedGMT=$record.origin_timestamp_utc ;
-                if($record.origin_timestamp_utc){
+                
+                #if($record.origin_timestamp_utc){
+                if( -not $isMTDetail){
                     $TransSummary.Received=([datetime]$record.origin_timestamp_utc).ToLocalTime() ; # converting HistSearch GMT to LocalTime
                     $TransSummary.ReceivedGMT=$record.origin_timestamp_utc ;
-                } elseif($record.date_time_utc){
+                #} elseif($record.date_time_utc){
+                } elseif($isMTDetail){
                     $TransSummary.Received=([datetime]$record.date_time_utc).ToLocalTime() ; # converting HistSearch GMT to LocalTime
                     $TransSummary.ReceivedGMT=$record.date_time_utc ;
                     write-verbose "(Expanded Report fields detected, and adding...)" ; 
@@ -265,9 +289,12 @@ function convert-HistoricalSearchCSV {
                     $TransSummary.ADD('internal_message_id',$record.internal_message_id) ;
                     #$TransSummary.ADD('message_id',$record.message_id) ;
                     $TransSummary.ADD('network_message_id',$record.network_message_id) ;
+
                     #$TransSummary.ADD('recipient_address',$record.recipient_address) ;
-                    #$TransSummary.RecipientAddress = $record.recipient_address ; 
+                    $TransSummary.RecipientAddress = $record.recipient_address ; 
                     #$TransSummary.ADD('recipient_status',$record.recipient_status) ;
+                    $TransSummary.Status = $record.recipient_status ;  
+                    
                     #$TransSummary.ADD('total_bytes',$record.total_bytes) ;
                     $TransSummary.ADD('recipient_count',$record.recipient_count) ;
                     $TransSummary.ADD('related_recipient_address',$record.related_recipient_address) ;
@@ -279,93 +306,157 @@ function convert-HistoricalSearchCSV {
                     $TransSummary.ADD('message_info',$record.message_info) ;
                     #$TransSummary.ADD('directionality',$record.directionality) ;
                     $TransSummary.ADD('tenant_id',$record.tenant_id) ;
-                    #$TransSummary.ADD('original_client_ip',$record.original_client_ip) ;
+                    $TransSummary.ADD('original_client_ip',$record.original_client_ip) ; # covered in base hash
                     $TransSummary.ADD('original_server_ip',$record.original_server_ip) ;
+                    #$TransSummary.ADD('ToIP', $record.original_server_ip) ;
+                    $TransSummary.ToIP = $record.server_ip ; 
                     $TransSummary.ADD('custom_data',$record.custom_data) ;
-                    
 
                 } ;
 
                 if($record.recipient_status.contains(";")){
                     $rcpRecs = $record.recipient_status.split(';') ; # if semi-delim'd we have multi recipients & status, split them for processing below
-                } ; 
+                } else {
+                     $rcpRecs = $record.recipient_status ; 
+                } ;  ; 
                     
                 if($ToXML){
-                    $RecipientStatuses=@() ; 
-                    <# 9:47 AM 12/14/2021 finding in extended, there are expansion records that don't have below fmt, if then them:
-                        # recipient status: 
-                        Fname.Lname@domain.com##Receive, Deliver
-                        "Fname LName<fname.lname"@domain.com##Receive, Fail
-                        # expansions 
-                        'NotFound.OneOff.Resolver.CreateRecipientItems.10
-                        UserMailbox.Forwardable.Resolver.CreateRecipientItems.40
-                        UserMailbox.Forwardable.Resolver.CreateRecipientItems.40
-                        MailUniversalDistributionGroup.UnifiedGroup.Resolver.CreateRecipientItems.70
-                        MailUniversalDistributionGroup.UnifiedGroup.Resolver.CreateRecipientItems.70
-                        UserMailbox.Forwardable.Expansion.AddGroup.40
-                        UserMailbox.Forwardable.Expansion.AddGroup.40
-                        UserMailbox.Forwardable.Expansion.AddGroup.40
-                        UserMailbox.Forwardable.Expansion.AddGroup.40
-                        UserMailbox.Forwardable.Expansion.AddGroup.40
-                        UserMailbox.Forwardable.Expansion.AddEntry.40
-                        MailContact.Contact.Expansion.AddEntry.50'
-                        
-                    #>
-                    # the only one's that need expansion, are the one's delimited and with ##, all 
-                    # others have a RecipientAddress & Status pulled from $record.recipient_address & 
-                    # full $record.recipient_status value; 
+                    if( -not $isMTDetail){
+                        $RecipientStatuses=@() ; 
+                        # the only one's that need expansion, are the one's delimited and with ##, all 
+                        # others have a RecipientAddress & Status pulled from $record.recipient_address & 
+                        # full $record.recipient_status value; 
 
-                     #looks like non ## recipient_statu's have an entry corresponding to the number of $record.recipient_address's: [recipientAddr]:UserMailbox.Forwardable.Resolver.CreateRecipientItems.40
-                    #split both and use/assign them in like order
-                    $rcpRecipientSplit = $record.recipient_address.split(';') ; 
-                    $rcpRecNo = 0 ; 
-                    foreach($rcpRec in $rcpRecs){
-                        $statusRpt = [ordered]@{
-                            RecipientAddress = $null ; 
-                            RecipientEvents = $null ; 
+                        #looks like non ## recipient_statu's have an entry corresponding to the number of $record.recipient_address's: [recipientAddr]:UserMailbox.Forwardable.Resolver.CreateRecipientItems.40
+                        #split both and use/assign them in like order
+                        if($record.recipient_status.contains(';')){
+                            $rcpStatusSets = $record.recipient_status.split(';') ; 
+                        } else { 
+                            $rcpStatusSets = $record.recipient_status
                         } ; 
-                        if($rcpRec.contains('##')){
-                            write-verbose "(RecipientAddress event)" ;
-                            $statusRpt.RecipientAddress =  ($rcpRec -split '##')[0] ; 
-                            $statusRpt.RecipientEvents = ($rcpRec -split '##')[1] -split ', ' ; 
-                        } else {
-                            write-verbose "(RecipientEvent)" ;
-                            # fake the primary into the same format
-                            #$statusRpt.RecipientAddress =  $record.recipient_address ; 
-                            #$statusRpt.RecipientEvents = $record.recipient_status ; 
-                            $statusRpt.RecipientAddress = $rcpRecipientSplit[$rcpRecNo] ; 
-                            $statusRpt.RecipientEvents = $rcpRec ; 
-                        } ; 
-                        $RecipientStatuses += New-Object PSObject -Property $statusRpt ; 
-                    } ; 
-                    $TransSummary.RecipientStatuses = $RecipientStatuses ; 
-                    $aggreg += New-Object PSObject -Property $TransSummary ; 
-                } elseif($ToCSV){
-                    
-                    #looks like non ## recipient_statu's have an entry corresponding to the number of $record.recipient_address's
-                    #split both and use/assign them in like order
-                    $rcpRecipientSplit = $record.recipient_address.split(';') ; 
-                    $rcpRecNo = 0 ; 
-                    foreach($rcpRec in $rcpRecs){
-                        if($rcpRec.contains('##')){
-                             write-verbose "(RecipientAddress event)" ;
-                            $TransSummary.RecipientAddress =  ($rcpRec -split '##')[0] ; 
-                            foreach ($status in ($rcpRec -split '##')[1] -split ', '){
-                                $TransSummary.Status = $status ;
-                                $aggreg += New-Object PSObject -Property $TransSummary ; 
+                        foreach($rcpStatusSet in $rcpStatusSets){
+                            $statusRpt = [ordered]@{
+                                RecipientAddress = $null ; 
+                                Status = $null ; 
                             } ; 
-                        } else {
-                            write-verbose "(RecipientEvent)" ;
-                            #$TransSummary.Status = $rcpRec ;
-                            #$aggreg += New-Object PSObject -Property $TransSummary ; 
-                            # fake the primary into the same format as above
-                            #$TransSummary.RecipientAddress =  $record.recipient_address ; 
-                            #$TransSummary.Status = = $record.recipient_status ; 
-                            $TransSummary.RecipientAddress = $rcpRecipientSplit[$rcpRecNo] ; 
-                            $TransSummary.Status = $rcpRec ; 
+                            if($rcpStatusSet.contains('##')){
+                                write-verbose "(RecipientAddress event)" ;
+                                $statusRpt.RecipientAddress =  ($rcpStatusSet -split '##')[0] ; 
+                                $statusRpt.Status = ($rcpStatusSet -split '##')[1] -split ', ' ; 
+                            } else {
+                                $smsg = "MTSummary CSV that contains non-##-delimited recipient_status!"
+                                write-warning $smsg ; 
+                                throw $smsg ; 
+                                break ; 
+                                <# shouldn't have the below, all status should have ## delim ; 
+                                write-verbose "(RecipientEvent)" ;
+                                # fake the primary into the same format
+                                #$statusRpt.RecipientAddress =  $record.recipient_address ; 
+                                #$statusRpt.Status = $record.recipient_status ; 
+                                $statusRpt.RecipientAddress = $rcpRecipientSplit[$rcpRecNo] ; 
+                                $statusRpt.Status = $rcpStatusSet ; 
+                                #>
+                            } ; 
+                            $RecipientStatuses += New-Object PSObject -Property $statusRpt ; 
+                        } ; 
+                        $TransSummary.RecipientStatuses = $RecipientStatuses ; 
+                    } else { 
+                        # MTDetail report, has native recipient_address  & recipient_status
+                        #$rcpRecipientSplit = $record.recipient_address.split(';') ; 
+                        #$rcpStatusSets = $record.recipient_status.split(';') ; 
+                        if($record.recipient_address.contains(';')){
+                            $rcpRecipientSplit = $record.recipient_address.split(';') ; 
+                        } else { 
+                            $rcpRecipientSplit = $record.recipient_address ;
+                        } ; 
+                        if($record.recipient_status.contains(';')){
+                            $rcpStatusSets = $record.recipient_status.split(';') ; 
+                        } else { 
+                            $rcpStatusSets = $record.recipient_status ;
+                        } ; 
+                        # if there's both -gt 1 recipient & -gt 1 status, do the loop, 
+                        # otherwise, append the set (only reason to expand is per-recipoient status failure reporting/parsing)
+                        if( ($rcpRecipientSplit|measure).count -gt 1 -AND ($rcpStatusSets|measure).count -gt 1){
+                            $rcpRecNo = 0 ; 
+                            foreach($rcp in $rcpRecipientSplit){
+                                $statusRpt = [ordered]@{
+                                    RecipientAddress = $rcp ; 
+                                    Status = $rcpStatusSets[$rcpRecNo] ; 
+                                } ; 
+                                $rcpRecNo ++ ; 
+                            } ; 
+                        } else { 
+                            $TransSummary.RecipientAddress = $record.recipient_address ; 
+                            $TransSummary.Status = $record.recipient_status ; 
                             $aggreg += New-Object PSObject -Property $TransSummary ; 
                         } ; 
-                        $rcpRecNo++ ; 
+                    } ; 
+                    $aggreg += New-Object PSObject -Property $TransSummary ; 
+
+                } elseif($ToCSV){
+                    
+                    if( -not $isMTDetail){
+                        #looks like non ## recipient_statu's have an entry corresponding to the number of $record.recipient_address's
+
+                        if($record.recipient_status.contains(';')){
+                            $rcpStatusSets = $record.recipient_status.split(';') ; 
+                        } else { 
+                            $rcpStatusSets = $record.recipient_status ;
+                        } ; 
+                        foreach($rcpStatusSet in $rcpStatusSets){
+                            if($rcpStatusSet.contains('##')){
+                                write-verbose "(RecipientAddress event)" ;
+                                $TransSummary.RecipientAddress =  ($rcpStatusSet -split '##')[0] ; 
+                                #$statusRpt.Status = ($rcpStatusSet -split '##')[1] -split ', ' ; 
+                                foreach ($status in ($rcpStatusSet -split '##')[1] -split ', '){
+                                    $TransSummary.Status = $status ;
+                                    # add an entire new duped line for the status record
+                                    $aggreg += New-Object PSObject -Property $TransSummary ; 
+                                } ; 
+                            } else {
+                                $smsg = "MTSummary CSV that contains non-##-delimited recipient_status!"
+                                write-warning $smsg ; 
+                                throw $smsg ; 
+                                break ; 
+                            } ; 
+                        }
+
+                    } else { 
+                        # MTDetail report, has native recipient_address  & recipient_status
+                        #$TransSummary.RecipientAddress = $rcpRecipientSplit[$rcpRecNo] ; 
+                        #$TransSummary.Status = $rcpRec ; 
+                        # ---
+                        if($record.recipient_address.contains(';')){
+                            $rcpRecipientSplit = $record.recipient_address.split(';') ; 
+                        } else { 
+                            $rcpRecipientSplit = $record.recipient_address ;
+                        } ; 
+                        if($record.recipient_status.contains(';')){
+                            $rcpStatusSets = $record.recipient_status.split(';') ; 
+                        } else { 
+                            $rcpStatusSets = $record.recipient_status ;
+                        } ; 
+                        # if there's both -gt 1 recipient & -gt 1 status, do the loop, 
+                        # otherwise, append the set (only reason to expand is per-recipoient status failure reporting/parsing)
+                        if( ($rcpRecipientSplit|measure).count -gt 1 -AND ($rcpStatusSets|measure).count -gt 1){
+                            $rcpRecNo = 0 ; 
+                            foreach($rcp in $rcpRecipientSplit){
+                                #$statusRpt = [ordered]@{
+                                    #RecipientAddress = $rcp ; 
+                                    $TransSummary.RecipientAddress = $rcp ; 
+                                    $TransSummary.Status = $rcpStatusSets[$rcpRecNo] ; 
+                                #} ; 
+                                # add a whole dupe status set for each variant 
+                                $aggreg += New-Object PSObject -Property $TransSummary ; 
+                                $rcpRecNo ++ ; 
+                            } ; 
+                        } else { 
+                            $TransSummary.RecipientAddress = $record.recipient_address ; 
+                            $TransSummary.Status = $record.recipient_status ; 
+                            $aggreg += New-Object PSObject -Property $TransSummary ; 
+                        } ; 
+                        # ---
+                        #$aggreg += New-Object PSObject -Property $TransSummary ; 
                     } ; 
                 } else { throw "neither ToCSV or ToXML specified!" } ; 
             } CATCH {

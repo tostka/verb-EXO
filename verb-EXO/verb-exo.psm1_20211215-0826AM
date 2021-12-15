@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 1.1.1.0
+  Version     : 2.0.2.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -60,6 +60,7 @@ Function check-EXOLegalHold {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,Legal
     REVISIONS   :
+    * 2:40 PM 12/10/2021 more cleanup 
     * 11:23 AM 9/16/2021 string
     * 8:24 AM 8/27/2021 cleanedup 
     * 1:23 PM 5/14/2021 init version, roughed in, completely untested (was prev a largely unmodified dupe of disconnect-exo)
@@ -132,7 +133,7 @@ Function check-EXOLegalHold {
     check-EXOLegalHold
     Connect using defaults, and leverage any pre-set $global:credo365TORSID variable
     .EXAMPLE
-    check-EXOLegalHold -CommandPrefix exo -credential (Get-Credential -credential s-todd.kadrie@torolab.com)  ;
+    check-EXOLegalHold -CommandPrefix exo -credential (Get-Credential -credential user@domain.com)  ;
     Connect an explicit credential, and use 'exolab' as the cmdlet prefix
     .EXAMPLE
     $cred = get-credential -credential $o365_Torolab_SIDUpn ;
@@ -423,6 +424,24 @@ https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-
         # TSK:add a BEGIN block & stick THE ExchangOnlineManagement.psm1 'above-the mods' variable/load specs in here, with tests added
         # Import the REST module so that the EXO* cmdlets are present before Connect-ExchangeOnline in the powershell instance.
         
+        # defer to verb-text if avail
+        if(-not(get-command test-uri -ea 0)){
+          function Test-Uri {
+              [CmdletBinding()]
+              [OutputType([bool])]
+              Param
+              (
+                  # Uri to be validated
+                  [Parameter(Mandatory=$true, ValueFromPipelineByPropertyName=$true, Position=0)]
+                  [string]
+                  $UriString
+              )
+              [Uri]$uri = $UriString -as [Uri]
+              $uri.AbsoluteUri -ne $null -and $uri.Scheme -eq 'https'
+            }
+        } ;
+        
+        
         if(-not($ExchangeOnlineMgmtPath)){
             $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list).Path ; 
         } ; 
@@ -616,11 +635,12 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 2:40 PM 12/10/2021 more cleanup 
     * 11:21 AM 9/16/2021 string clean
     * 1:20 PM 7/21/2021 enabled TOR titlebar tagging with TenOrg (prompt tagging by scraping TitleBar values)
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     * 11:43 AM 4/2/2021 updated added wlt & recstat support, updated catch blocks
-    # 2:56 PM 3/31/2021 typo/mispaste fix: had $E10Sess assigning on the import ;  bugfix: @toroco.onmicr...com, isn't in EXO.AccDoms, so added a 2nd test for match to TenDom ; added verbose suppress to all import-mods
+    # 2:56 PM 3/31/2021 typo/mispaste fix: had $E10Sess assigning on the import ;  bugfix: @DOMAIN.onmicr...com, isn't in EXO.AccDoms, so added a 2nd test for match to TenDom ; added verbose suppress to all import-mods
     * 11:36 AM 3/5/2021 updated colorcode, subed wv -verbose with just write-verbose, added cred.uname echo
     * 1:15 PM 3/1/2021 added org-level color-coded console
     * 8:30 AM 10/22/2020 ren'd $TentantTag -> $TenOrg, swapped looping meta resolve with 1-liner approach ; added AcceptedDom caching to the middle status test (suppress one more get-exoaccepteddomain call if possible)
@@ -663,7 +683,7 @@ Function Connect-EXO {
     connect-exo
     Connect using defaults, and leverage any pre-set $global:credo365TORSID variable
     .EXAMPLE
-    connect-exo -CommandPrefix exo -credential (Get-Credential -credential s-todd.kadrie@torolab.com)  ;
+    connect-exo -CommandPrefix exo -credential (Get-Credential -credential user@domain.com)  ;
     Connect an explicit credential, and use 'exolab' as the cmdlet prefix
     .EXAMPLE
     $cred = get-credential -credential $o365_Torolab_SIDUpn ;
@@ -735,7 +755,7 @@ Function Connect-EXO {
                     # validate that the connected EXO is to the $Credential tenant    
                     $smsg = "(EXO Authenticated & Functional(AccDom):$($Credential.username.split('@')[1].tostring()))" ; 
                     $bExistingEXOGood = $true ; 
-                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
                 }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                     $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -969,7 +989,7 @@ Function Connect-EXO {
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 $bExistingEXOGood = $true ; 
-            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
             }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                 $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -1017,6 +1037,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 2:40 PM 12/10/2021 more cleanup 
     # 11:23 AM 9/16/2021 string
     # 1:31 PM 7/21/2021 revised Add-PSTitleBar $sTitleBarTag with TenOrg spec (for prompt designators)
     * 11:53 AM 4/2/2021 updated with rlt & recstat support, updated catch blocks
@@ -1079,7 +1100,7 @@ Function Connect-EXO2 {
     Connect-EXO2 -cred $credO365TORSID ;
     Connect using defaults, and leverage any pre-set $global:credo365TORSID variable
     .EXAMPLE
-    Connect-EXO2 -Prefix exo -credential (Get-Credential -credential s-todd.kadrie@torolab.com)  ;
+    Connect-EXO2 -Prefix exo -credential (Get-Credential -credential user@domain.com)  ;
     Connect an explicit credential, and use 'exolab' as the cmdlet prefix
     .EXAMPLE
     $cred = get-credential -credential $o365_Torolab_SIDUpn ;
@@ -1271,7 +1292,7 @@ Function Connect-EXO2 {
                     # validate that the connected EXO is to the $Credential tenant
                     write-verbose "(Existing EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ;
                     $bExistingEXOGood = $true ;
-                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
                 }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                     $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -1521,7 +1542,7 @@ Function Connect-EXO2 {
                 # validate that the connected EXO is to the $Credential tenant
                 write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring())),($($Credential.username))" ;
                 $bExistingEXOGood = $true ;
-            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
             }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                 $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -1570,6 +1591,7 @@ Function connect-EXO2old {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 2:40 PM 12/10/2021 more cleanup 
     * 11:22 AM 9/16/2021 string
     # 8:34 AM 3/31/2021 added verbose suppress to all import-mods
     * 2:01 PM 11/10/2020 swap connect-exo2 to connect-exo2old (uses connect-ExchangeOnline), also ren'd CommandPrefix parm -> Prefix (matches EXOModule spec)
@@ -1613,7 +1635,7 @@ Function connect-EXO2old {
     connect-EXO2old
     Connect using defaults, and leverage any pre-set $global:credo365TORSID variable
     .EXAMPLE
-    connect-EXO2old -Prefix exo -credential (Get-Credential -credential s-todd.kadrie@torolab.com)  ;
+    connect-EXO2old -Prefix exo -credential (Get-Credential -credential user@domain.com)  ;
     Connect an explicit credential, and use 'exolab' as the cmdlet prefix
     .EXAMPLE
     $cred = get-credential -credential $o365_Torolab_SIDUpn ;
@@ -1718,7 +1740,7 @@ Function connect-EXO2old {
                     # validate that the connected EXO is to the $Credential tenant
                     write-verbose "(Existing EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ;
                     $bExistingEXOGood = $true ;
-                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
                 }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                     $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -1863,7 +1885,7 @@ Function connect-EXO2old {
                 # validate that the connected EXO is to the $Credential tenant
                 write-verbose "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ;
                 $bExistingEXOGood = $true ;
-            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
             }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                 $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -2662,6 +2684,7 @@ function copy-XPermissionGroupToCloudOnly {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:40 PM 12/10/2021 more cleanup 
     * 3:51 PM 8/17/2021 added $MembersCloudOnly | select -unique - kept leaking in duplicates in the inputs.
     * 1:40 PM 8/11/2021 ADDED & debugged -Mailbox param (spec target of grants), and code to add-mailboxperm/add-(ad|recipient)permission to OP or EXO target mailbox, and more detailed follow up dump report. Ran against exo-mailbox wio issues. Need to dbug against a still onprem mbx next.
     * 2:19 PM 8/3/2021 step-debugged, looks functional ; init 
@@ -2696,7 +2719,7 @@ function copy-XPermissionGroupToCloudOnly {
     None. Does not accepted piped input.(.NET types, can add description)
     .EXAMPLE
     PS> $whatif = $true ;
-        [array]$tgroups = @("627192;LYN-SEC-Email-ToroMobilityTeam-G;ToroMobilityTeam@toro.com;dccoldiron@charlesmachine.works;member1@domain.com,dccoldiron@charlesmachine.works") ;
+        [array]$tgroups = @("627192;LYN-SEC-Email-COMPANYMobilityTeam-G;COMPANYMobilityTeam@COMPANY.com;dccoldiron@charlesmachine.works;member1@domain.com,dccoldiron@charlesmachine.works") ;
         [array]$tgroups += "123457;SIT-SEC-Email-GrantMailbox2-G;GrantMailbox2@domain.com;owner2@domain.com;member1@domain.com,member2@domain.com" ;
         foreach($tgrp in $tgroups){
             $pltCXPermGrp=[ordered]@{
@@ -2720,7 +2743,7 @@ function copy-XPermissionGroupToCloudOnly {
     ###Requires -Version 5
     #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010, verb-Text
     #Requires -RunasAdministrator
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.COMPANY\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
     ##[Alias('somealias')]
@@ -4197,6 +4220,7 @@ function get-MsgTrace {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
+    * 2:40 PM 12/10/2021 more cleanup 
      * 12:17 PM 5/14/2021 updated passstatus code to curr, and added -ea to the gv's (suppress errors when not present)
     * 2:23 PM 3/16/2021 added multi-tenant support ; debugged both exOP & exo, added -ReportFail & -ReportRowsLimit params. At this point Exclusive params are only partially configured
     * 1:12 PM 3/15/2021 init work was done 3/12, removed recursive-err generating #Require on the hosting verb-EXO module
@@ -4246,10 +4270,10 @@ function get-MsgTrace {
     $msgs = get-MsgTrace -Sender quotes@bossplow.com -Ticket 347298 -days 7 -asobject -verbose ;
     Above EXO MessageTrace returning an object for further postfiltering.
     .EXAMPLE
-    get-msgtrace -sender monitoring@toro.com -useEXOP -ticket 99999 -d 1 -verbose ; 
+    get-msgtrace -sender ACCOUNT@COMPANY.com -useEXOP -ticket 99999 -d 1 -verbose ; 
     Run an ONPREM get-MessageTrackingLog search
     .EXAMPLE 
-    $msgs = get-msgtrace -sender monitoring@toro.com -useEXOP -ticket 99999 -start (get-date).addhours(-1) -verbose -ReportFail; 
+    $msgs = get-msgtrace -sender ACCOUNT@COMPANY.com -useEXOP -ticket 99999 -start (get-date).addhours(-1) -verbose -ReportFail; 
     Run an ONPREM get-MessageTrackingLog search, with specific -Start time (End will be asserted), with detailed dump of (first 100) EventID 'Fail' items
     .LINK
     https://github.com/tostka/verb-exo
@@ -4258,7 +4282,7 @@ function get-MsgTrace {
     #>
     #Requires -Version 3
     #Requires -Modules verb-ex2010
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.COMPANY\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding(DefaultParameterSetName='SendRec')]
     <# $isplt=@{  ticket="347298" ;  uid="wilinaj";  days=7 ;  Sender="quotes@bossplow.com" ;  Recipients="" ;  MessageSubject="" ;  EventID='' ;  Connectorid="" ;  Source="" ;} ; 
     #>
@@ -4781,6 +4805,7 @@ function get-xoHistSearch {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:40 PM 12/10/2021 more cleanup 
     * 12:49 PM 9/28/2021 init; added MsgID support; added MsgID example
     .DESCRIPTION
     get-xoHistSearch.ps1 - wrapper/automation for EXO's get-HistoricalSearch cmdlet, Assembles ReportTitle & models an export-csv filename, around recipient, sender, reportType etc params specified for get-historicalsearch, also dawdle loops monitoring & alerting the progress of the associated PSJob created by the search submission.
@@ -4842,7 +4867,7 @@ function get-xoHistSearch {
     #Requires -Modules ExchangeOnlineManagement,verb-Auth, verb-IO, verb-logging, verb-Text
     ###Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Text
     #Requires -RunasAdministrator
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.COMPANY\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding(DefaultParameterSetName='Days')]
     #[CmdletBinding()]
@@ -4938,7 +4963,7 @@ function get-xoHistSearch {
         $smtpPriority="Normal";
         # SMTP port (default is 25)
         $smtpPort = 25 ;
-        $smtpToFailThru="todd.kadrie@toro.com"
+        $smtpToFailThru="dG9kZC5rYWRyaWVAdG9yby5jb20="| convertfrom-Base64String
         # pull the notifc smtpto from the xxxMeta.NotificationDlUs value
         if(!$showdebug){
             if((Get-Variable  -name "$($TenOrg)Meta").value.NotificationDlUs){
@@ -5276,16 +5301,6 @@ $($smtpBody)
             Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
             ###>
             $o365Cred=$null ;
-            <# $TenOrg is a mandetory param in this script, skip dyn resolution
-            switch -regex ($env:USERDOMAIN){
-                "(TORO|CMW)" {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
-                "TORO-LAB" {$TenOrg = 'TOL' }
-                default {
-                    throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ;
-                    Break ;
-                } ;
-            } ;
-            #>
             if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
                 # make it script scope, so we don't have to predetect & purge before using new-variable
                 if(get-Variable -Name cred$($tenorg) -scope Script){
@@ -5863,6 +5878,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    * 2:40 PM 12/10/2021 more cleanup 
     * 11:24 AM 9/16/2021 encoded eml
     # 10:46 AM 6/2/2021 sub'd verb-logging for v-trans
     * 1:54 PM 5/19/2021 expanded get-hybridcred to use both esvc & sid userroles
@@ -5942,10 +5958,10 @@ function move-MailboxToXo{
     .OUTPUTS
     None. Returns no objects or output.
     .EXAMPLE
-    move-MailboxToXo.ps1 -TargetMailboxes GTC-Ventrac@toro.com -showDebug  -whatIf ;
+    move-MailboxToXo.ps1 -TargetMailboxes ACCOUNT@COMPANY.com -showDebug  -whatIf ;
     Perform immediate move of specified mailbox, with debug output & whtif pass
     .EXAMPLE
-    move-MailboxToXo.ps1 -TargetMailboxes GTC-Ventrac@toro.com -showDebug -notest -whatIf ;
+    move-MailboxToXo.ps1 -TargetMailboxes ACCOUNT@COMPANY.com -showDebug -notest -whatIf ;
     Perform immediate move of specified mailbox, suppress MEP tests (-NoTest), showdebug output & whatif pass
     .LINK
     #>
@@ -6350,16 +6366,6 @@ function move-MailboxToXo{
         Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
         ###>
         $o365Cred=$null ;
-        <# $TenOrg is a mandetory param in this script, skip dyn resolution
-        switch -regex ($env:USERDOMAIN){
-            "(TORO|CMW)" {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
-            "TORO-LAB" {$TenOrg = 'TOL' }
-            default {
-                throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ;
-                exit ;
-            } ;
-        } ;
-        #>
         if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
             # make it script scope, so we don't have to predetect & purge before using new-variable - except now it does [headcratch]
             $tvari = "cred$($tenorg)" ; if(get-Variable -Name $tvari -scope Script){Remove-Variable -Name $tvari -scope Script}
@@ -7135,6 +7141,7 @@ function new-DgTor {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,DistributionGroup,DistributionList,Hybrid
     REVISIONS
+    * 2:40 PM 12/10/2021 more cleanup 
     * 4:54 PM 9/30/2021 updated CloudFirst code, and used to create functional 
     exoDG, also added code to dynamically create onprem unreplicated MailContacts 
     for CloudFirst, to represent an onprem AddrBook object ; flipped members & 
@@ -7307,7 +7314,7 @@ function new-DgTor {
     #>
     ###Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Text, verb-logging
     #Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-IO, verb-logging, verb-Text, verb-logging
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.DOMAIN\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
     PARAM(
@@ -7698,16 +7705,6 @@ $($smtpBody)
         Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
         ###>
         $o365Cred=$null ;
-        <# $TenOrg is a mandatory param in this script, skip dyn resolution
-        switch -regex ($env:USERDOMAIN){
-            "(TORO|CMW)" {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
-            "TORO-LAB" {$TenOrg = 'TOL' }
-            default {
-                throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; 
-                Break ; 
-            } ;
-        } ; 
-        #>
         if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
             # make it script scope, so we don't have to predetect & purge before using new-variable
             if(get-Variable -Name cred$($tenorg) -scope Script -ea 0 ){ remove-Variable -Name cred$($tenorg) -scope Script } ;
@@ -9017,6 +9014,7 @@ Function Reconnect-EXO2 {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 2:40 PM 12/10/2021 more cleanup 
     # 8:34 AM 3/31/2021 added verbose suppress to all import-mods
     * 8:30 AM 10/22/2020 added $TenOrg, swapped looping meta resolve with 1-liner approach ; added AcceptedDom caching to the middle status test (suppress one more get-xoaccepteddomain call if possible)
     * 1:30 PM 9/21/2020 added caching of AcceptedDomain, dynamically into XXXMeta - checks for .o365_AcceptedDomains, and pops w (Get-exoAcceptedDomain).domainname when blank. 
@@ -9123,7 +9121,7 @@ Function Reconnect-EXO2 {
                     # validate that the connected EXO is to the $Credential tenant    
                     $smsg = "(EXO Authenticated & Functional(AccDom):$($Credential.username.split('@')[1].tostring()))" ; 
                     $bExistingEXOGood = $true ; 
-                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
                 }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                     $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -9176,7 +9174,7 @@ Function Reconnect-EXO2 {
                 # validate that the connected EXO is to the $Credential tenant    
                 write-verbose "(EXOv2 Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
                 $bExistingEXOGood = $true ; 
-            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
             }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                 $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -9205,6 +9203,7 @@ Function Reconnect-EXO2old {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    * 2:40 PM 12/10/2021 more cleanup 
     # 11:21 AM 3/31/2021 added TenDom test, after AccDom test ; 
     * 2:08 PM 11/10/2020 ren'd the older connect-ExchangeOnline-related version, to reconnect-exo2old, in favor of the name going on the NewEXOPSSessoin-based version.
     * 8:30 AM 10/22/2020 added $TenOrg, swapped looping meta resolve with 1-liner approach ; added AcceptedDom caching to the middle status test (suppress one more get-xoaccepteddomain call if possible)
@@ -9310,7 +9309,7 @@ Function Reconnect-EXO2old {
                     # validate that the connected EXO is to the $Credential tenant    
                     $smsg = "(EXO Authenticated & Functional(AccDom):$($Credential.username.split('@')[1].tostring()))" ; 
                     $bExistingEXOGood = $true ; 
-                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+                # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
                 }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                     $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -9363,7 +9362,7 @@ Function Reconnect-EXO2old {
                 # validate that the connected EXO is to the $Credential tenant    
                 write-verbose "(EXOv2 Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
                 $bExistingEXOGood = $true ; 
-            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @toroco.mail.onmicrosoft.comis)
+            # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
             }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                 $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -9597,6 +9596,7 @@ Function resolve-Name {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell,ExchangeOnline,Exchange,MsolUser,AzureADUser,ADUser
     REVISIONS
+    * 2:40 PM 12/10/2021 more cleanup 
     * 1:17 PM 6/10/2021 added missing $exMProps add lic grp memberof check for aadu, for x-hyb users; add missing $rgxLicGrp, as $rgxLicGrpDN & $rgxLicGrpDName (aduser & aaduser respectively); pulled datestamps on echo's, simplified echo's (removed "$($smsg)")
     * 4:00 PM 6/9/2021 added alias 'nlu' (7nlu is still ahk macro) ; fixed typo; expanded echo for $lic;flipped -displayname to -identifier, and handle smtpaddr|alias|displayname lookups ; init; 
     .DESCRIPTION
@@ -9652,14 +9652,14 @@ Function resolve-Name {
         # below doesn't encode cleanly, mainly black diamonds - better w alt font (non-lucida console)
         #"^[a-zA-Z??????acce????ei????ln??????????uu??zz??c????????ACCEE????????ILN??????????UU??ZZ????C???? ,.'-]+$"
         [regex]$rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"
-        [regex]$rgxCMWDomain = 'DC=cmw,DC=internal$' ;
+        [regex]$rgxCMWDomain = $CMWMeta.rgxCMWDomain ;
         [regex]$rgxExAlias = "^[0-9a-zA-Z-._+&]{1,64}$" ;
         # used for adu.memberof
-        [regex]$rgxLicGrpDN = "^CN=ENT-APP-Office365-.*-DL,((OU=Enterprise\sApplications,)*)OU=ENTERPRISE,DC=global,DC=ad,DC=toro((lab)*),DC=com$" ;  ; 
+        [regex]$rgxLicGrpDN = $TorMeta.rgxLicGrpDN ;  ; 
         # used for taadu memberof
-        [regex]$rgxLicGrpDName = "^ENT-APP-Office365-.*-DL((\s)*)$" ;
-        #"^ENT-APP-Office365-.*-DL$" ;  
-        # cute, we've got cmw AAD grps with trailing spaces: 'ENT-APP-Office365-CMWUsers-E3-DL ', pull trailing $
+        [regex]$rgxLicGrpDName = $CMWMeta.rgxLicGrpDName ;
+        #XXXX" ;  
+        # cute, we've got cmw AAD grps with trailing spaces: 'XXX-XXX-E3-DL ', pull trailing $
 
         if(!$Identifier -AND (gcm get-clipboard) -AND (get-clipboard)){
             $Identifier = get-clipboard ;
@@ -9765,7 +9765,7 @@ Function resolve-Name {
         else{ write-host -foregroundcolor green $smsg } ;
         #>
         
-        # steer all onprem code on $XXXMeta.ExOPAccessFromToro & Ex10Server values
+        
         $UseOP=$true ; 
 
         $useEXO = $true ; # non-dyn setting, drives variant EXO reconnect & query code
@@ -9783,16 +9783,6 @@ Function resolve-Name {
             Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
             ###>
             $o365Cred=$null ;
-            <# $TenOrg is a mandetory param in this script, skip dyn resolution
-            switch -regex ($env:USERDOMAIN){
-                "(TORO|CMW)" {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
-                "TORO-LAB" {$TenOrg = 'TOL' }
-                default {
-                    throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; 
-                    Break ; 
-                } ;
-            } ; 
-            #>
             if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
                 # make it script scope, so we don't have to predetect & purge before using new-variable
                 if(get-Variable -Name cred$($tenorg) -scope Script -ea 0){remove-variable -Name cred$($tenorg) -scope Script} ; 
@@ -9956,7 +9946,7 @@ Function resolve-Name {
 
         
         # 3:00 PM 9/12/2018 shift this to 1x in the script ; - this would need to be customized per tenant, not used (would normally be for forcing UPNs, but CMW uses brand UPN doms)
-        #$script:forestdom = ((get-adforest | select -expand upnsuffixes) | ? { $_ -eq 'toro.com' }) ;
+        
 
         # Clear error variable
         $Error.Clear() ;
@@ -10048,7 +10038,7 @@ Function resolve-Name {
                         write-host "LicGrp(AD):(no ADUser.memberof matched pattern:`n$($rgxLicGrpDN.tostring())" ; 
                     } ; 
                 } else {
-                    write-host -fo yellow  "Unable to expand ADU, user is hybrid AD from CMW.internal domain`nproxying AzureADUser memberof" ; 
+                    write-host -fo yellow  "Unable to expand ADU, user is hybrid AD from $($CMWMeta.adforestname) domain`nproxying AzureADUser memberof" ; 
                     if($taadu){
                         $mbrof = $taadu | Get-AzureADUserMembership | select DisplayName,DirSyncEnabled,MailEnabled,SecurityEnabled,Mail,objectid ;
                         if($LicGrp = $mbrof.displayname -match $rgxLicGrpDName){
@@ -10122,6 +10112,22 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:40 PM 12/10/2021 more cleanup 
+    * 12:55 PM 12/10/2021 added $hsum.isDirSynced, for further bulk filter/profiling
+        flipped $hsum.isUnlicensed -> Islicensed & added msol.Islicensed test to pop ; 
+        appears to work in console - output a stack of filterable objects into collection variable.
+        further tweaking and nobrain t-shooting outputs ; added 
+        output switches: 
+        isNoBrain,isSplitBrain,isUnlicensed,IsDisabledOU,IsADDisabled,IsAADDisabled for 
+        postfiltering large collections in bulk, to identify patterns ; reformulated 
+        nobrain detec, to have an unlic'd block as well as a licensed - with deadwood 
+        offboard nobrains, they'll never have a lic. 
+    * 4:19 PM 12/9/2021 improved pipeline support; fixed pipeline param mbinding fails ; added supoort for resolving
+        baddomain users or op.mailusers where need to resolve aadu.immutableid to
+        aduser, to *ensure* we have a hardmatch of problem objects (resolving baddomain
+        DDG-DL-AllDOMAIN recipients to internal NoBrain etc. Still doesn't seem to be
+        setting $hsum.NoBrain properly in outputs, but is dropping direct to pipe. May
+        have borked single-indiceent xml object dumps tho.
     * 10:30 AM 11/8/2021 fixed CBH/HelpMessage tagging on -outobject
     * 3:30 PM 10/12/2021 added new Name:ObjName_guid support (new hires turn up with aduser named this way); added some marginal multi xoRcp & xoMailbox handling (loops outputs on the above, and the mapiTest), but doesn't do full AzureAD,Msoluser,MailUser,Guest lookups for these. It's really about error-suppression, and notifying the issue more than returning the full picture
     * 1:04 PM 9/28/2021 added:$AADUserManager lookup and dump of UPN, OpDN & mail (for correlating what email pol a user should have -> the one their manager does)
@@ -10133,7 +10139,7 @@ function resolve-user {
     * 1:30 PM 8/27/2021 new sniggle: CMW user that has EXOP mbx, remote: Added xoMailUser support, failed through DName lookups to try '*lname*' for near-missies. Could add trailing 'lnamne[0-=3]* searches, if not rcp/xrcps found...
     * 9:16 AM 8/18/2021 $xMProps: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
     * 12:40 PM 8/17/2021 added -outObject, outputs a full descriptive object for each resolved recipient ; added a $hSum hash and shifted all the varis into mountpoints in the hash, with -outObject, the entire hash is conv'd to an obj and appended to $Rpt ; renamed most of the varis/as objects very clearly for what they are, as sub-props of the output objects. Wo -outobject, the usual comma-delim'd string of addresses is output.
-    * 3:26 PM 7/29/2021 had sorta bug (AD context was adtorocom:, gadu failing throwing undefined error), but debugging added extensive verbose echos, and an AD-specific try/catch to trap AD notfound errors (notorious, they throw terminating fails, unlike other modules; which crashes out processing even when using -EA continue). So it hardens up the fail recovery process.
+    * 3:26 PM 7/29/2021 had sorta bug (AD context was xxxx:, gadu failing throwing undefined error), but debugging added extensive verbose echos, and an AD-specific try/catch to trap AD notfound errors (notorious, they throw terminating fails, unlike other modules; which crashes out processing even when using -EA continue). So it hardens up the fail recovery process.
     * 12:55 PM 7/19/2021 added guest & exo-mailcontact support (resolving missing ext-federated addresses), retolled logic down to grcp & gxrcp to drive balance of tests.
     * 12:05 PM 7/14/2021 rem'd requires: verb-exo  rem'd requires version 5 (gen'ing 'version' is specified more than once.); rem'd the $rgxSamAcctName, gen's parsing errors compiling into mod ;  added alias 'ulu'; added mailcontact excl on init grcp, to force those to exombx qry ; init vers
     .DESCRIPTION
@@ -10165,6 +10171,10 @@ function resolve-user {
     group results on federation sources,
     output summary of EXO mailboxes for the second federator
     then output the primary smtpaddress for all EXO mailboxes resolved to that federator
+    .EXAMPLE
+    $rptNNNNNN_FName_LName_Domain_com = ulu -o -users 'FName.LName@Domain.com' ;  $rpt655692_FName_LName_Domain_com | xxml .\logs\rpt655692_FName_LName_Domain_com.xml
+    Example (from ahk 7uluo! macro parser output) that creates a variable based on ticketnumber & email address (with underscores for alphanums), from the output, and then exports the variable content to xml. 
+    ves an immediately parsable inmem variable, along with the canned .xml that can be reloaded in future, or attached to a ticket.
     .LINK
     https://github.com/tostka/verb-exo
     .LINK
@@ -10172,12 +10182,14 @@ function resolve-user {
     ###Requires -Version 5
     #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
     #Requires -RunasAdministrator
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.toro\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
+    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.DOMAIN\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
     [Alias('ulu')]
     PARAM(
-        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)")]
+        #[Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)")]
+        # failing to map pipeline to $users, reduce to Value from Pipeline
+        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)")]
         #[ValidateNotNullOrEmpty()]
         #[Alias('ALIAS1', 'ALIAS2')]
         [array]$users,
@@ -10202,7 +10214,7 @@ function resolve-user {
         # $propsMailx: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
         $propsMailx='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','IsDirSynced','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
         # pulls: 'ImmutableId',
-        $propsXMFed = 'samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ; 
+        $propsXMFed = 'samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
         $propsLic = @{Name='HasLic'; Expression={$_.IsLicensed }},@{Name='LicIssue'; Expression={$_.LicenseReconciliationNeeded }} ;
         $propsADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName','StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone','Enabled','DistinguishedName','Description','whenCreated','whenChanged'
         #'samaccountname','UserPrincipalName','distinguishedname','Description','title','whenCreated','whenChanged','Enabled','sAMAccountType','userAccountControl' ;
@@ -10253,6 +10265,7 @@ function resolve-user {
         $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
 
+        <# if we want pipeline to work have to move the clipboard grab out or down into process{}, where pipeline binding will be actually populated
         if(!$users){
             $users= (get-clipboard).trim().replace("'",'').replace('"','') ;
             if($users){
@@ -10264,19 +10277,42 @@ function resolve-user {
         } else {
             write-verbose "($(($users|measure).count)) user(s) specified:`n'$($users -join "','")'" ;
         } ;
-
+        #>
         rx10 -Verbose:$false ; rxo  -Verbose:$false ; cmsol  -Verbose:$false ;
+
+        # finally if we're using pipeline, and aggregating, we need to aggreg outside of the process{} block
+        if($PSCmdlet.MyInvocation.ExpectingInput){
+            # pipeline instantiate an aggregator here
+        } ;
 
     }
     PROCESS{
         #$dname= 'Todd Kadrie' ;
         #$dname = 'Stacy Sotelo'
+
+        if(-not $users){
+            $users= (get-clipboard).trim().replace("'",'').replace('"','') ;
+            if($users){
+                write-verbose "No -users specified, detected value on clipboard:`n$($users)" ;
+            } else {
+                write-warning "No -users specified, nothing matching dname, emailaddress or samaccountname, found on clipboard. EXITING!" ;
+                Break ;
+            } ;
+        } else {
+            write-verbose "($(($users|measure).count)) user(s) specified:`n'$($users -join "','")'" ;
+        } ;
+
         $ttl = ($users|measure).count ; $Procd=0 ;
         [array]$Rpt =@() ;
+        # with pipeline input, the pipeline evals as either $_ (if unmapped to a param in binding), or iterating on the mapped value.
+        #     the foreach loop below doesn't actually loop. Process{} is the loop with a pipeline-fed param, and the bound - $users - variable once per pipeline bound element - per array item on an array -
+        #     is run with the $users value populated with each element in turn. IOW, the foreach is a single-run pass, and the Process{} block is the loop.
+        # you need both a bound $users at the top - to handle explicit assigns resolve-user -users $variable.
+        # with a process {} block to handle any pipeline passed input. The pipeline still maps to the bound param: $users, but the e3ntire process{} is run per element, rather than iteratign the internal $users foreach.
         foreach ($usr in $users){
             #$fname = $lname = $dname = $OPRcp = $OPMailbox = $OPRemoteMailbox = $ADUser = $xoRcp = $xoMailbox = $xoUser = $xoMemberOf = $MsolUser = $LicenseGroup = $null ;
             $isEml=$isDname=$isSamAcct=$isXORcpMulti  = $false ;
-            
+
 
             $hSum = [ordered]@{
                 dname = $null ;
@@ -10297,8 +10333,16 @@ function resolve-user {
                 xoMapiTest = $null ;
                 MsolUser = $null ;
                 AADUser = $null ; # added for MailUser variant
-                AADUserMgr = $null ; 
+                AADUserMgr = $null ;
                 LicenseGroup = $null ;
+                isDirSynced = $null 
+                isNoBrain = $false ;
+                isSplitBrain = $false;
+                #isUnlicensed = $false ;
+                IsLicensed = $false ; 
+                IsDisabledOU = $false ; 
+                IsADDisabled = $false ; 
+                IsAADDisabled = $false ; 
             } ;
             $procd++ ;
             write-verbose "processing:$($usr)" ;
@@ -10308,7 +10352,7 @@ function resolve-user {
                     $hSum.dname = $usr ;
                     write-verbose "(detected user ($($usr)) as EmailAddr)" ;
                     $isEml = $true ;
-                    Break ; 
+                    Break ;
                 }
                 $rgxObjNameNewHires{
                     write-verbose "(detected user ($($usr)) as ObjNameNewHires)" ;
@@ -10316,7 +10360,7 @@ function resolve-user {
                     $hSum.dname = $usr.split('_')[0] ;
                     write-verbose "(detected user ($($usr)) as DisplayName)" ;
                     $isObjName = $true ;
-                    Break ; 
+                    Break ;
                 }
                 $rgxDName {
                     if($usr.contains('.')){
@@ -10327,13 +10371,13 @@ function resolve-user {
                     $hSum.dname = $usr ;
                     write-verbose "(detected user ($($usr)) as DisplayName)" ;
                     $isDname = $true ;
-                    Break ; 
+                    Break ;
                 }
                 $rgxSamAcctNameTOR {
                     $hSum.lname = $usr ;
                     write-verbose "(detected user ($($usr)) as SamAccountName)" ;
                     $isSamAcct  = $true ;
-                    Break ; 
+                    Break ;
                 }
                 default {
                     write-warning "$((get-date).ToString('HH:mm:ss')):No -user specified, nothing matching dname, emailaddress or samaccountname, found on clipboard. EXITING!" ;
@@ -10366,7 +10410,7 @@ function resolve-user {
                 $fltr = "name -like '$usr'" ;
                 write-verbose "processing:'filter':$($fltr)" ;
                 $pltGMailObj.add('filter',$fltr) ;
-            } ; 
+            } ;
             if($isDname){
                 # interestinb bug: switched to $hSum.dname: ISE is fine, but ConsoleHost fails to expand the $fltr properly.
                 # standard is: Variables: Enclose variables that need to be expanded in single quotation marks (for example, '$User'). Don't use curly-brackets (impedes expansion)
@@ -10393,6 +10437,7 @@ function resolve-user {
                     'MailUser' {
                         $smsg = "MAILUSER WO RMBX DETECTED! - POSSIBLE NOBRAIN?"
                         write-warning $smsg
+                        #$hsum.isNoBrain = $true ;
                     }
                     'MailUniversalDistributionGroup' {write-host "(DG)" -nonewline}
                     'DynamicDistributionGroup'  {write-host "(DDG)" -nonewline}
@@ -10439,11 +10484,11 @@ function resolve-user {
                 write-host $smsg ;
             } else {
                 $smsg =  "`$hSum.xoRcp:`n$(($hSum.xoRcp|out-string).trim())" ;
-                write-verbose $smsg ; 
+                write-verbose $smsg ;
                 if($hSum.xoRcp -is [system.array]){
-                    write-warning "Multiple matching xoRcps!:$($smsg)`nTHIS WILL NOT RETURN FULL AADUSER ETC FOR BOTH OBJECTS!`nUSE TARGETED UPN ETC TO DUMP VARIANT OBJECTS!" ; 
-                    $isXORcpMulti = $true ; 
-                } ; 
+                    write-warning "Multiple matching xoRcps!:$($smsg)`nTHIS WILL NOT RETURN FULL AADUSER ETC FOR BOTH OBJECTS!`nUSE TARGETED UPN ETC TO DUMP VARIANT OBJECTS!" ;
+                    $isXORcpMulti = $true ;
+                } ;
             } ;
 
             if($hSum.OPRcp){
@@ -10471,8 +10516,22 @@ function resolve-user {
                         }
                         "MailUser" {
                             write-verbose "'MailUser':get-remotemailbox $($hSum.OPRcp.identity)"
-                            $hSum.OPRemoteMailbox=get-remotemailbox $hSum.OPRcp.identity -resultsize $MaxRecips | select -first $MaxRecips  ;
-                            write-verbose "`$hSum.OPRemoteMailbox:`n$(($hSum.OPRemoteMailbox|out-string).trim())" ;
+                            if($hSum.OPRemoteMailbox=get-remotemailbox $hSum.OPRcp.identity -resultsize $MaxRecips -ea 0 | select -first $MaxRecips){
+                                write-verbose "`$hSum.OPRemoteMailbox:`n$(($hSum.OPRemoteMailbox|out-string).trim())" ;
+                            }else{
+                                $smsg = "RecipientTypeDetails:MailUser with NO Rmbx! (NoBrain?)" ;
+                                write-warning $smsg ;
+                                if($hsum.xoRcp.ExternalDirectoryObjectId){
+                                    # of course has match to AADU  - always does - we're going to need the AADU before we can lookup the ADU
+                                    # $pltGadu.identity = $hSum.AADUser.ImmutableId | convert-ImmuntableIDToGUID | select -expand guid ;
+                                    caad  -Verbose:$false -silent ;
+                                    write-verbose "OPRcp:Mailuser, ensure GET-ADUSER pulls AADUser.matched object for cloud recipient:`nfallback:get-AzureAdUser  -objectid $($hsum.xoRcp.ExternalDirectoryObjectId)" ;
+                                    # have to postfilter, if want specific count -maxresults catch's with no $error[0]
+                                    $hSum.AADUser  = get-AzureAdUser  -objectid $hsum.xoRcp.ExternalDirectoryObjectId | select -first $MaxRecips;  ;
+                                } else {
+                                    throw "Unsupported object, blank `$hsum.xoRcp.ExternalDirectoryObjectId!" ;
+                                } ;
+                            }
                             if($outObject){
 
                             } else {
@@ -10497,14 +10556,31 @@ function resolve-user {
                         $pltGadu.identity = $hSum.OPRemoteMailbox.samaccountname ;
                     }elseif($hSum.OPMailbox){
                         $pltGadu.identity = $hSum.OPMailbox.samaccountname ;
-                    } ;
+                    } else {
+                        # cloud-first or no brain, neither oprmbx or opmailbox;  should have populated $hSum.AADUser above, use immutable lookup
+                        if($hSum.AADUser.DirSyncEnabled){
+                            $smsg = "Falling back to AADU Immutable lookup to locate replicated adu source" ;
+                            if($pltGadu.identity = $hSum.AADUser.ImmutableId | convert-ImmuntableIDToGUID | select -expand guid){
+                                $smsg = "(Resolved AADU.Immutable ->GUID:$($pltGadu.identity))" ;
+                                write-verbose $smsg ;
+                            }else {
+                                $smsg = "UNABLE TO RESOLVE ADU.IMMUTABLEID TO ADU GUID!"
+                                write-warning $smsg ;
+                                throw $smsg ;
+                            }
+                        } else {
+                            $smsg = "$AADUsuer not DirSyncEnabled: CLOUD FIRST!"
+                            write-warning $smsg ;
+                            #throw $smsg ;
+                        } ;
+                    };
                     if($pltGadu.identity){
                         <# this is throwing a blank fail
                         WARNING: 15:04:18:Failed processing .
                         Error Message:
                         Error Details:
                         # and dumping balance of processing
-                        issue: was in adms drive: :adtorocom, gadu was searching root domain only
+                        issue: was in adms drive: :xxxx, gadu was searching root domain only
                         so it was a search fail, throwing an error, but didn't return details. Still good idea to trap not found and echo it
                         #>
                         #$hSum.ADUser =Get-ADUser @pltGadu ;
@@ -10524,8 +10600,8 @@ function resolve-user {
                         } ;
 
                         write-verbose "`$hSum.ADUser:`n$(($hSum.ADUser|fl $propsADU| out-string).trim())" ;
-                        $smsg = "(TOR USER, fed:ad.toro.com)" ;
-                        $hSum.Federator = 'ad.toro.com' ;
+                        $smsg = "(TOR USER, fed:$($TORMeta.adforestname))" ;
+                        $hSum.Federator = $TORMeta.adforestname ;
                         write-host -Fore yellow $smsg ;
                         if($hSum.OPRemoteMailbox){
                             $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
@@ -10557,17 +10633,17 @@ function resolve-user {
                                         $Rpt += $hSum.xoMailbox.primarysmtpaddress ;
                                     } ;
                                     if($hSum.xoMailbox -is [system.array]){
-                                        write-warning "Multiple mailboxes matched!" ; 
-                                    } ; 
+                                        write-warning "Multiple mailboxes matched!" ;
+                                    } ;
                                     # accomodate array returned (multiple matches):
-                                    $ino = 0 ; 
+                                    $ino = 0 ;
                                     foreach($xmbx in $hSum.xoMailbox){
-                                        $ino++ ; 
+                                        $ino++ ;
                                         if($hSum.xoMailbox -isnot [system.array]){
-                                            $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ; 
-                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                            $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ;
+                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                        } ; 
+                                        } ;
                                         write-verbose "'xoUserMailbox':Test-exoMAPIConnectivity $($xmbx.userprincipalname)"
                                         $hSum.xoMapiTest = Test-exoMAPIConnectivity -identity $xmbx.userprincipalname ;
                                         $smsg = "Outlook (xoMAPI) Access Test Result:$($hsum.xoMapiTest.result)" ;
@@ -10576,7 +10652,7 @@ function resolve-user {
                                         } else {
                                             write-WARNING $smsg ;
                                         } ;
-                                    } ;  
+                                    } ;
                                     break ;
                                 } ;
                             }
@@ -10667,8 +10743,8 @@ function resolve-user {
                         } ;
 
                         write-verbose "`$hSum.ADUser:`n$(($hSum.ADUser|fl $propsADU | out-string).trim())" ;
-                        $smsg = "(TOR USER, fed:ad.toro.com)" ;
-                        $hSum.Federator = 'ad.toro.com' ;
+                        $smsg = "(TOR USER, fed:$($TORMeta.adforestname))" ;
+                        $hSum.Federator = $TORMeta.adforestname ;
                         write-host -Fore yellow $smsg ;
                         if($hSum.OPRemoteMailbox){
                             $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
@@ -10694,78 +10770,79 @@ function resolve-user {
                 } else {
                     $Rpt += $hSum.xoMailbox.primarysmtpaddress ;
                 } ;
-                $ino = 0 ; 
+                $ino = 0 ;
                 foreach($xmbx in $hSum.xoMailbox){
-                    $ino++; 
+                    $ino++;
                     if($hSum.xoMailbox -isnot [system.array]){
-                        $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    } ; 
+                    } ;
                     if($xmbx.isdirsynced){
                         # can be federated to VEN|CMW|Toro
                         switch -regex ($xmbx.primarysmtpaddress.split('@')[1]){
                             $CMWMeta.rgxOPFederatedDom {
-                                $smsg="(CMW USER, fed:cmw.internal)" ;
-                                $hSum.Federator = 'cmw.internal' ;
+                                $smsg="(CMW USER, fed:$($CMWMeta.adforestname))" ;
+                                $hSum.Federator = $CMWMeta.adforestname ;
                             }
                             $TORMeta.rgxOPFederatedDom {
-                                $smsg="(TOR USER, fed:ad.toro.com)" ;
-                                $hSum.Federator = 'ad.toro.com' ;
+                                $smsg="(TOR USER, fed:$($TORMeta.adforestname))" ;
+                                $hSum.Federator = $TORMeta.adforestname ;
                             }
                             $VENMeta.rgxOPFederatedDom {
-                                $smsg="(VEN USER, fed:ventrac)" ;
-                                $hSum.Federator = 'ventrac' ;
+                                $smsg="(VEN USER, fed:$($venmeta.o365_TenantLabel))" ;
+                                $hSum.Federator = $VENMETA.o365_TenantLabel ;
                             }
 
                         } ;
                     } elseif($hSum.xoMuser.IsDirSynced){
                         switch -regex ($xmbx.primarysmtpaddress.split('@')[1]){
                             $CMWMeta.rgxOPFederatedDom {
-                                $smsg="(CMW USER, fed:cmw.internal)" ;
-                                $hSum.Federator = 'cmw.internal' ;
+                                $smsg="(CMW USER, fed:$($CMWMeta.adforestname))" ;
+                                $hSum.Federator = $CMWMeta.adforestname ;
                             }
                             $TORMeta.rgxOPFederatedDom {
-                                $smsg="(TOR USER, fed:ad.toro.com)" ;
-                                $hSum.Federator = 'ad.toro.com' ;
+                                $smsg="(TOR USER, fed:$($TORMeta.adforestname))" ;
+                                $hSum.Federator = $TORMeta.adforestname ;
                             }
                             $VENMeta.rgxOPFederatedDom {
-                                $smsg="(VEN USER, fed:ventrac)" ;
-                                $hSum.Federator = 'ventrac' ;
+                                $smsg="(VEN USER, fed:$($venmeta.o365_TenantLabel))" ;
+                                $hSum.Federator = $VENMETA.o365_TenantLabel ;
                             }
                         } ;
                     }else{
-                        if($hsum.xoRcp.primarysmtpaddress -match "@toroco\.onmicrosoft\.com"){
+                        [regex]$rgxTenDom = [regex]::escape("@$($tormeta.o365_TenantDomain)")
+                        if($hsum.xoRcp.primarysmtpaddress -match $rgxTenDom){
                                 $smsg="(CLOUD-1ST ACCT, unfederated)" ;
-                                $hSum.Federator = 'Toroco' ;
+                                $hSum.Federator = $TORMeta.o365_TenantDom ;
 
                         } else {
                             $smsg="(CLOUD-1ST ACCT, unfederated)" ;
-                            $hSum.Federator = 'Toroco' ;
+                            $hSum.Federator = $TORMeta.o365_TenantDom ;
                         } ;
                     } ;
                 } ;  # loop-E
                 write-host -Fore yellow $smsg ;
                 # skip user lookup if guest already pulled it
                 if(!$hSum.xoUser){
-                    $ino = 0 ; 
+                    $ino = 0 ;
                     foreach($xmbx in $hSum.xoMailbox){
                         write-verbose "get-exouser -id $($xmbx.UserPrincipalName)"
                         $hSum.xoUser += get-exouser -id $xmbx.UserPrincipalName -ResultSize $MaxRecips ;
                         write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
-                    } ; 
+                    } ;
                 }
                 if($hSum.xoMailbox){
-                    $ino = 0 ; 
+                    $ino = 0 ;
                     foreach($xmbx in $hSum.xoMailbox){
-                        $ino++ ; 
+                        $ino++ ;
                         if($hSum.xoMailbox -isnot [system.array]){
-                            $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ; 
+                            $smsg = "xmbx$($ino):$($xmbx.userprincipalname)" ;
                             write-host $smsg ;
-                        } ; 
+                        } ;
                         write-host -foreground yellow "=get-xMbx:> " -nonewline;
                         write-host "$(($hSum.xoMailbox |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
-                    } ; 
+                    } ;
                 }elseif($hSum.xoMUser){
                     write-host "=get-xMUSR:>`n$(($hSum.xoMUser |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
                 }elseif($hSum.txGuest){
@@ -10817,16 +10894,16 @@ function resolve-user {
             if(($hSum.xoRcp|?{$_.recipienttypedetails -eq 'UserMailbox'}) -AND -not($hSum.xoMailbox)){
                 write-verbose "get-exomailbox w`n$(($pltGMailObj|out-string).trim())" ;
                 if($hSum.xoMailbox=get-exomailbox @pltGMailObj -ea 0| select -first $MaxRecips ){
-                    $ino = 0 ; 
-                    $mapiResults = @() ; 
+                    $ino = 0 ;
+                    $mapiResults = @() ;
                     foreach($xmbx in $hSum.xoMailbox){
-                        $ino++ ; 
+                        $ino++ ;
                         if($hSum.xoMailbox -is [system.array]){
-                            $msgprefix = "xmbx$($ino):" ; 
-                        } else { $msgprefix = $null } ; 
-                        $smsg = $msgprefix, "`$hSum.xoMailbox:`n$(($xmbx|out-string).trim())" -join ' ' ; 
+                            $msgprefix = "xmbx$($ino):" ;
+                        } else { $msgprefix = $null } ;
+                        $smsg = $msgprefix, "`$hSum.xoMailbox:`n$(($xmbx|out-string).trim())" -join ' ' ;
                         write-verbose $smsg ;
-                        $smsg = $msgprefix,"'xoUserMailbox':Test-exoMAPIConnectivity $($xmbx.userprincipalname)"  -join ' ' ; 
+                        $smsg = $msgprefix,"'xoUserMailbox':Test-exoMAPIConnectivity $($xmbx.userprincipalname)"  -join ' ' ;
                         write-verbose $smsg ;
                        $mapiResults += Test-exoMAPIConnectivity -identity $xmbx.userprincipalname ;
                         $smsg = "Outlook (xoMAPI) Access Test Result:$($mapiResults[$ino - 1].result)" ;
@@ -10835,8 +10912,8 @@ function resolve-user {
                         } else {
                             write-WARNING $smsg ;
                         } ;
-                    } ; 
-                    $hSum.xoMapiTest = $mapiResults ; 
+                    } ;
+                    $hSum.xoMapiTest = $mapiResults ;
                 } ;
             } ;
 
@@ -10858,6 +10935,8 @@ function resolve-user {
                     # have to postfilter, if want specific count -maxresults catch's with no $error[0]
                     $hSum.MsolUser=get-msoluser @pltgMsoUsr | select -first $MaxRecips;  ;
                     write-verbose "`$hSum.MsolUser:`n$(($hSum.MsolUser|out-string).trim())" ;
+                    if($hSum.MsolUser.IsLicensed){$hsum.IsLicensed = $true ;  }
+                    else {$hsum.IsLicensed = $false } ;
                 } CATCH {
                     $ErrTrapd=$Error[0] ;
                     $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
@@ -10903,7 +10982,7 @@ function resolve-user {
                     } ;
 
                 } ;
-                
+
                 if(-not($hSum.AADUserMgr) -AND $hSum.AADUser ){
                     write-host -foregroundcolor yellow "=get-AADuserManager $($hSum.AADUser.UserPrincipalName)>:" ;
                     TRY{
@@ -10935,7 +11014,7 @@ function resolve-user {
                     $smsg += "`n$(($hSum.AADUser|select $propsAADL4 |out-markdowntable @MDtbl|out-string).trim())" ;
                     $smsg += "`n$(($hSum.AADUser|select $propsAADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
                     #$hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName
-                    if($hSum.Federator -ne 'ad.toro.com'){
+                    if($hSum.Federator -ne $TORMeta.adforestname){
                         $smsg += "`n$($hSum.Federator):Remote ADUser.DN:`n$(($hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName|out-string).trim())" ;
                     }  ;
 
@@ -10976,14 +11055,14 @@ function resolve-user {
                     if($hSum.aduser.Enabled){} else {
                         $smsg = "ADUser:$($hSum.ADUser.userprincipalname) AD Account is *DISABLED!*"
                         write-warning $smsg ;
-                    } ; 
+                    } ;
                 } ;
                 # acct enabled/disabled: .aduser.Enbabled & .aaduser.AccountEnabled
                 if($hSum.AADUser){
                     if($hSum.aaduser.AccountEnabled){} else {
                         $smsg = "AADUser:$($hSum.AADUser.userprincipalname) AAD Account is *DISABLED!*"
                         write-warning $smsg ;
-                    } ; 
+                    } ;
                 } ;
                 if($hSum.ADUser){$hSum.LicenseGroup = $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
 
@@ -10996,7 +11075,7 @@ function resolve-user {
                 } ;
                 if($hSum.ADUser){$hSum.LicenseGroup = $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
                 elseif($hSum.xoMemberOf){$hSum.LicenseGroup = $hSum.xoMemberOf.Name |?{$_ -match $rgxXLic}}
-                if(!($hSum.LicenseGroup) -AND ($hSum.MsolUser.licenses.AccountSkuId -contains 'toroco:ENTERPRISEPACK')){$hSum.LicenseGroup = '(direct-assigned E3)'} ;
+                if(!($hSum.LicenseGroup) -AND ($hSum.MsolUser.licenses.AccountSkuId -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup = '(direct-assigned E3)'} ;
                 if($hSum.LicenseGroup){$smsg = "LicenseGroup:$($hSum.LicenseGroup)"}
                 else{$smsg = "LicenseGroup:(unresolved, direct-assigned other?)" } ;
                 write-host $smsg ;
@@ -11011,8 +11090,8 @@ function resolve-user {
                     $smsg += "`n$(($hSum.AADUserMgr|fl $propsAADMgrL2|out-string).trim())" ;
                     #$smsg += "`n$(($hSum.AADUserMgr|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                 } else {
-                    $smsg += "(AADUserMgr was blank, or unresolved)" ; 
-                } ;  
+                    $smsg += "(AADUserMgr was blank, or unresolved)" ;
+                } ;
                 write-host $smsg ;
 
             } ;
@@ -11047,54 +11126,116 @@ function resolve-user {
             } ;
             #>
             # ($hSum.ADUser.sAMAccountType -eq '805306368')
-            switch ($hSum.Federator) {
-                'ad.toro.com' {
-                    if(($hsum.xoRcp -match '(RemoteUserMailbox|UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
-                        $smsg = "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!" ;
-                        write-warning $smsg ;
-                    } elseif(($hsum.xoRcp -match '(RemoteUserMailbox|UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
-                        $smsg = "NOBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd &  has *NEITHER* xoMbx OR opMbx!" ;
-                        write-warning $smsg ;
-                    } elseif($hSum.MsolUser.IsLicensed -eq $false){
-                        $smsg = "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
-                        write-warning $smsg ;
-                    } ELSE { } ;
 
+            if($hsum.ADUser){
+                if($hsum.ADUser.Enabled){
+                    $hsum.IsADDisabled = $false ;
+                } else {
+                    $hsum.IsADDisabled = $true ;
+                } ;
+             } else {
+                write-verbose "(no ADUser found)" ;
+            } ;
+            if($hsum.AADUser.AccountEnabled){
+                $hsum.IsADDisabled = $false ;
+            } else {
+                $hsum.IsADDisabled = $true ;
+            } ;
+
+            if($hSum.MsolUser){
+                $hsum.IsLicensed = [boolean]($hSum.MsolUser.IsLicensed -eq $true)
+            } ; 
+
+            if($hsum.AADUser){
+                $hsum.isDirSynced = [boolean]($hsum.AADUser.DirSyncEnabled  -eq $True)
+            } ; 
+
+            $smsg = "`n"
+            if(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
+                <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
+                $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!" ;
+                #write-warning $smsg ;
+                $hsum.IsSplitBrain = $true ;
+            }elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hSum.MsolUser.IsLicensed) -AND $hSum.xomailbox -AND $hSum.OPMailbox){
+                <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
+                $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!`nAND is *UNLICENSED!*" ;
+                #write-warning $smsg ;
+                $hsum.IsSplitBrain = $true ;
+            } elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
+                $smsg += "NOBRAIN! W LICENSE!:$($hSum.ADUser.userprincipalname).IsLic'd &  has *NEITHER* xoMbx OR opMbx!" ;
+                #write-warning $smsg ;
+                $hsum.IsNoBrain = $true ;
+            } elseif (($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hSum.MsolUser.IsLicensed) -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
+                $smsg += "NOBRAIN! *WO* LICENSE! (TERM?):$($hSum.ADUser.userprincipalname) NOT licensed'd &  has *NEITHER* xoMbx OR opMbx!" ;
+                $hsum.IsNoBrain = $true ;
+            } elseif($hSum.MsolUser.IsLicensed -eq $false){
+                $smsg += "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
+                write-warning $smsg ;
+                $hsum.IsLicensed = $false ;
+            } ELSE { } ;
+
+            if($hsum.IsNoBrain){
+                switch ($hSum.Federator) {
+                    $TORMeta.adforestname {$rgxTermOU = $TORMeta.rgxTermUserOUs }
+                    $CMWMeta.adforestname  {$rgxTermOU = $CMWMeta.rgxTermUserOUs }
+                    $VENMETA.o365_TenantLabel  {$rgxTermOU = $NULL }
+                    $TORMeta.o365_TenantDom   {$rgxTermOU = $NULL }
+                    default {
+                        write-warning "UNRECOGNIZED `$hsum.FEDERATOR!:$($hSum.Federator)" ;
+                    }
                 }
-                'cmw.internal' {
-                    if($hSum.MsolUser.IsLicensed -eq $false){
-                        $smsg = "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
-                        write-warning $smsg ;
-                    } ELSE { } ;
+
+                if($rgxTermOU -AND $hsum.ADUser){
+                    if($hsum.ADUser.distinguishedname -match $rgxTermOU){
+                        $hsum.IsDisabledOU = $true ;
+                        $smsg += "`n--ADUser:$($hsum.ADUser.samaccountname) is within a *DISABLED* OU (likely TERM)" ;
+                    } else {
+                        $hsum.IsDisabledOU = $false ;
+                        $smsg += "`n--ADUser:$($hsum.ADUser.samaccountname) is *NOT* in a DISABLED OU (improperly offboarded TERM?)" ;
+                    } ;
+                } else {
+                    $smsg +=  "`n--Cloud-only or other non-AD-resolvable host" ;
                 }
-                'ventrac'  {
-                    if($hSum.MsolUser.IsLicensed -eq $false){
-                        $smsg = "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
-                        write-warning $smsg ;
-                    } ELSE { } ;
-                }
-                'Toroco'  {
-                    if($hSum.MsolUser.IsLicensed -eq $false){
-                        $smsg = "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
-                        write-warning $smsg ;
-                    } ELSE { } ;
-                }
-                default {
-                    write-warning "UNRECOGNIZED `$hsum.FEDERATOR!:$($hSum.Federator)" ;
-                }
-            }
+                if($hsum.ADUser){
+                    $smsg += "`n----$($hsum.ADUser.distinguishedname)" ;
+                    $smsg += "`n--ADUser.Description:$($hsum.ADUser.Description)" ;
+                    if($hsum.IsADDisabled){
+                        $smsg += "`n--ADUser:$($hsum.ADUser.samaccountname) is *DISABLED* for logon (likely TERM)" ;
+                    } else {
+                        $smsg += "`n--ADUser:$($hsum.ADUser.samaccountname) is *UN-DISABLED* for logon (improperly offboarded TERM?)" ;
+                    } ;
+                } else {
+                    write-verbose "(no ADUser found)" ;
+                } ;
+                if($hsum.IsAADDisabled){
+                    $smsg += "`n--AADUser:$($hsum.AADUser.UserPrincipalName) is *DISABLED* for logon (likely TERM)" ;
+                } else {
+                    $smsg += "`n--AADUser:$($hsum.AADUser.UserPrincipalName) is *UN-DISABLED* for logon (improperly offboarded TERM?)" ;
+                } ;
+                $smsg += "`n"
+                write-warning $smsg ;
+            } ;
+
+
 
             if($outObject){
-                $Rpt += New-Object PSObject -Property $hSum ;
+                if($PSCmdlet.MyInvocation.ExpectingInput){
+                    write-verbose "(pipeline input, skipping aggregator, dropping into pipeline)" ;
+                    New-Object PSObject -Property $hSum | write-output  ;
+                } else {
+                    $Rpt += New-Object PSObject -Property $hSum ;
+                } ;
             } ;
             write-host -foregroundcolor green $sBnr.replace('=v','=^').replace('v=','^=') ;
         } ;
 
-    }
+    } # PROC-E
     END{
-        if($outObject){
+        if($outObject -AND -not ($PSCmdlet.MyInvocation.ExpectingInput)){
             $Rpt | write-output ;
             write-host "(-outObject: Output summary object to pipeline)"
+        }elseif($outObject -AND ($PSCmdlet.MyInvocation.ExpectingInput)){
+            write-verbose "(pipeline input, individual objects dropped into pipeline)" ;
         } else {
             $oput = ($Rpt | select-object -unique) -join ',' ;
             $oput | out-clipboard ;
@@ -11544,7 +11685,8 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
-    * 8:41 AM 8s/27a/n2021 cleanup comments
+    * 2:40 PM 12/10/2021 more cleanup 
+    * 8:41 AM 8/27/2021 cleanup comments
     * 1:51 PM 5/19/2021 expanded $pltGHOpCred= to include 'ESVC','SID'; verbose=$($verbose)} ;
     # 12:27 PM 5/11/2021 updated to cover Room|Shared|Equipment mbx types, along with UserMailbox
     # 3:47 PM 5/6/2021 recoded start-log switching, was writing logs into AllUsers profile dir ; swapped out 'Fail' msgtrace expansion, and have it do all non-Delivery statuses, up to the $MsgTraceNonDeliverDetailsLimit = 10; tested, appears functional
@@ -11645,10 +11787,6 @@ Function test-xoMailbox {
         $ComputerName = $env:COMPUTERNAME ;
         $sQot = [char]34 ; $sQotS = [char]39 ;
         $NoProf = [bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); # if($NoProf){# do this};
-        $MyBox = "LYN-3V6KSY1", "TIN-BYTEIII", "TIN-BOX", "TINSTOY", "LYN-8DCZ1G2" ;
-        $DomainWork = "TORO";
-        $DomHome = "REDBANK";
-        $DomLab = "TORO-LAB";
         #$ProgInterval= 500 ; # write-progress wait interval in ms
         # 12:23 PM 2/20/2015 add gui vb prompt support
         #[System.Reflection.Assembly]::LoadWithPartialName('Microsoft.VisualBasic') | Out-Null ;
@@ -11687,7 +11825,7 @@ Function test-xoMailbox {
         #$rgxExcl = '.*\\(Recipient\sCache|PersonMetadata|Audits|Calendar\sLogging|Purges)$' ;
 
         $rgxSID = "^S-\d-\d+-(\d+-){1,14}\d+$" ;
-        $rgxEntLicGrps = "CN=ENT-APP-Office365-.*-DL,OU=ENTERPRISE,DC=global,DC=ad,DC=toro((lab)*),DC=com" ;
+        $rgxEntLicGrps = $TORMeta.rgxLicGrpDN ; 
 
         $propsXmbx = 'UserPrincipalName','Alias','ExchangeGuid','Database','ExternalDirectoryObjectId','RemoteRecipientType'
         $propsOPmbx = 'UserPrincipalName','SamAccountName','RecipientType','RecipientTypeDetails' ; 
@@ -11855,16 +11993,7 @@ Function test-xoMailbox {
             Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
             ###>
             $o365Cred=$null ;
-            <# $TenOrg is a mandetory param in this script, skip dyn resolution
-            switch -regex ($env:USERDOMAIN){
-                "(TORO|CMW)" {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
-                "TORO-LAB" {$TenOrg = 'TOL' }
-                default {
-                    throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; 
-                    Break ; 
-                } ;
-            } ; 
-            #>
+            
             if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
                 # make it script scope, so we don't have to predetect & purge before using new-variable
                 New-Variable -Name cred$($tenorg) -scope Script -Value $o365Cred.cred ;
@@ -12037,7 +12166,7 @@ Function test-xoMailbox {
 
         
         # 3:00 PM 9/12/2018 shift this to 1x in the script ; - this would need to be customized per tenant, not used (would normally be for forcing UPNs, but CMW uses brand UPN doms)
-        #$script:forestdom = ((get-adforest | select -expand upnsuffixes) | ? { $_ -eq 'toro.com' }) ;
+        
 
         # Clear error variable
         $Error.Clear() ;
@@ -12205,7 +12334,7 @@ Function test-xoMailbox {
                     $Exit = $Retries ;
                 }
                 Catch {
-                    # get fails go here with: The operation couldn't be performed because object 'Anthony.Magana@toro.com' couldn't be found on 'CY4PR04A008DC10.NAMPR04A008.PROD.OUTLOOK.COM'.
+                    # get fails go here with: The operation couldn't be performed because object 'ACCOUNT@DOMAIN.com' couldn't be found on 'CY4PR04A008DC10.NAMPR04A008.PROD.OUTLOOK.COM'.
                     $errTrpd=$_ ; 
                     if( $errtrpd -match "\scouldn't\sbe\sfound\son\s" ){
                         $smsg = "(no EXO recipient found)" ;
@@ -12393,10 +12522,10 @@ Function test-xoMailbox {
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                             <# Count Name                      Group
                             ----- ----                      -----
-                              448 Delivered                 {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<BN8PR12MB33158F1D07B3862078D758E6EB499@BN8PR12MB3315.namprd12.prod.o...
-                                1 Failed                    {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<5bc2055fed4d43d3827cf7f61d37a4c9@CH2PR04MB7062.namprd04.prod.outlook...
-                                1 Quarantined               {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<threatsim-5f0bc0101d-c200b2590d@app.emaildistro.com>; Received=4/28/...
-                                1 FilteredAsSpam            {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=toroco.onmicrosoft.com; MessageId=<SA0PR01MB61858E3C6111672E081373C1E45F9@SA0PR01MB6185.prod.exchangela...
+                              448 Delivered                 {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<BN8PR12MB33158F1D07B3862078D758E6EB499@BN8PR12MB3315.namprd12.prod.o...
+                                1 Failed                    {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<5bc2055fed4d43d3827cf7f61d37a4c9@CH2PR04MB7062.namprd04.prod.outlook...
+                                1 Quarantined               {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<threatsim-5f0bc0101d-c200b2590d@app.emaildistro.com>; Received=4/28/...
+                                1 FilteredAsSpam            {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<SA0PR01MB61858E3C6111672E081373C1E45F9@SA0PR01MB6185.prod.exchangela...
                             #>
                             $nonDelivStats = $msgs | ?{$_.status -ne 'Delivered'} | group status | select-object -expand name ; 
                             
@@ -12481,7 +12610,7 @@ Function test-xoMailbox {
                     $Exit = $Retries ;
                 }
                 Catch {
-                    # get fails go here with: The operation couldn't be performed because object 'Anthony.Magana@toro.com' couldn't be found on 'CY4PR04A008DC10.NAMPR04A008.PROD.OUTLOOK.COM'.
+                    # get fails go here with: The operation couldn't be performed because object 'ACCOUNT@DOMAIN.com' couldn't be found on 'CY4PR04A008DC10.NAMPR04A008.PROD.OUTLOOK.COM'.
                     $errTrpd=$_ ; 
                     if( $errtrpd -match "\scouldn't\sbe\sfound\son\s" ){
                         $smsg = "(no EXO mailbox found)" ;
@@ -12523,7 +12652,7 @@ Function test-xoMailbox {
                     $Exit = $Retries ;
                 }
                 Catch {
-                    # get fails go here with: The operation couldn't be performed because object 'blahblah' couldn't be found on 'BCCMS8100.global.ad.toro.com'.
+                    # get fails go here with: The operation couldn't be performed because object 'blahblah' couldn't be found on DC.domain.ccc
                     $errTrpd=$_ ; 
                     if( $errtrpd -match "\scouldn't\sbe\sfound\son\s" ){
                         $smsg = "(no EXOP remotemailbox found)" ;
@@ -12578,7 +12707,7 @@ Function test-xoMailbox {
 
                 }
                 Catch {
-                    # get fails go here with: The operation couldn't be performed because object 'blahblah' couldn't be found on 'BCCMS8100.global.ad.toro.com'.
+                    # get fails go here with: The operation couldn't be performed because object 'blahblah' couldn't be found on dc.domain...
                     $errTrpd=$_ ; 
                     if( $errtrpd -match "\scouldn't\sbe\sfound\son\s" ){
                         $smsg = "(no EXOP mailbox found)" ;
@@ -12621,7 +12750,7 @@ Function test-xoMailbox {
                     $Exit = $Retries ;
                 }
                 Catch {
-                    # get fails go here with: get-msoluser : User Not Found.  User: blah@toro.com.
+                    # get fails go here with: get-msoluser : User Not Found.  User: blah@DOMAIN.com.
                     $errTrpd=$_ ; 
                     if( $errtrpd -match "User\sNot\sFound" ){
                         $smsg = "(no EXOP mailbox found)" ;
@@ -13004,14 +13133,14 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Connect-EXO,Connect-EXO2,Test-Uri,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-EXOMsgTraceDetailed,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,resolve-Name,resolve-user,Resolve-xoRcps,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,test-xoMailbox,_cleanup -Alias *
+Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Test-Uri,Connect-EXO,Connect-EXO2,Test-Uri,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-EXOMsgTraceDetailed,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,resolve-Name,resolve-user,Resolve-xoRcps,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,test-xoMailbox,_cleanup -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUNC3mmdRiaP++69BlFNg7FMwN
-# Pn+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU/ku8LFomrBRDWHYdRHFbQxVK
+# /vCgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -13026,9 +13155,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSK+uuR
-# g21rzKPrgBO3YPXNQSvPpjANBgkqhkiG9w0BAQEFAASBgKjh0JcIVqAFr2VrlYIP
-# Pc7khlcBGpqAMI2ddxuJdq8+y9fVIfmwKNRz6iIFxgH34xBJifWM55CGEc/ro5Jv
-# Y5XVp9/e69YZ9rGuhfZeRta34GgfPUnUFvuD6qopohsyQZChIOHYMiipmWz9U1/N
-# CG+Ksy3b/kBTy1PefciD3hCy
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSegorJ
+# tj0zXbz8N/1HTo15HNJTFjANBgkqhkiG9w0BAQEFAASBgJrnkNXMpocGPlj/WlJr
+# M/I/gGGEGkmAYmAH/k8DvE7V7kK2l8w1T7VvK8d7VtTrmaIeo+bllmbi5kjko8kG
+# VxdkjDp5fxJvfWUEwv0SGlsUpeQGqMQGagpSiRlvegaKoOhDd5pUI0TJw/UZosTg
+# iFxfxIg+ON0mLZTp0tvoeDeO
 # SIG # End signature block
