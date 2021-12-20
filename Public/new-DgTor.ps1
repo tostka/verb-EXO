@@ -547,22 +547,8 @@ $($smtpBody)
     # 1:01 PM 4/28/2017 add try catch as well - this may be making it zero-tolerance and catching all minor errors, disable it
     #Set-StrictMode -Version 2.0 ;
 
-    #*------v SERVICE CONNECTIONS v------
-    #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    # steer all onprem code on $XXXMeta.ExOPAccessFromToro & Ex10Server values
-    $UseOP=$false ; 
-    if((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro -AND (Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server){
-        $UseOP = $true ; 
-        $smsg = "$($TenOrg):Meta.ExOPAccessFromToro($((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro)) -AND/OR Meta.Ex10Server($((Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server)),`ENABLING use of OnPrem Ex system this pass." ; 
-        if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-    } else { 
-        $UseOP = $false ; 
-        $smsg = "$($TenOrg):Meta.ExOPAccessFromToro($((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro)) -AND/OR Meta.Ex10Server($((Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server)),`nDISABLING use of OnPrem Ex system this pass." ; 
-        if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-    } ; 
-
+    #region SERVICE-CONNECTIONS #*======v SERVICE-CONNECTIONS v======
+    #region useEXO ; #*------v useEXO v------
     $useEXO = $false ; # non-dyn setting, drives variant EXO reconnect & query code
     if($CloudFirst){ $useEXO = $true } ; 
     if($useEXO){
@@ -615,8 +601,23 @@ $($smtpBody)
             Verbose = $FALSE ; Silent = $true ;} ; 
         #*------^ END GENERIC EXO CREDS & SVC CONN BP ^------
     } # if-E $useEXO
-
-    if($UseOP){
+    #endregion useEXO ; #*------^ END useEXO ^------
+    
+    #region UseExOP #*------v UseExOP v------ 
+    # steer all onprem code on $XXXMeta.ExOPAccessFromToro & Ex10Server values
+    $UseExOP=$false ; 
+    if((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro -AND (Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server){
+        $UseExOP = $true ; 
+        $smsg = "$($TenOrg):Meta.ExOPAccessFromToro($((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro)) -AND/OR Meta.Ex10Server($((Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server)),`ENABLING use of OnPrem Ex system this pass." ; 
+        if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+    } else { 
+        $UseExOP = $false ; 
+        $smsg = "$($TenOrg):Meta.ExOPAccessFromToro($((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro)) -AND/OR Meta.Ex10Server($((Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server)),`nDISABLING use of OnPrem Ex system this pass." ; 
+        if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+    } ; 
+    if($UseExOP){
         #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
         # do the OP creds too
         $OPCred=$null ;
@@ -664,17 +665,11 @@ $($smtpBody)
         } else { Reconnect-Ex2010 ; } ; 
     } ;  # if-E $useEXOP
 
-    <# already confirmed in modloads
-    # load ADMS
-    $reqMods += "load-ADMS".split(";") ;
-    if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
-    #>
-    write-host -foregroundcolor gray  "(loading ADMS...)" ;
-    #write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MSG" ; 
-
-    load-ADMS -Verbose:$FALSE ;
-
-    if($UseOP){
+    
+    #region UseOPAD #*------v UseOPAD v------
+    if($UseExOP){
+        write-host -foregroundcolor gray  "(loading ADMS...)" ;
+        load-ADMS -Verbose:$FALSE ;
         # resolve $domaincontroller dynamic, cross-org
         # setup ADMS PSDrives per tenant 
         if(!$global:ADPsDriveNames){
@@ -713,10 +708,10 @@ $($smtpBody)
     #if(!$domaincontroller){ if(test-path function:get-gcfast){$domaincontroller=get-gcfast} else { throw "no get-gcfast()!" } ;} else {"(existing `$domaincontroller:$($domaincontroller))"} ;
     # use new get-GCFastXO cross-org dc finde
     # default to Op_ExADRoot forest from $TenOrg Meta
-    if($UseOP){
+    if($UseExOP){
         $domaincontroller = get-GCFastXO -TenOrg $TenOrg -subdomain ((gv -name "$($TenOrg)Meta").value['OP_ExADRoot']) -verbose:$($verbose) |?{$_.length};
     } ; 
-
+    #endregion UseOPAD #*------^ END UseOPAD ^------
 
     <# MSOL CONNECTION
     $reqMods += "connect-msol".split(";") ;
@@ -734,7 +729,6 @@ $($smtpBody)
     #connect-msol ;
     Connect-AAD @pltRXO ; 
     #>
-
 
     <# defined above
     # EXO connection
@@ -758,8 +752,7 @@ $($smtpBody)
     } ;
     #>
     #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-    #*------^ END SERVICE CONNECTIONS ^------
-
+    #endregion SERVICE-CONNECTIONS #*======^ END SERVICE-CONNECTIONS ^======
 
     $error.clear() ;
     TRY {
@@ -1366,7 +1359,7 @@ $($smtpBody)
         # 1:07 PM 9/30/2021 rem-out the mailcontact creation code, needs debugging. 
         if($isCloud1st -and -not($whatif)){
             # check for onprem recipient on smtpaddr, if none, offer to build a MailContact in unreplicated ($($TenOrg)meta.UnreplicatedOU)
-            if($UseOP){
+            if($UseExOP){
                 Reconnect-Ex2010 @pltRX10 ; 
                 if($existRcp = get-recipient -id $odl.primarysmtpaddress -domaincontroller $domaincontroller -ErrorAction 0){
                     $smsg = "(existing recipient object for $($odl.primarysmtpaddress) found:$($existRcp.recipienttypedetails) - skipping MContact creation)" ; 
