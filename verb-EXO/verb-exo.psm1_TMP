@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 2.0.4.0
+  Version     : 2.0.7.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -10357,6 +10357,9 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:51 PM 12/27/2021 flipped DN & Desc from md tbl to fl (drops a crlf) ; 
+         flipped $propsMailx output to md fmt split lines (condensed output vertically) ; 
+         added forward props to propsMailx, and test & echo to tag forwarded mbxs; wrapped $prop* vari's for legibility
     * 11:02 AM 12/13/2021 #11111:had $hsum IsADDisabled, typo: to IsAADDisabled
     * 2:40 PM 12/10/2021 more cleanup ; added $hsum.isDirSynced, for further bulk filter/profiling
         flipped $hsum.isUnlicensed -> Islicensed & added msol.Islicensed test to pop ; 
@@ -10478,14 +10481,28 @@ function resolve-user {
 
         # props dyn filtering: write-host "=get-xMbx:>`n$(($hSum.xoMailbox |fl ($xMprops |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
         # $propsMailx: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
-        $propsMailx='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','IsDirSynced','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
+        # 11:01 AM 12/27/2021 add forwarding settings (critical to bounce/block tracking for RM)
+        #$propsMailx='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','IsDirSynced','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
+        $propsMailx='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType',
+            'IsDirSynced','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled',
+            'DeliverToMailboxAndForward','DeliverToMailboxAndForward','ForwardingSmtpAddress' ;
         # pulls: 'ImmutableId',
-        $propsXMFed = 'samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
+        # 1:41 PM 12/27/2021 add multiline md tbl output
+        $propsMailxL1 = 'SamAccountName','WindowsEmailAddress' ; 
+        $propsMailxL2 = 'Office','RecipientTypeDetails','RemoteRecipientType', 'IsDirSynced' ;
+        $propsMailxL3 = 'ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ; 
+        $propsMailxL4 = 'DistinguishedName' ; 
+        $propsMailxL5 = 'ForwardingAddress','ForwardingSmtpAddress','DeliverToMailboxAndForward' ;        
+        $propsXMFed = 'samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType',
+            'ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
         $propsLic = @{Name='HasLic'; Expression={$_.IsLicensed }},@{Name='LicIssue'; Expression={$_.LicenseReconciliationNeeded }} ;
-        $propsADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName','StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone','Enabled','DistinguishedName','Description','whenCreated','whenChanged'
+        $propsADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName',
+            'StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone','Enabled','DistinguishedName',
+            'Description','whenCreated','whenChanged'
         #'samaccountname','UserPrincipalName','distinguishedname','Description','title','whenCreated','whenChanged','Enabled','sAMAccountType','userAccountControl' ;
         $propsADUsht = 'Enabled','Description','whenCreated','whenChanged','Title' ;
-        $propsAADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName','StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone','Enabled','DistinguishedName' ;
+        $propsAADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName',
+            'StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone','Enabled','DistinguishedName' ;
         #'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime','AccountEnabled' ;
         $propsAADUfed = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
         $propsRcpTbl = 'Alias','PrimarySmtpAddress','RecipientType','RecipientTypeDetails' ;
@@ -10500,12 +10517,19 @@ function resolve-user {
         #$propsADL5 = 'ObjectType','UserType' ;
         #>
         # abbreviated:
-        $propsADL1 = @{Name='UPN';Expression={$_.UserPrincipalName }}, @{Name='DName';Expression={$_.DisplayName }}, @{Name='FName';Expression={$_.GivenName }},@{Name='LName';Expression={$_.Surname }},@{Name='Title';Expression={$_.Title }};
-        $propsADL2 = @{Name='Company';Expression={$_.Company }},@{Name='Dept';Expression={$_.Department }},@{Name='Ofc';Expression={$_.PhysicalDeliveryOfficeName }} ;
-        $propsADL3 = @{Name='Street';Expression={$_.StreetAddress }}, 'City','State',@{Name='Zip';Expression={$_.PostalCode }}, @{Name='Phone';Expression={$_.TelephoneNumber }}, @{Name='Mobile';Expression={$_.MobilePhone }} ;
+        $propsADL1 = @{Name='UPN';Expression={$_.UserPrincipalName }}, @{Name='DName';Expression={$_.DisplayName }}, 
+            @{Name='FName';Expression={$_.GivenName }},@{Name='LName';Expression={$_.Surname }},
+            @{Name='Title';Expression={$_.Title }};
+        $propsADL2 = @{Name='Company';Expression={$_.Company }},@{Name='Dept';Expression={$_.Department }},
+            @{Name='Ofc';Expression={$_.PhysicalDeliveryOfficeName }} ;
+        $propsADL3 = @{Name='Street';Expression={$_.StreetAddress }}, 'City','State',
+            @{Name='Zip';Expression={$_.PostalCode }}, @{Name='Phone';Expression={$_.TelephoneNumber }}, 
+            @{Name='Mobile';Expression={$_.MobilePhone }} ;
         $propsADL4 = 'Enabled',@{Name='DN';Expression={$_.DistinguishedName }} ;
         #$propsADL4 = @{Name='Dsync';Expression={$_.DirSyncEnabled }}, @{Name='ImutID';Expression={$_.ImmutableId }}, @{Name='LastDSync';Expression={$_.LastDirSyncTime }}, @{Name='UseLoc';Expression={$_.UsageLocation }};
         #$propsADL5 = 'ObjectType','UserType' ;
+        $propsADL5 = 'whenCreated','whenChanged' ; 
+        $propsADL6 = @{Name='Desc';Expression={$_.Description }} ;
 
         # line1-5 AADU outputs
         <# full size
@@ -10516,15 +10540,21 @@ function resolve-user {
         $propsAADL5 = 'ObjectType','UserType' ;
         #>
         # abbreviated:
-        $propsAADL1 = @{Name='UPN';Expression={$_.UserPrincipalName }}, @{Name='DName';Expression={$_.DisplayName }}, @{Name='FName';Expression={$_.GivenName }},@{Name='LName';Expression={$_.Surname }},@{Name='Title';Expression={$_.JobTitle }};
-        $propsAADL2 = @{Name='Company';Expression={$_.CompanyName }},@{Name='Dept';Expression={$_.Department }},@{Name='Ofc';Expression={$_.PhysicalDeliveryOfficeName }} ;
-        $propsAADL3 = @{Name='Street';Expression={$_.StreetAddress }}, 'City','State',@{Name='Zip';Expression={$_.PostalCode }}, @{Name='Phone';Expression={$_.TelephoneNumber }}, 'Mobile' ;
-        $propsAADL4 = @{Name='Dsync';Expression={$_.DirSyncEnabled }}, @{Name='ImutID';Expression={$_.ImmutableId }}, @{Name='LastDSync';Expression={$_.LastDirSyncTime }}, @{Name='UseLoc';Expression={$_.UsageLocation }};
+        $propsAADL1 = @{Name='UPN';Expression={$_.UserPrincipalName }}, @{Name='DName';Expression={$_.DisplayName }}, 
+            @{Name='FName';Expression={$_.GivenName }},@{Name='LName';Expression={$_.Surname }},
+            @{Name='Title';Expression={$_.JobTitle }};
+        $propsAADL2 = @{Name='Company';Expression={$_.CompanyName }},@{Name='Dept';Expression={$_.Department }},
+            @{Name='Ofc';Expression={$_.PhysicalDeliveryOfficeName }} ;
+        $propsAADL3 = @{Name='Street';Expression={$_.StreetAddress }}, 'City','State',
+            @{Name='Zip';Expression={$_.PostalCode }}, @{Name='Phone';Expression={$_.TelephoneNumber }}, 'Mobile' ;
+        $propsAADL4 = @{Name='Dsync';Expression={$_.DirSyncEnabled }}, @{Name='ImutID';Expression={$_.ImmutableId }}, 
+            @{Name='LastDSync';Expression={$_.LastDirSyncTime }}, @{Name='UseLoc';Expression={$_.UsageLocation }};
         $propsAADL5 = 'ObjectType','UserType', @{Name='Enabled';Expression={$_.AccountEnabled }} ;
 
         #$propsAADMgr = 'UserPrincipalName','Mail',@{Name='OpDN';Expression={$_.ExtensionProperty.onPremisesDistinguishedName }} ;
         # get mgr OU, not DN: ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1 ) -join ','
-        $propsAADMgr = 'UserPrincipalName','Mail',@{Name='OpOU';Expression={($_.ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;
+        $propsAADMgr = 'UserPrincipalName','Mail',
+            @{Name='OpOU';Expression={($_.ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;
         $propsAADMgrL1 = 'UserPrincipalName','Mail' ;
         $propsAADMgrL2 = @{Name='OpOU';Expression={($_.ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;
 
@@ -10869,14 +10899,53 @@ function resolve-user {
                         $smsg = "(TOR USER, fed:$($TORMeta.adforestname))" ;
                         $hSum.Federator = $TORMeta.adforestname ;
                         write-host -Fore yellow $smsg ;
+                        
+                        <#
                         if($hSum.OPRemoteMailbox){
                             $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
                         } ;
                         if($hSum.OPMailbox){
                             $smsg =  "$(($hSum.OPMailbox |fl $propsMailx|out-string).trim())" ;
                         } ;
-                        $smsg += "`n$(($hSum.ADUser |fl $propsADUsht  |out-string).trim())"
+                        #>
+                        # swap to md tbl fmt
+                        if($hSum.OPRemoteMailbox){$MailRecip = $hSum.OPRemoteMailbox } ; 
+                        if($hSum.OPMailbox){$MailRecip = $hSum.OPMailbox } ; 
+                        $smsg = "$(($MailRecip| select $propsMailxL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                        $smsg += "`n$(($MailRecip|select $propsMailxL2 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        $smsg += "`n$(($MailRecip|select $propsMailxL3 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        #$smsg += "`n$(($MailRecip|select $propsMailxL4 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        #$smsg += "`n$(($MailRecip|select $propsMailxL4 | fl |out-string).trim())" ;
+                        # drop L4 it's DN, which is already in ADU md tbl
+                        # flip dn L4 to fl (suppress crlf)
+
                         write-host $smsg ;
+                        #if($MailRecip.ForwardingAddress){
+                        #    $smsg += "`n$(($MailRecip|select $propsMailxL5 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        #} ; 
+                        <#
+                        if($hSum.OPRemoteMailbox -AND $hSum.OPRemoteMailbox.ForwardingAddress){
+                            write-host $smsg ; # write pending primary (using ww on next)
+                            #$smsg = "==FORWARDED rMBX!:`n$(($hSum.OPRemoteMailbox  |ft -a ForwardingAddress,DeliverToMailboxAndForward,ForwardingSmtpAddress|out-string).trim())" ;
+                            $smsg = "==FORWARDED rMBX!:" ; 
+                            $smsg += "`n$(($MailRecip|select $propsMailxL5 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        } ;
+                        if($hSum.OPMailbox -AND $hSum.OPMailbox.ForwardingAddress){
+                            write-host $smsg ; # write pending primary (using ww on next)
+                            $smsg = "==FORWARDED opMBX!:`n$(($hSum.OPMailbox |ft -a ForwardingAddress,DeliverToMailboxAndForward,ForwardingSmtpAddress|out-string).trim())" ;
+                        } ;
+                        #>
+                        if($hSum.OPRemoteMailbox.ForwardingAddress -OR $hSum.OPMailbox.ForwardingAddress){
+                            write-host $smsg ; # echo pending, using ww below
+                            $smsg = "==FORWARDED rMBX!:" ; 
+                            $smsg += "`n$(($MailRecip|select $propsMailxL5 |out-markdowntable @MDtbl|out-string).trim())" ;
+                            write-warning $smsg ;
+                        } ; 
+
+                        #$smsg += "`n$(($hSum.ADUser |fl $propsADUsht  |out-string).trim())"
+                        # these are already in the ADU md tbl dump, drop them
+                        #$smsg = "$(($hSum.ADUser |fl $propsADUsht  |out-string).trim())"
+                        #write-host $smsg ;
                     } ;
                 } CATCH {
                     $ErrTrapd=$Error[0] ;
@@ -11304,7 +11373,15 @@ function resolve-user {
                     $smsg += "`n$(($hSum.ADUser|select $propsADL2 |out-markdowntable @MDtbl|out-string).trim())" ;
                     $smsg += "`n$(($hSum.ADUser|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                     $smsg += "`n$(($hSum.ADUser|select $propsADL4 |out-markdowntable @MDtbl|out-string).trim())" ;
+                    <# $propsADL5 = 'whenCreated','whenChanged' ; 
+                    $propsADL6 = @{Name='Desc';Expression={$_.Description }} ;
+                    #>
+                    $smsg += "`n$(($hSum.ADUser|select $propsADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
+                    # stick desc on trailing line $propsADL5
                     #$smsg += "`n$(($hSum.ADUser|select $propsADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
+                    # flip L5 to fl (suppress crlf wrap)
+                    $smsg += "`n$(($hSum.ADUser|select $propsADL6 |Format-List|out-string).trim())" ;
+
                     # moved DN into adl4, w enabled
                     #$smsg += "`n`$ADUser.DN:`n$(($hsum.aduser.DistinguishedName|out-string).trim())" ;
                     #$smsg += "`n$($hSum.ADUser|select Enabled,distinguishedname| convertTo-MarkdownTable -NoDashRow -Border) `$ADUser.DN:`n$(($hsum.aduser.DistinguishedName|out-string).trim())" ;
@@ -11332,7 +11409,7 @@ function resolve-user {
                 } ;
                 if($hSum.ADUser){$hSum.LicenseGroup = $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
 
-                $smsg = "$(($hSum.MsolUser|fl $propsLic|out-string).trim())`n" ;
+                $smsg = "$(($hSum.MsolUser|Format-List $propsLic|out-string).trim())`n" ;
                 $smsg += "Licenses Assigned:$(($hSum.MsolUser.licenses.AccountSkuId -join '; '|out-string).trim())" ;
                 if($hSum.MsolUser.LicenseReconciliationNeeded){
                     write-WARNING $smsg ;
@@ -11353,7 +11430,7 @@ function resolve-user {
                     write-host -foreground yellow "===`$hSum.AADUserMgr: " #-nonewline;
                     $smsg = "$(($hSum.AADUserMgr| select $propsAADMgrL1 |out-markdowntable @MDtbl |out-string).trim())" ;
                     #$smsg += "`n$(($hSum.AADUserMgr|select $propsAADMgrL2 |out-markdowntable @MDtbl|out-string).trim())" ;
-                    $smsg += "`n$(($hSum.AADUserMgr|fl $propsAADMgrL2|out-string).trim())" ;
+                    $smsg += "`n$(($hSum.AADUserMgr|Format-List $propsAADMgrL2|out-string).trim())" ;
                     #$smsg += "`n$(($hSum.AADUserMgr|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                 } else {
                     $smsg += "(AADUserMgr was blank, or unresolved)" ;

@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 2.0.8.0
+  Version     : 2.0.7.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -10357,8 +10357,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 2:51 PM 12/27/2021 flipped DN & Desc from md tbl to fl (drops a crlf) ; 
-         flipped $propsMailx output to md fmt split lines (condensed output vertically) ; 
+    * 1:59 PM 12/27/2021 flipped $propsMailx output to md fmt split lines (condensed output vertically) ; 
          added forward props to propsMailx, and test & echo to tag forwarded mbxs; wrapped $prop* vari's for legibility
     * 11:02 AM 12/13/2021 #11111:had $hsum IsADDisabled, typo: to IsAADDisabled
     * 2:40 PM 12/10/2021 more cleanup ; added $hsum.isDirSynced, for further bulk filter/profiling
@@ -10528,8 +10527,7 @@ function resolve-user {
         $propsADL4 = 'Enabled',@{Name='DN';Expression={$_.DistinguishedName }} ;
         #$propsADL4 = @{Name='Dsync';Expression={$_.DirSyncEnabled }}, @{Name='ImutID';Expression={$_.ImmutableId }}, @{Name='LastDSync';Expression={$_.LastDirSyncTime }}, @{Name='UseLoc';Expression={$_.UsageLocation }};
         #$propsADL5 = 'ObjectType','UserType' ;
-        $propsADL5 = 'whenCreated','whenChanged' ; 
-        $propsADL6 = @{Name='Desc';Expression={$_.Description }} ;
+        $propsADL5 = @{Name='Desc';Expression={$_.Description }} ;
 
         # line1-5 AADU outputs
         <# full size
@@ -10914,12 +10912,7 @@ function resolve-user {
                         $smsg = "$(($MailRecip| select $propsMailxL1 |out-markdowntable @MDtbl |out-string).trim())" ;
                         $smsg += "`n$(($MailRecip|select $propsMailxL2 |out-markdowntable @MDtbl|out-string).trim())" ;
                         $smsg += "`n$(($MailRecip|select $propsMailxL3 |out-markdowntable @MDtbl|out-string).trim())" ;
-                        #$smsg += "`n$(($MailRecip|select $propsMailxL4 |out-markdowntable @MDtbl|out-string).trim())" ;
-                        #$smsg += "`n$(($MailRecip|select $propsMailxL4 | fl |out-string).trim())" ;
-                        # drop L4 it's DN, which is already in ADU md tbl
-                        # flip dn L4 to fl (suppress crlf)
-
-                        write-host $smsg ;
+                        $smsg += "`n$(($MailRecip|select $propsMailxL4 |out-markdowntable @MDtbl|out-string).trim())" ;
                         #if($MailRecip.ForwardingAddress){
                         #    $smsg += "`n$(($MailRecip|select $propsMailxL5 |out-markdowntable @MDtbl|out-string).trim())" ;
                         #} ; 
@@ -11373,15 +11366,8 @@ function resolve-user {
                     $smsg += "`n$(($hSum.ADUser|select $propsADL2 |out-markdowntable @MDtbl|out-string).trim())" ;
                     $smsg += "`n$(($hSum.ADUser|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                     $smsg += "`n$(($hSum.ADUser|select $propsADL4 |out-markdowntable @MDtbl|out-string).trim())" ;
-                    <# $propsADL5 = 'whenCreated','whenChanged' ; 
-                    $propsADL6 = @{Name='Desc';Expression={$_.Description }} ;
-                    #>
-                    $smsg += "`n$(($hSum.ADUser|select $propsADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
                     # stick desc on trailing line $propsADL5
-                    #$smsg += "`n$(($hSum.ADUser|select $propsADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
-                    # flip L5 to fl (suppress crlf wrap)
-                    $smsg += "`n$(($hSum.ADUser|select $propsADL6 |Format-List|out-string).trim())" ;
-
+                    $smsg += "`n$(($hSum.ADUser|select $propsADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
                     # moved DN into adl4, w enabled
                     #$smsg += "`n`$ADUser.DN:`n$(($hsum.aduser.DistinguishedName|out-string).trim())" ;
                     #$smsg += "`n$($hSum.ADUser|select Enabled,distinguishedname| convertTo-MarkdownTable -NoDashRow -Border) `$ADUser.DN:`n$(($hsum.aduser.DistinguishedName|out-string).trim())" ;
@@ -11409,7 +11395,7 @@ function resolve-user {
                 } ;
                 if($hSum.ADUser){$hSum.LicenseGroup = $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
 
-                $smsg = "$(($hSum.MsolUser|Format-List $propsLic|out-string).trim())`n" ;
+                $smsg = "$(($hSum.MsolUser|fl $propsLic|out-string).trim())`n" ;
                 $smsg += "Licenses Assigned:$(($hSum.MsolUser.licenses.AccountSkuId -join '; '|out-string).trim())" ;
                 if($hSum.MsolUser.LicenseReconciliationNeeded){
                     write-WARNING $smsg ;
@@ -11430,7 +11416,7 @@ function resolve-user {
                     write-host -foreground yellow "===`$hSum.AADUserMgr: " #-nonewline;
                     $smsg = "$(($hSum.AADUserMgr| select $propsAADMgrL1 |out-markdowntable @MDtbl |out-string).trim())" ;
                     #$smsg += "`n$(($hSum.AADUserMgr|select $propsAADMgrL2 |out-markdowntable @MDtbl|out-string).trim())" ;
-                    $smsg += "`n$(($hSum.AADUserMgr|Format-List $propsAADMgrL2|out-string).trim())" ;
+                    $smsg += "`n$(($hSum.AADUserMgr|fl $propsAADMgrL2|out-string).trim())" ;
                     #$smsg += "`n$(($hSum.AADUserMgr|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                 } else {
                     $smsg += "(AADUserMgr was blank, or unresolved)" ;
@@ -13476,8 +13462,8 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU84CN8eGL49kg7f+eV9Ay1cjK
-# 1KWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUd45FzApL7gaec0hPMiNzD/4t
+# 57GgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -13492,9 +13478,9 @@ Export-ModuleMember -Function check-EXOLegalHold,Connect-ExchangeOnlineTargetedP
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQX45r9
-# HEHi03JzqQqZAT+fdG/+MzANBgkqhkiG9w0BAQEFAASBgEmWnfQOFswrmdmcCYP1
-# 7x40EcbCKINuEZEp/Lr5LQRDdLZq4tf8cdJwqhpYO99uHYFyesM9nfLf6B2fCvDK
-# Dz+Jo9pacOAedzONpsfAbBgy+Y8hO8zcNDgEAj0CYaR1koL7RrIeGjGVNLwWInbQ
-# +VkgWq4fJVzY8IjZIE30id4o
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQmxgNj
+# wJR/v12GtKtJ6kA7aP7W0jANBgkqhkiG9w0BAQEFAASBgCa9R1BGs7P+x8yLpW15
+# CT/wHYeDFprAsWlaaxTYsqU1n8iCvLi5AMjDrST0MrTQyTj8pHzcmXolw38OPz/P
+# ZM1qd3oLqLzHzf4JYqMcQMLFkc8lPdEtMjUdr9PgVaglWzYqUvX37DabYxn0poXi
+# 64UvMYurqG/IXqCUnuYPcly4
 # SIG # End signature block
