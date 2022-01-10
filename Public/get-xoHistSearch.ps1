@@ -18,6 +18,7 @@ function get-xoHistSearch {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:44 PM 1/6/2022 updated example2 to have start/end rather than days; added region tags for bracketed blocks of code
     * 2:40 PM 12/10/2021 more cleanup 
     * 12:49 PM 9/28/2021 init; added MsgID support; added MsgID example
     .DESCRIPTION
@@ -45,12 +46,13 @@ function get-xoHistSearch {
     .OUTPUTS
     Returns report to pipeline
     .EXAMPLE
-    PS> $pltHS = [ordered]@{ Ticket = 999999;
-            Requester = 'uid@domain.com' ;
+    PS> $pltHS = [ordered]@{ 
+            Ticket = TICKET;
+            Requester = 'REQUESTOR' ;
             Days = 30 ;
             Recipient = $null ;
-            Sender = 'sender@domain.com' ;
-            NotifyAddress = 'notify@domain.com' ;
+            Sender = 'SENDER@DOMAIN.COM' ;
+            NotifyAddress = 'NOTIFY@DOMAIN.COM' ;
             verbose = $true ;
             showdebug = $true ;
          } ;
@@ -58,19 +60,21 @@ function get-xoHistSearch {
     get-xoHistSearch @pltHS ;
     Demo splatted-params search against Days and Sender
     .EXAMPLE
-    PS> $pltHS = [ordered]@{ Ticket = 'toddvac';
-            Requester = 'uid@domain.com' ;;
-            Days = 25 ;
-            Recipient = $null ;
-            Sender = sender@domain.com' ;
-            NotifyAddress = 'notify@domain.com' ;
-            MessageId = '<xxxxxx...@CH0PR04MB8147.namprd04.prod.outlook.com>' ;
-            verbose = $true ;
-            showdebug = $true ;
-        } ;
-        write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):get-xoHistSearch w`n$(($pltHS|out-string).trim())" ;
-        get-xoHistSearch @pltHS ;
-        Demo splatted-params MessageID HistoricalSearch
+    PS> $pltHS = [ordered]@{ 
+        Ticket = 'TICKET';
+        Requester = 'REQUESTOR' ;;
+        StartDate = (get-date 'TIMESTAMP').AddMinutes(-5) ;
+        EndDate = (get-date 'TIMESTAMP').AddMinutes(60) ; ; 
+        Recipient = $null ;
+        Sender = 'SENDER' ;
+        NotifyAddress = 'todd.kadrie@toro.com' ;
+        MessageId = '<CH2PR04MB6886105FBBEB2C3FB2DD9D0DF4759@CH2PR04MB6886.namprd04.prod.outlook.com>' ;
+        verbose = $true ;
+        showdebug = $true ;
+    } ;
+    write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):get-xoHistSearch w`n$(($pltHS|out-string).trim())" ;
+    get-xoHistSearch @pltHS ;
+    Demo splatted-params -MessageID HistoricalSearch with Start & EndDates bracketing timestamp (from problem message)
     .LINK
     https://docs.microsoft.com/en-us/powershell/module/exchange/get-historicalsearch
     .LINK
@@ -170,8 +174,7 @@ function get-xoHistSearch {
         if($showDebug){
             write-host -foregroundcolor green "`SHOWDEBUG: `$ScriptDir:$($ScriptDir)`n`$ScriptBaseName:$($ScriptBaseName)`n`$ScriptNameNoExt:$($ScriptNameNoExt)`n`$PSScriptRoot:$($PSScriptRoot)`n`$PSCommandPath:$($PSCommandPath)" ;
         } ;
-
-        #====== v EMAIL HANDLING BOILERPLATE (USE IN SUB MAIN) v==================================
+        #region EMAIL_HANDLING_BOILERPLATE ; #====== v EMAIL HANDLING BOILERPLATE (USE IN SUB MAIN) v==================================
         $bodyAsHtml=$true ;
         $smtpPriority="Normal";
         # SMTP port (default is 25)
@@ -206,7 +209,9 @@ function get-xoHistSearch {
         # setup body as a hash
         $smtpBody = @() ;
         # (`n = CrLf in body)
-        #====== ^ EMAIL HANDLING BOILERPLATE (USE IN SUB MAIN) ^==================================
+        #endregion EMAIL_HANDLING_BOILERPLATE ; #====== ^ EMAIL HANDLING BOILERPLATE (USE IN SUB MAIN) ^ ==================================
+
+        #*======v FUNCTIONS v======
 
         #-------v Function _cleanup v-------
         function _cleanup {
@@ -464,6 +469,8 @@ $($smtpBody)
             } ;
         } #*------^ END Function _cleanup ^------
 
+        #*======^ END FUNCTIONS ^======
+
         #*======v SUB MAIN  v====== (not really, but it's a landmark for post-functions exec)
 
         #rx10 -Verbose:$false ;
@@ -480,7 +487,7 @@ $($smtpBody)
         # add try catch as well - this may be making it zero-tolerance and catching all minor errors, disable it
         #Set-StrictMode -Version 2.0 ;
 
-        #*------v SERVICE CONNECTIONS v------
+        #region SERVICE_CONNECTIONS #*------v SERVICE CONNECTIONS v------
         #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         # steer all onprem code on $XXXMeta.ExOPAccessFromToro & Ex10Server values
         $UseOP=$false ;
@@ -501,7 +508,7 @@ $($smtpBody)
 
         $useEXO = $true ; # non-dyn setting, drives variant EXO reconnect & query code
         if($useEXO){
-            #*------v GENERIC EXO CREDS & SVC CONN BP v------
+            #region GENERIC_EXO_CREDS_&_SVC_CONN #*------v GENERIC EXO CREDS & SVC CONN BP v------
             # o365/EXO creds
             <### Usage: Type defaults to SID, if not spec'd - Note: there must be a *logged in & configured *profile*
             $o365Cred=get-TenantCredentials -TenOrg $TenOrg -verbose -userrole SID ;
@@ -550,11 +557,11 @@ $($smtpBody)
                 Credential = (Get-Variable -name cred$($tenorg) ).value ;
                 #verbose = $($verbose) ;
                 Verbose = $FALSE ; Silent = $true ;} ;
-            #*------^ END GENERIC EXO CREDS & SVC CONN BP ^------
+            #endregion GENERIC_EXO_CREDS_&_SVC_CONN #*------^ END GENERIC EXO CREDS & SVC CONN BP ^------
         } # if-E $useEXO
 
         if($UseOP){
-            #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
+            #region GENERIC_EXOP_CREDS_&_SRVR_CONN #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
             # do the OP creds too
             $OPCred=$null ;
             # default to the onprem svc acct
@@ -595,25 +602,27 @@ $($smtpBody)
                 Verbose = $FALSE ; Silent = $true ; } ;
 
             # defer cx10/rx10, until just before get-recipients qry
-            #*------^ END GENERIC EXOP CREDS & SRVR CONN BP ^------
+            #endregion GENERIC_EXOP_CREDS_&_SRVR_CONN #*------^ END GENERIC EXOP CREDS & SRVR CONN BP ^------
             # connect to ExOP X10
             if($pltRX10){
                 #ReConnect-Ex2010XO @pltRX10 ;
                 ReConnect-Ex2010 @pltRX10 ;
             } else { Reconnect-Ex2010 ; } ;
-        } ;  # if-E $useEXOP
+        } ;  # if-E $useOP
 
-        <# already confirmed in modloads
-        # load ADMS
-        $reqMods += "load-ADMS".split(";") ;
-        if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
-        #>
-        write-host -foregroundcolor gray  "(loading ADMS...)" ;
-        #write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MSG" ;
-
-        load-ADMS -Verbose:$FALSE ;
-
+        
         if($UseOP){
+            #region GENERIC_ADMS_CONN_&_XO #*------v GENERIC ADMS CONN & XO  v------
+            <# already confirmed in modloads
+            # load ADMS
+            $reqMods += "load-ADMS".split(";") ;
+            if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
+            #>
+            write-host -foregroundcolor gray  "(loading ADMS...)" ;
+            #write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MSG" ;
+
+            load-ADMS -Verbose:$FALSE ;
+
             # resolve $domaincontroller dynamic, cross-org
             # setup ADMS PSDrives per tenant
             if(!$global:ADPsDriveNames){
@@ -652,24 +661,27 @@ $($smtpBody)
         #if(!$domaincontroller){ if(test-path function:get-gcfast){$domaincontroller=get-gcfast} else { throw "no get-gcfast()!" } ;} else {"(existing `$domaincontroller:$($domaincontroller))"} ;
         # use new get-GCFastXO cross-org dc finde
         # default to Op_ExADRoot forest from $TenOrg Meta
-        $domaincontroller = get-GCFastXO -TenOrg $TenOrg -subdomain ((Get-Variable -name "$($TenOrg)Meta").value['OP_ExADRoot']) -verbose:$($verbose) |Where-Object{$_.length};
+        #$domaincontroller = get-GCFastXO -TenOrg $TenOrg -subdomain ((Get-Variable -name "$($TenOrg)Meta").value['OP_ExADRoot']) -verbose:$($verbose) |Where-Object{$_.length};
+        #endregion GENERIC_ADMS_CONN_&_XO #*------^ END GENERIC ADMS CONN & XO ^------
 
-
-        <# MSOL CONNECTION
+        <# 
+        #region MSOL_CONNECTION ; #*------v  MSOL CONNECTION v------ 
         $reqMods += "connect-msol".split(";") ;
         if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
         write-host -foregroundcolor gray  "(loading AAD...)" ;
         #connect-msol ;
         connect-msol @pltRXO ;
+        #endregion MSOL_CONNECTION ; #*------^  MSOL CONNECTION ^------ 
         #>
 
         <#
-        # AZUREAD CONNECTION
+        #region AZUREAD_CONNECTION ; #*------v AZUREAD CONNECTION v------ 
         $reqMods += "Connect-AAD".split(";") ;
         if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
         write-host -foregroundcolor gray  "(loading AAD...)" ;
         #connect-msol ;
         Connect-AAD @pltRXO ;
+        #region AZUREAD_CONNECTION ; #*------^ AZUREAD CONNECTION ^------ 
         #>
 
 
@@ -693,7 +705,7 @@ $($smtpBody)
             $verbose = ($VerbosePreference -eq "Continue") ;
         } ;
         #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-        #*------^ END SERVICE CONNECTIONS ^------
+        #endregion SERVICE_CONNECTIONS #*------^ END SERVICE CONNECTIONS ^------
 
 
         $error.clear() ;
@@ -726,7 +738,7 @@ $($smtpBody)
             Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
         } ;
 
-        #*======V CONFIGURE DEFAULT LOGGING FROM PARENT SCRIPT NAME v======
+        #region CONFIGURE_DEFAULT_LOGGING_FROM_PARENT_SCRIPT_NAME #*======V CONFIGURE DEFAULT LOGGING FROM PARENT SCRIPT NAME v======
         if(!(get-variable LogPathDrives -ea 0)){$LogPathDrives = 'd','c' };
         foreach($budrv in $LogPathDrives){if(test-path -path "$($budrv):\scripts" -ea 0 ){break} } ;
         if(!(get-variable rgxPSAllUsersScope -ea 0)){
@@ -789,7 +801,7 @@ $($smtpBody)
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
             else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         } ;
-        #*======^ CONFIGURE DEFAULT LOGGING FROM PARENT SCRIPT NAME ^======
+        #endregion CONFIGURE_DEFAULT_LOGGING_FROM_PARENT_SCRIPT_NAME #*======^ CONFIGURE DEFAULT LOGGING FROM PARENT SCRIPT NAME ^======
 
 
 
