@@ -819,7 +819,13 @@ resolve-user:pv
 Resolve-xoRcps:Recipients
 Resolve-xoRcps:MatchRecipientTypeDetails
 Resolve-xoRcps:BlockRecipientTypeDetails
+Resolve-xoRcps:getGroups
+Resolve-xoRcps:getRecipients
+Resolve-xoRcps:getMailboxPrincipals
 Resolve-xoRcps:useEXOv2
+Resolve-xoRcps:PreviewThreshold
+Resolve-xoRcps:UpdateInterval
+Resolve-xoRcps:returnObject
 Resolve-xoRcps:Verbose
 Resolve-xoRcps:vb
 Resolve-xoRcps:Debug
