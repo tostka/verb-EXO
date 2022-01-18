@@ -36,14 +36,14 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
     https://github.com/tostka/verb-EXO
     #>
     ##Requires -Version 2.0
-    #Requires -Version 3
-    #requires -PSEdition Desktop
-    ##requires -PSEdition Core
     ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Network, verb-Text
-    #Requires -RunasAdministrator
+    ##requires -PSEdition Core
     ##Requires -PSSnapin Microsoft.Exchange.Management.PowerShell.E2010
     ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, MicrosoftTeams, SkypeOnlineConnector, Lync,  verb-AAD, verb-ADMS, verb-Auth, verb-Azure, VERB-CCMS, verb-Desktop, verb-dev, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Mods, verb-Network, verb-L13, verb-SOL, verb-Teams, verb-Text, verb-logging
-    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Network, verb-Text
+    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-IO, verb-logging, verb-Network, verb-Text
+    #Requires -RunasAdministrator
+    #Requires -Version 3
+    #requires -PSEdition Desktop
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
