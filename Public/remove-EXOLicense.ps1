@@ -18,6 +18,7 @@ function remove-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:14 PM 1/18/2022 REM'D EXOP conn's (match add-exolic), this is pure msolu & exo. 
     * 1:02 PM 1/17/2022 port of add-EXOLicense to removal process
     .DESCRIPTION
     remove-EXOLicense.ps1 - Remove a temporary o365 license from specified MsolUser account. Returns updated MSOLUser object to pipeline.
@@ -38,26 +39,40 @@ function remove-EXOLicense {
     .OUTPUTS
     System.Object - returns summary report to pipeline
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose  ;
+    PS> remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -ticket TICKETNUMBER -verbose  ;
     Process an array of users, with default 'hunting' -LicenseSkuIds array. 
     .EXAMPLE
-    PS> $updatedMSOLU = remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose ;
+    PS> $updatedMSOLU = remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose -ticket TICKETNUMBER;
         if($updatedMSOLU.islicensed){'Y'} else { 'N'} ; 
     Process licnse removal for specified user, and post-test isLicensed status, using default license array configured on the -LicenseSkuIDs default value.
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd ;
+    PS> $whatif=$true ;
+        $target = '99999,lynctest15@toro.com' ;
+        if($target.contains(',')){
+            $ticket,$trcp = $target.split(',') ;
+            $updatedmsolu = remove-EXOLicense -users $trcp -Ticket $ticket -whatif:$($whatif) ;
+            $props1 = 'UserPrincipalName','DisplayName','IsLicensed' ;
+            $props2 = @{Name='Licenses';
+            Expression={$_.licenses.accountskuid -join ', '}}  ;
+            $smsg = "$((get-date).ToString('HH:mm:ss')):UpdatedMsolU: w`n$(($updatedmsolu| ft -auto $props1|out-string).trim())" ;
+            $smsg += "`n$(($updatedmsolu| fl $props2 |out-string).trim())" ;
+            write-host -foregroundcolor green $smsg ;
+        } else { write-warning "`$target does *not* contain comma delimited ticket,UPN string!"} ;
+    Fancier variant of above, with more post-confirm reporting
+    .EXAMPLE
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd -ticket TICKETNUMBER;
     removal an explictly specified lic to a user (in this case, using the LicenseSku for EXCHANGESTANDARD, as stored in a global variable)
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 ;
-    removal an expliictly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 -ticket TICKETNUMBER;
+    removal an explicitly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 ;
-    removal an expliictly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 -ticket TICKETNUMBER;
+    removal an explicitly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' ;
-    removal an expliictly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' -ticket TICKETNUMBER;
+    removal an explicitly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
     .EXAMPLE
-    PS> remove-o365License -$MsoLUser.UserprincipalName 
+    PS> remove-o365License -$MsoLUser.UserprincipalName -ticket TICKETNUMBER ;
     remove-o365License compatibility option
     .LINK
     https://github.com/tostka/verb-exo
@@ -417,6 +432,7 @@ function remove-EXOLicense {
         #region GENERIC_EXOP_CREDS_&_SRVR_CONN #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
         # steer all onprem code on $XXXMeta.ExOPAccessFromToro & Ex10Server values
         $UseExOP=$true ;
+        <# no onprem dep
         if((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro -AND (Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server){
             $UseExOP = $true ;
             $smsg = "$($TenOrg):Meta.ExOPAccessFromToro($((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro)) -AND/OR Meta.Ex10Server($((Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server)),`ENABLING use of OnPrem Ex system this pass." ;
@@ -428,6 +444,7 @@ function remove-EXOLicense {
             if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
         } ;
+        #>
         if($UseExOP){
             #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
             # do the OP creds too
