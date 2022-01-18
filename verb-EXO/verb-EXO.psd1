@@ -12,7 +12,7 @@
 RootModule = 'verb-EXO.psm1'
 
 # Version number of this module.
-ModuleVersion = '2.1.1'
+ModuleVersion = '2.1.2'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -69,7 +69,7 @@ Description = 'Powershell Exchange Online generic functions module'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('check-EXOLegalHold','Connect-ExchangeOnlineTargetedPurge','Test-Uri','Connect-EXO','Connect-EXO2','Test-Uri','connect-EXO2old','Connect-EXOPSSession','connect-EXOv2RAW','Connect-IPPSSessionTargetedPurge','convert-HistoricalSearchCSV','copy-XPermissionGroupToCloudOnly','cxo2cmw','cxo2TOL','cxo2TOR','cxo2VEN','cxoCMW','cxoTOL','cxoTOR','cxoVEN','Disconnect-ExchangeOnline','Disconnect-EXO','Disconnect-EXO2','get-EXOMsgTraceDetailed','get-MailboxFolderStats','get-MsgTrace','Get-OrgNameFromUPN','get-xoHistSearch','_cleanup','Invoke-ExoOnlineConnection','move-MailboxToXo','check-ReqMods','new-DgTor','_cleanup','new-xoDGFromProperty','Print-Details','Reconnect-EXO','Reconnect-EXO2','Reconnect-EXO2old','RemoveExistingEXOPSSession','RemoveExistingPSSessionTargeted','Remove-EXOBrokenClosed','resolve-Name','resolve-user','Resolve-xoRcps','rxo2CMW','rxo2TOL','rxo2TOR','rxo2VEN','rxoCMW','rxoTOL','rxoTOR','rxoVEN','test-ExoPSession','test-EXOToken','test-xoMailbox','_cleanup')
+FunctionsToExport = @('check-EXOLegalHold','Connect-ExchangeOnlineTargetedPurge','Test-Uri','Connect-EXO','Connect-EXO2','Test-Uri','connect-EXO2old','Connect-EXOPSSession','connect-EXOv2RAW','Connect-IPPSSessionTargetedPurge','convert-HistoricalSearchCSV','copy-XPermissionGroupToCloudOnly','cxo2cmw','cxo2TOL','cxo2TOR','cxo2VEN','cxoCMW','cxoTOL','cxoTOR','cxoVEN','Disconnect-ExchangeOnline','Disconnect-EXO','Disconnect-EXO2','get-ADUsersWithSoftDeletedxoMailboxes','get-EXOMsgTraceDetailed','get-MailboxFolderStats','get-MsgTrace','Get-OrgNameFromUPN','get-xoHistSearch','_cleanup','Invoke-ExoOnlineConnection','move-MailboxToXo','check-ReqMods','new-DgTor','_cleanup','new-xoDGFromProperty','Print-Details','Reconnect-EXO','Reconnect-EXO2','Reconnect-EXO2old','RemoveExistingEXOPSSession','RemoveExistingPSSessionTargeted','Remove-EXOBrokenClosed','resolve-Name','resolve-user','Resolve-xoRcps','rxo2CMW','rxo2TOL','rxo2TOR','rxo2VEN','rxoCMW','rxoTOL','rxoTOR','rxoVEN','test-ExoPSession','test-EXOToken','test-xoMailbox','_cleanup')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
@@ -126,8 +126,8 @@ PrivateData = @{
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU2yfJEo/QDuQhnFwpGdfCBgJ8
-# mn2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU5qrlW9QVefxgqQDGUUlyEE1M
+# eZ6gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -142,9 +142,9 @@ PrivateData = @{
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRmI3br
-# zggGnbANIPSrOgO7Jap6MTANBgkqhkiG9w0BAQEFAASBgJtg+uehX1sK3VwMO8CW
-# Ex6W7fWkubWVB9C7gonBXvopjmr5SobbAX2FFdLX7Rp7AzCB9BHys/TNfyyLU914
-# LOWWL+3nLBfKW9aUMwGhgdjcgK+q6O0qKQhIvWQlEAgvzJJMiF4rZYb9Ao/rUWTu
-# 3m85QyP5eW2PPb70c88PHGQu
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTFdG7g
+# rj7EvhnVq6ZigaTRdfgczjANBgkqhkiG9w0BAQEFAASBgEJsoGrxocuXbUmOOynk
+# vaPkIh+VGfteguf75XOuo+up6S3ODpVvG2L5emZOIb+HYvDBDHP5uw1PMsMZw4VT
+# eBWyFXCNSbyby5VqoN8U+3g65GVo4YEZt4BEMCCs795+aKkGDM5lcdD4wwyFnfh9
+# hTj1esoD28X55iaa5alxv0hX
 # SIG # End signature block
