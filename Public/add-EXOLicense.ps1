@@ -18,6 +18,7 @@ function add-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:14 PM 1/18/2022 updated Example 1 to include echo of the returned msolu.licenses value.
     * 12:08 PM 1/11/2022 ren add-EXOLicenseTemp -> add-EXOLicense ; add 
     $TORMETA.o365LicSkuExStd == EXCHANGESTANDARD (Office 365 Exchange Online Only 
     ,commonly used for App Access) & stick in front of $LicenseSkuIds, 
@@ -39,34 +40,58 @@ function add-EXOLicense {
     .PARAMETER outObject
     switch to return a system.object summary to the pipeline[-outObject]
     .INPUTS
-    None. Does not accepted piped input.(.NET types, can add description)
+    None. Does not accepted piped input.
     .OUTPUTS
-    System.Object - returns summary report to pipeline
+    Microsoft.Online.Administration.User
+    Returns updated MSOLUser object to pipeline
     .EXAMPLE
     PS> add-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose  ;
     Process an array of users, with default 'hunting' -LicenseSkuIds array. 
     .EXAMPLE
     PS> $updatedMSOLU = add-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose ;
-        if($updatedMSOLU.islicensed){'Y'} else { 'N'} ; 
-    Process licnse add for specified user, and post-test isLicensed status, using default license array configured on the -LicenseSkuIDs default value.
+        if($updatedMSOLU.islicensed){'Y' ; $updatedMSOLU.licenses } else { 'N' } ; 
+    Process license add for specified user, and post-test isLicensed status, using default license array configured on the -LicenseSkuIDs default value. Then echo the current licenses list (as returned in the updated MSOLUser object). 
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd ;
-    add an expliictly specified lic to a user (in this case, using the LicenseSku for EXCHANGESTANDARD, as stored in a global variable)
+PS> $whatif=$true ;
+    $target = 'TICKETNUMBER,USERUPN' ;
+    if($target.contains(',')){
+        $ticket,$trcp = $target.split(',') ;
+        $updatedmsolu = add-EXOLicense -users $trcp -Ticket $ticket -whatif:$($whatif) ;
+        $props1 = 'UserPrincipalName','DisplayName','IsLicensed' ;
+        $props2 = @{Name='Licenses';
+        Expression={$_.licenses.accountskuid -join ', '}}  ;
+        $smsg = "UpdatedMsolU: w`n$(($updatedmsolu| ft -auto $props1 |out-string).trim())" ;
+        $smsg += "`n:$(($updatedmsolu| fl $props2 |out-string).trim())" ;
+        write-host -foregroundcolor green $smsg ;
+        if(!$whatif){
+            write-host "dawdling until License reinflates mbx..." ;
+            $1F=$false ;
+            Do {
+                if($1F){Sleep -s 30} ;
+                write-host "." -NoNewLine ;
+                $1F=$true ;
+            } Until (get-exomailbox -id $trcp  -EA 0) ;
+            write-host "Mailbox reattached: Ready for conversion!" ;
+        } ;
+    } else { write-warning "`$target does *not* contain comma delimited ticket,UPN string!"} ;
+    Fancier variant of above, with more post-confirm reporting
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 ;
-    add an expliictly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd -ticket TICKETNUMBER;
+    add an explicitly specified lic to a user (in this case, using the LicenseSku for EXCHANGESTANDARD, as stored in a global variable)
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 ;
-    add an expliictly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 -ticket TICKETNUMBER;
+    add an explicitly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' ;
-    add an expliictly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 -ticket TICKETNUMBER ;
+    add an explicitly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> add-o365License -$MsoLUser.UserprincipalName 
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' -ticket TICKETNUMBER ;
+    add an explicitly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
+    .EXAMPLE
+    PS> add-o365License -$MsoLUser.UserprincipalName -ticket TICKETNUMBER ;
     add-o365License compatibility option
     .LINK
     https://github.com/tostka/verb-exo
-    .LINK
     #>
     ###Requires -Version 5
     ###Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
