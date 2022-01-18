@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 2.3.0.0
+  Version     : 2.2.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -63,7 +63,6 @@ function add-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 2:14 PM 1/18/2022 updated Example 1 to include echo of the returned msolu.licenses value.
     * 12:08 PM 1/11/2022 ren add-EXOLicenseTemp -> add-EXOLicense ; add 
     $TORMETA.o365LicSkuExStd == EXCHANGESTANDARD (Office 365 Exchange Online Only 
     ,commonly used for App Access) & stick in front of $LicenseSkuIds, 
@@ -85,58 +84,34 @@ function add-EXOLicense {
     .PARAMETER outObject
     switch to return a system.object summary to the pipeline[-outObject]
     .INPUTS
-    None. Does not accepted piped input.
+    None. Does not accepted piped input.(.NET types, can add description)
     .OUTPUTS
-    Microsoft.Online.Administration.User
-    Returns updated MSOLUser object to pipeline
+    System.Object - returns summary report to pipeline
     .EXAMPLE
     PS> add-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose  ;
     Process an array of users, with default 'hunting' -LicenseSkuIds array. 
     .EXAMPLE
     PS> $updatedMSOLU = add-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose ;
-        if($updatedMSOLU.islicensed){'Y' ; $updatedMSOLU.licenses } else { 'N' } ; 
-    Process license add for specified user, and post-test isLicensed status, using default license array configured on the -LicenseSkuIDs default value. Then echo the current licenses list (as returned in the updated MSOLUser object). 
+        if($updatedMSOLU.islicensed){'Y'} else { 'N'} ; 
+    Process licnse add for specified user, and post-test isLicensed status, using default license array configured on the -LicenseSkuIDs default value.
     .EXAMPLE
-PS> $whatif=$true ;
-    $target = 'TICKETNUMBER,USERUPN' ;
-    if($target.contains(',')){
-        $ticket,$trcp = $target.split(',') ;
-        $updatedmsolu = add-EXOLicense -users $trcp -Ticket $ticket -whatif:$($whatif) ;
-        $props1 = 'UserPrincipalName','DisplayName','IsLicensed' ;
-        $props2 = @{Name='Licenses';
-        Expression={$_.licenses.accountskuid -join ', '}}  ;
-        $smsg = "UpdatedMsolU: w`n$(($updatedmsolu| ft -auto $props1 |out-string).trim())" ;
-        $smsg += "`n:$(($updatedmsolu| fl $props2 |out-string).trim())" ;
-        write-host -foregroundcolor green $smsg ;
-        if(!$whatif){
-            write-host "dawdling until License reinflates mbx..." ;
-            $1F=$false ;
-            Do {
-                if($1F){Sleep -s 30} ;
-                write-host "." -NoNewLine ;
-                $1F=$true ;
-            } Until (get-exomailbox -id $trcp  -EA 0) ;
-            write-host "Mailbox reattached: Ready for conversion!" ;
-        } ;
-    } else { write-warning "`$target does *not* contain comma delimited ticket,UPN string!"} ;
-    Fancier variant of above, with more post-confirm reporting
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd ;
+    add an expliictly specified lic to a user (in this case, using the LicenseSku for EXCHANGESTANDARD, as stored in a global variable)
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd -ticket TICKETNUMBER;
-    add an explicitly specified lic to a user (in this case, using the LicenseSku for EXCHANGESTANDARD, as stored in a global variable)
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 ;
+    add an expliictly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 -ticket TICKETNUMBER;
-    add an explicitly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 ;
+    add an expliictly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 -ticket TICKETNUMBER ;
-    add an explicitly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' ;
+    add an expliictly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' -ticket TICKETNUMBER ;
-    add an explicitly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
-    .EXAMPLE
-    PS> add-o365License -$MsoLUser.UserprincipalName -ticket TICKETNUMBER ;
+    PS> add-o365License -$MsoLUser.UserprincipalName 
     add-o365License compatibility option
     .LINK
     https://github.com/tostka/verb-exo
+    .LINK
     #>
     ###Requires -Version 5
     ###Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
@@ -11226,7 +11201,6 @@ function remove-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 3:14 PM 1/18/2022 REM'D EXOP conn's (match add-exolic), this is pure msolu & exo. 
     * 1:02 PM 1/17/2022 port of add-EXOLicense to removal process
     .DESCRIPTION
     remove-EXOLicense.ps1 - Remove a temporary o365 license from specified MsolUser account. Returns updated MSOLUser object to pipeline.
@@ -11247,40 +11221,26 @@ function remove-EXOLicense {
     .OUTPUTS
     System.Object - returns summary report to pipeline
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -ticket TICKETNUMBER -verbose  ;
+    PS> remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose  ;
     Process an array of users, with default 'hunting' -LicenseSkuIds array. 
     .EXAMPLE
-    PS> $updatedMSOLU = remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose -ticket TICKETNUMBER;
+    PS> $updatedMSOLU = remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose ;
         if($updatedMSOLU.islicensed){'Y'} else { 'N'} ; 
     Process licnse removal for specified user, and post-test isLicensed status, using default license array configured on the -LicenseSkuIDs default value.
     .EXAMPLE
-    PS> $whatif=$true ;
-        $target = '99999,lynctest15@toro.com' ;
-        if($target.contains(',')){
-            $ticket,$trcp = $target.split(',') ;
-            $updatedmsolu = remove-EXOLicense -users $trcp -Ticket $ticket -whatif:$($whatif) ;
-            $props1 = 'UserPrincipalName','DisplayName','IsLicensed' ;
-            $props2 = @{Name='Licenses';
-            Expression={$_.licenses.accountskuid -join ', '}}  ;
-            $smsg = "$((get-date).ToString('HH:mm:ss')):UpdatedMsolU: w`n$(($updatedmsolu| ft -auto $props1|out-string).trim())" ;
-            $smsg += "`n$(($updatedmsolu| fl $props2 |out-string).trim())" ;
-            write-host -foregroundcolor green $smsg ;
-        } else { write-warning "`$target does *not* contain comma delimited ticket,UPN string!"} ;
-    Fancier variant of above, with more post-confirm reporting
-    .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd -ticket TICKETNUMBER;
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd ;
     removal an explictly specified lic to a user (in this case, using the LicenseSku for EXCHANGESTANDARD, as stored in a global variable)
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 -ticket TICKETNUMBER;
-    removal an explicitly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 ;
+    removal an expliictly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 -ticket TICKETNUMBER;
-    removal an explicitly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 ;
+    removal an expliictly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' -ticket TICKETNUMBER;
-    removal an explicitly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' ;
+    removal an expliictly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
     .EXAMPLE
-    PS> remove-o365License -$MsoLUser.UserprincipalName -ticket TICKETNUMBER ;
+    PS> remove-o365License -$MsoLUser.UserprincipalName 
     remove-o365License compatibility option
     .LINK
     https://github.com/tostka/verb-exo
@@ -11640,7 +11600,6 @@ function remove-EXOLicense {
         #region GENERIC_EXOP_CREDS_&_SRVR_CONN #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
         # steer all onprem code on $XXXMeta.ExOPAccessFromToro & Ex10Server values
         $UseExOP=$true ;
-        <# no onprem dep
         if((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro -AND (Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server){
             $UseExOP = $true ;
             $smsg = "$($TenOrg):Meta.ExOPAccessFromToro($((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro)) -AND/OR Meta.Ex10Server($((Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server)),`ENABLING use of OnPrem Ex system this pass." ;
@@ -11652,7 +11611,6 @@ function remove-EXOLicense {
             if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
         } ;
-        #>
         if($UseExOP){
             #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
             # do the OP creds too
@@ -15962,8 +15920,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUs05rHeA45ETfh5QnnARISMYk
-# YeqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU8wEti3TzoGQ4Ec1LjH0k+n3p
+# RNWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -15978,9 +15936,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQDUqoD
-# Ey7KyRXmn/nFSPZnYsAzbzANBgkqhkiG9w0BAQEFAASBgFKoSVTlYeA4HHJkLmLm
-# 5QchRXvpWnHUSrwbCuz0ft1Ll7Cg8ffEpt/2PkxjRgzzpyjw+vn0oNhikF58U62f
-# HvgPh/GYvqlN+2R0VPfMV6nWtMqd5RW/1UhWbC6vKunWx8zm/lQN3ua8jxKe4LsZ
-# EXx50OAw2zKMm7vc9F/s0ciz
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRkeOS8
+# 9O8Yq1wzIyMqeNyvpZMRRjANBgkqhkiG9w0BAQEFAASBgH2kW/LOHo6/gKOC4EJ2
+# tejtK/1BMTvK37+kTe4H2Fb1lzP0isqAvj8w+LXLMdkGeXsuBiSN54R9OR3m/G0L
+# SW7sbDHDfwB0EYBCzO5Z7wgtnS3PSyh5HIW4y85T1DrzNDAuLx6RJhx7XQvjwjwE
+# b4do8tPQPP+UrTJTCZkB/gt1
 # SIG # End signature block
