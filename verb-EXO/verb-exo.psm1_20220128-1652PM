@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 2.1.2.0
+  Version     : 2.3.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -63,6 +63,7 @@ function add-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:14 PM 1/18/2022 updated Example 1 to include echo of the returned msolu.licenses value.
     * 12:08 PM 1/11/2022 ren add-EXOLicenseTemp -> add-EXOLicense ; add 
     $TORMETA.o365LicSkuExStd == EXCHANGESTANDARD (Office 365 Exchange Online Only 
     ,commonly used for App Access) & stick in front of $LicenseSkuIds, 
@@ -84,40 +85,66 @@ function add-EXOLicense {
     .PARAMETER outObject
     switch to return a system.object summary to the pipeline[-outObject]
     .INPUTS
-    None. Does not accepted piped input.(.NET types, can add description)
+    None. Does not accepted piped input.
     .OUTPUTS
-    System.Object - returns summary report to pipeline
+    Microsoft.Online.Administration.User
+    Returns updated MSOLUser object to pipeline
     .EXAMPLE
     PS> add-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose  ;
     Process an array of users, with default 'hunting' -LicenseSkuIds array. 
     .EXAMPLE
     PS> $updatedMSOLU = add-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose ;
-        if($updatedMSOLU.islicensed){'Y'} else { 'N'} ; 
-    Process licnse add for specified user, and post-test isLicensed status, using default license array configured on the -LicenseSkuIDs default value.
+        if($updatedMSOLU.islicensed){'Y' ; $updatedMSOLU.licenses } else { 'N' } ; 
+    Process license add for specified user, and post-test isLicensed status, using default license array configured on the -LicenseSkuIDs default value. Then echo the current licenses list (as returned in the updated MSOLUser object). 
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd ;
-    add an expliictly specified lic to a user (in this case, using the LicenseSku for EXCHANGESTANDARD, as stored in a global variable)
+PS> $whatif=$true ;
+    $target = 'TICKETNUMBER,USERUPN' ;
+    if($target.contains(',')){
+        $ticket,$trcp = $target.split(',') ;
+        $updatedmsolu = add-EXOLicense -users $trcp -Ticket $ticket -whatif:$($whatif) ;
+        $props1 = 'UserPrincipalName','DisplayName','IsLicensed' ;
+        $props2 = @{Name='Licenses';
+        Expression={$_.licenses.accountskuid -join ', '}}  ;
+        $smsg = "UpdatedMsolU: w`n$(($updatedmsolu| ft -auto $props1 |out-string).trim())" ;
+        $smsg += "`n:$(($updatedmsolu| fl $props2 |out-string).trim())" ;
+        write-host -foregroundcolor green $smsg ;
+        if(!$whatif){
+            write-host "dawdling until License reinflates mbx..." ;
+            $1F=$false ;
+            Do {
+                if($1F){Sleep -s 30} ;
+                write-host "." -NoNewLine ;
+                $1F=$true ;
+            } Until (get-exomailbox -id $trcp  -EA 0) ;
+            write-host "Mailbox reattached: Ready for conversion!" ;
+        } ;
+    } else { write-warning "`$target does *not* contain comma delimited ticket,UPN string!"} ;
+    Fancier variant of above, with more post-confirm reporting
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 ;
-    add an expliictly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd -ticket TICKETNUMBER;
+    add an explicitly specified lic to a user (in this case, using the LicenseSku for EXCHANGESTANDARD, as stored in a global variable)
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 ;
-    add an expliictly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 -ticket TICKETNUMBER;
+    add an explicitly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' ;
-    add an expliictly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 -ticket TICKETNUMBER ;
+    add an explicitly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> add-o365License -$MsoLUser.UserprincipalName 
+    PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' -ticket TICKETNUMBER ;
+    add an explicitly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
+    .EXAMPLE
+    PS> add-o365License -$MsoLUser.UserprincipalName -ticket TICKETNUMBER ;
     add-o365License compatibility option
     .LINK
     https://github.com/tostka/verb-exo
-    .LINK
     #>
     ###Requires -Version 5
     ###Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
     ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-logging
     # stripped down, doesn't really need AAD, may not need balance.
-    #Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-Auth, verb-EXO, verb-IO, verb-logging, verb-Mods, verb-Text
+    ##Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-Auth, verb-EXO, verb-IO, verb-logging, verb-Mods, verb-Text
+    # migr to verb-exo, pull the dupe spec...
+    #Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-Auth, verb-IO, verb-logging, verb-Mods, verb-Text
     #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\s\regex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
@@ -4588,14 +4615,14 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
     https://github.com/tostka/verb-EXO
     #>
     ##Requires -Version 2.0
-    #Requires -Version 3
-    #requires -PSEdition Desktop
-    ##requires -PSEdition Core
     ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Network, verb-Text
-    #Requires -RunasAdministrator
+    ##requires -PSEdition Core
     ##Requires -PSSnapin Microsoft.Exchange.Management.PowerShell.E2010
     ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, MicrosoftTeams, SkypeOnlineConnector, Lync,  verb-AAD, verb-ADMS, verb-Auth, verb-Azure, VERB-CCMS, verb-Desktop, verb-dev, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Mods, verb-Network, verb-L13, verb-SOL, verb-Teams, verb-Text, verb-logging
     #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-IO, verb-logging, verb-Network, verb-Text
+    #Requires -RunasAdministrator
+    #Requires -Version 3
+    #requires -PSEdition Desktop
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
@@ -6384,7 +6411,6 @@ function get-xoHistSearch {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 1:56 PM 1/17/2022 cap load-adms output
     * 1:44 PM 1/6/2022 updated example2 to have start/end rather than days; added region tags for bracketed blocks of code
     * 2:40 PM 12/10/2021 more cleanup 
     * 12:49 PM 9/28/2021 init; added MsgID support; added MsgID example
@@ -6988,7 +7014,7 @@ $($smtpBody)
             write-host -foregroundcolor gray  "(loading ADMS...)" ;
             #write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MSG" ;
 
-            $ADMTLoaded = load-ADMS -Verbose:$FALSE ;
+            load-ADMS -Verbose:$FALSE ;
 
             # resolve $domaincontroller dynamic, cross-org
             # setup ADMS PSDrives per tenant
@@ -7470,7 +7496,6 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
-    * 1:44 PM 1/17/2022 cap load-adms output, out of pipe
     * 2:40 PM 12/10/2021 more cleanup 
     * 11:24 AM 9/16/2021 encoded eml
     # 10:46 AM 6/2/2021 sub'd verb-logging for v-trans
@@ -8070,7 +8095,7 @@ function move-MailboxToXo{
     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-    $ADMTLoaded = load-ADMS ;
+    load-ADMS ;
 
     # multi-org AD
     <#still needs ADMS mount-ADForestDrives() and set-location code @ 395 (had to recode mount-admforestdrives and debug cred production code & infra-string inputs before it would work; will need to dupe to suspend variant on final completion
@@ -8734,7 +8759,6 @@ function new-DgTor {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,DistributionGroup,DistributionList,Hybrid
     REVISIONS
-    * 1:56 PM 1/17/2022 cap load-adms output
     * 2:40 PM 12/10/2021 more cleanup 
     * 4:54 PM 9/30/2021 updated CloudFirst code, and used to create functional 
     exoDG, also added code to dynamically create onprem unreplicated MailContacts 
@@ -9389,7 +9413,7 @@ $($smtpBody)
     #region UseOPAD #*------v UseOPAD v------
     if($UseExOP){
         write-host -foregroundcolor gray  "(loading ADMS...)" ;
-        $ADMTLoaded = load-ADMS -Verbose:$FALSE ;
+        load-ADMS -Verbose:$FALSE ;
         # resolve $domaincontroller dynamic, cross-org
         # setup ADMS PSDrives per tenant 
         if(!$global:ADPsDriveNames){
@@ -11202,6 +11226,7 @@ function remove-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:14 PM 1/18/2022 REM'D EXOP conn's (match add-exolic), this is pure msolu & exo. 
     * 1:02 PM 1/17/2022 port of add-EXOLicense to removal process
     .DESCRIPTION
     remove-EXOLicense.ps1 - Remove a temporary o365 license from specified MsolUser account. Returns updated MSOLUser object to pipeline.
@@ -11222,26 +11247,40 @@ function remove-EXOLicense {
     .OUTPUTS
     System.Object - returns summary report to pipeline
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose  ;
+    PS> remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -ticket TICKETNUMBER -verbose  ;
     Process an array of users, with default 'hunting' -LicenseSkuIds array. 
     .EXAMPLE
-    PS> $updatedMSOLU = remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose ;
+    PS> $updatedMSOLU = remove-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose -ticket TICKETNUMBER;
         if($updatedMSOLU.islicensed){'Y'} else { 'N'} ; 
     Process licnse removal for specified user, and post-test isLicensed status, using default license array configured on the -LicenseSkuIDs default value.
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd ;
+    PS> $whatif=$true ;
+        $target = '99999,lynctest15@toro.com' ;
+        if($target.contains(',')){
+            $ticket,$trcp = $target.split(',') ;
+            $updatedmsolu = remove-EXOLicense -users $trcp -Ticket $ticket -whatif:$($whatif) ;
+            $props1 = 'UserPrincipalName','DisplayName','IsLicensed' ;
+            $props2 = @{Name='Licenses';
+            Expression={$_.licenses.accountskuid -join ', '}}  ;
+            $smsg = "$((get-date).ToString('HH:mm:ss')):UpdatedMsolU: w`n$(($updatedmsolu| ft -auto $props1|out-string).trim())" ;
+            $smsg += "`n$(($updatedmsolu| fl $props2 |out-string).trim())" ;
+            write-host -foregroundcolor green $smsg ;
+        } else { write-warning "`$target does *not* contain comma delimited ticket,UPN string!"} ;
+    Fancier variant of above, with more post-confirm reporting
+    .EXAMPLE
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd -ticket TICKETNUMBER;
     removal an explictly specified lic to a user (in this case, using the LicenseSku for EXCHANGESTANDARD, as stored in a global variable)
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 ;
-    removal an expliictly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuF1 -ticket TICKETNUMBER;
+    removal an explicitly specified lic to a user (in this case, using the LicenseSku for SPE_F1 - web-only o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 ;
-    removal an expliictly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuE3 -ticket TICKETNUMBER;
+    removal an explicitly specified lic to a user (in this case, using the LicenseSku for ENTERPRISEPACK - E3 o365 - lic as stored in a global variable)
     .EXAMPLE
-    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' ;
-    removal an expliictly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
+    PS> remove-EXOLicense -users 'Test@domain.com' -LicenseSkuIds 'TENANTNAME:EXCHANGESTANDARD' -ticket TICKETNUMBER;
+    removal an explicitly specified lic to a user by specifying the Tenant-specific LicenseSkuID directly
     .EXAMPLE
-    PS> remove-o365License -$MsoLUser.UserprincipalName 
+    PS> remove-o365License -$MsoLUser.UserprincipalName -ticket TICKETNUMBER ;
     remove-o365License compatibility option
     .LINK
     https://github.com/tostka/verb-exo
@@ -11251,7 +11290,7 @@ function remove-EXOLicense {
     ###Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
     ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-logging
     # stripped down, doesn't really need AAD, may not need balance.
-    #Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-Auth,  verb-IO, verb-logging, verb-Mods, verb-Text
+    #Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-Auth, verb-IO, verb-logging, verb-Mods, verb-Text
     #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\s\regex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
@@ -11601,6 +11640,7 @@ function remove-EXOLicense {
         #region GENERIC_EXOP_CREDS_&_SRVR_CONN #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
         # steer all onprem code on $XXXMeta.ExOPAccessFromToro & Ex10Server values
         $UseExOP=$true ;
+        <# no onprem dep
         if((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro -AND (Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server){
             $UseExOP = $true ;
             $smsg = "$($TenOrg):Meta.ExOPAccessFromToro($((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro)) -AND/OR Meta.Ex10Server($((Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server)),`ENABLING use of OnPrem Ex system this pass." ;
@@ -11612,6 +11652,7 @@ function remove-EXOLicense {
             if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
         } ;
+        #>
         if($UseExOP){
             #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
             # do the OP creds too
@@ -14467,7 +14508,6 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
-    * 1:56 PM 1/17/2022 cap load-adms output
     * 2:40 PM 12/10/2021 more cleanup 
     * 8:41 AM 8/27/2021 cleanup comments
     * 1:51 PM 5/19/2021 expanded $pltGHOpCred= to include 'ESVC','SID'; verbose=$($verbose)} ;
@@ -14866,7 +14906,7 @@ Function test-xoMailbox {
         write-host -foregroundcolor gray  "(loading ADMS...)" ;
         #write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):MSG" ; 
 
-        $ADMTLoaded = load-ADMS ;
+        load-ADMS ;
 
         if($UseOP){
             # resolve $domaincontroller dynamic, cross-org
@@ -15922,8 +15962,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUzSSleqDyNROnjzZUcFhWTlLl
-# a/KgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUs05rHeA45ETfh5QnnARISMYk
+# YeqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -15938,9 +15978,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTbDCU9
-# 2DQZCxBs2ikQriq/wWVWOTANBgkqhkiG9w0BAQEFAASBgA2U55CxA4SdP0nSkEJa
-# D7ZZ3bGRjHZVbkZuznBy3b//60qYA2kb1T6ZvcDT4RWbF9OnyIQ+4XfPfxlK5lVq
-# 0tdmN/4t/Icus90eIfjwKyUva95YawlyhgKtFLHDgiev2dHSIMd33st2q9BNsTAS
-# hJogMKqr5L+V5V1zVM01I/56
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQDUqoD
+# Ey7KyRXmn/nFSPZnYsAzbzANBgkqhkiG9w0BAQEFAASBgFKoSVTlYeA4HHJkLmLm
+# 5QchRXvpWnHUSrwbCuz0ft1Ll7Cg8ffEpt/2PkxjRgzzpyjw+vn0oNhikF58U62f
+# HvgPh/GYvqlN+2R0VPfMV6nWtMqd5RW/1UhWbC6vKunWx8zm/lQN3ua8jxKe4LsZ
+# EXx50OAw2zKMm7vc9F/s0ciz
 # SIG # End signature block
