@@ -18,6 +18,7 @@ function remove-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:57 PM 1/31/2022 addded -ea 0 to gv PassStatus_$($tenorg) (spurious error suppress)
     * 3:14 PM 1/18/2022 REM'D EXOP conn's (match add-exolic), this is pure msolu & exo. 
     * 1:02 PM 1/17/2022 port of add-EXOLicense to removal process
     .DESCRIPTION
@@ -212,7 +213,7 @@ function remove-EXOLicense {
 
         # email trigger vari, and email body aggretating log
         $PassStatus = $MailBody = $null ;
-        if(get-variable -Name PassStatus_$($tenorg) -scope Script){Remove-Variable -Name PassStatus_$($tenorg) -scope Script } ; # pre-clear any prior instance: -WhatIf:$($whatif)
+        if(get-variable -Name PassStatus_$($tenorg) -scope Script -ea 0){Remove-Variable -Name PassStatus_$($tenorg) -scope Script } ; # pre-clear any prior instance: -WhatIf:$($whatif)
         New-Variable -Name PassStatus_$($tenorg) -scope Script -Value $null ;
 
         # finally if we're using pipeline, and aggregating, we need to aggreg outside of the process{} block
@@ -900,5 +901,6 @@ function remove-EXOLicense {
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
      } ;
- } ; 
- #*------^ remove-EXOLicense.ps1 ^------
+ }
+
+#*------^ remove-EXOLicense.ps1 ^------

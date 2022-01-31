@@ -18,6 +18,7 @@ function add-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:57 PM 1/31/2022 addded -ea 0 to gv PassStatus_$($tenorg) (spurious error suppress)
     * 2:14 PM 1/18/2022 updated Example 1 to include echo of the returned msolu.licenses value.
     * 12:08 PM 1/11/2022 ren add-EXOLicenseTemp -> add-EXOLicense ; add 
     $TORMETA.o365LicSkuExStd == EXCHANGESTANDARD (Office 365 Exchange Online Only 
@@ -229,7 +230,7 @@ PS> $whatif=$true ;
 
         # email trigger vari, and email body aggretating log
         $PassStatus = $MailBody = $null ;
-        if(get-variable -Name PassStatus_$($tenorg) -scope Script){Remove-Variable -Name PassStatus_$($tenorg) -scope Script } ; # pre-clear any prior instance: -WhatIf:$($whatif)
+        if(get-variable -Name PassStatus_$($tenorg) -scope Script -ea 0){Remove-Variable -Name PassStatus_$($tenorg) -scope Script } ; # pre-clear any prior instance: -WhatIf:$($whatif)
         New-Variable -Name PassStatus_$($tenorg) -scope Script -Value $null ;
 
         # finally if we're using pipeline, and aggregating, we need to aggreg outside of the process{} block
@@ -893,5 +894,6 @@ PS> $whatif=$true ;
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
      } ;
- } ; 
- #*------^ add-EXOLicense.ps1 ^------
+ }
+
+#*------^ add-EXOLicense.ps1 ^------
