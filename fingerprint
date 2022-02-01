@@ -408,8 +408,8 @@ get-EXOMsgTraceDetailed:subject
 get-EXOMsgTraceDetailed:MessageId
 get-EXOMsgTraceDetailed:MessageTraceId
 get-EXOMsgTraceDetailed:MessageTraceDetailLimit
-get-EXOMsgTraceDetailed:doMTDReportRuleHits
-get-EXOMsgTraceDetailed:doMTD
+get-EXOMsgTraceDetailed:DetailedReportRuleHits
+get-EXOMsgTraceDetailed:Detailed
 get-EXOMsgTraceDetailed:Verbose
 get-EXOMsgTraceDetailed:vb
 get-EXOMsgTraceDetailed:Debug
@@ -879,6 +879,7 @@ resolve-Name:ob
 resolve-Name:PipelineVariable
 resolve-Name:pv
 resolve-user:users
+resolve-user:getMobile
 resolve-user:useEXOv2
 resolve-user:outObject
 resolve-user:Verbose
