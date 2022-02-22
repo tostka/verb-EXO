@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:55 PM 2/22/2022 extended the cloud federate test code, to include an INT block (though there's no hybrid to arbitrate, the users are onprem in AD at INT)
     * 12:24 PM 2/1/2022 updated CBH, added a crlf on the console echo (headers weren't lining up); added -getMobile & get-exoMobileDeviceStats support, with conditional md output block; added full aliased xo cmds, implementing full -exov2 support.
     * 2:51 PM 12/27/2021 flipped DN & Desc from md tbl to fl (drops a crlf) ; 
          flipped $propsMailx output to md fmt split lines (condensed output vertically) ; 
@@ -887,6 +888,10 @@ function resolve-user {
                                 $smsg="(VEN USER, fed:$($venmeta.o365_TenantLabel))" ;
                                 $hSum.Federator = $VENMETA.o365_TenantLabel ;
                             }
+                            $INTMeta.rgxOPFederatedDom {
+                                $smsg="(INT USER, fed:$($INTmeta.o365_TenantLabel))" ;
+                                $hSum.Federator = $INTMETA.o365_TenantLabel ;
+                            }
 
                         } ;
                     } elseif($hSum.xoMuser.IsDirSynced){
@@ -902,6 +907,10 @@ function resolve-user {
                             $VENMeta.rgxOPFederatedDom {
                                 $smsg="(VEN USER, fed:$($venmeta.o365_TenantLabel))" ;
                                 $hSum.Federator = $VENMETA.o365_TenantLabel ;
+                            }
+                            $INTMeta.rgxOPFederatedDom {
+                                $smsg="(INT USER, fed:$($INTmeta.o365_TenantLabel))" ;
+                                $hSum.Federator = $INTMETA.o365_TenantLabel ;
                             }
                         } ;
                     }else{
