@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 3.1.0.0
+  Version     : 3.2.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -5033,6 +5033,202 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
 }
 
 #*------^ get-ADUsersWithSoftDeletedxoMailboxes.ps1 ^------
+
+#*------v get-ExoMailboxLicenses.ps1 v------
+function get-ExoMailboxLicenses {
+<#
+    .SYNOPSIS
+    get-ExoMailboxLicenses - Provides a prefab array indexed hash of Exchange-Online mailbox-supporting licenses (at least one of which is required to accomodate an EXO Usermailbox - Note: This is a static non-query-based list of license. The function must be manually updated to accomodate MS licensure changes over time).
+    .PARAMETER Mailboxes
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2022-02-25
+    FileName    : get-ExoMailboxLicenses.ps1
+    License     : MIT License
+    Copyright   : (c) 2022 Todd Kadrie
+    Github      : https://github.com/tostka/verb-ex2010
+    Tags        : Powershell
+    REVISIONS
+    * 4:27 PM 2/25/2022 init vers
+    .DESCRIPTION
+    get-ExoMailboxLicenses - Provides a prefab array indexed hash of Exchange-Online mailbox-supporting licenses (at least one of which is required to accomodate an EXO Usermailbox - Note: This is a static non-query-based list of license. The function must be manually updated to accomodate MS licensure changes over time).
+    .PARAMETER TenOrg
+TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']
+    .EXAMPLE
+    PS> $hQuotas = get-ExoMailboxLicenses -verbose ; 
+    PS> $hQuotas['database2']
+    Name           ProhibitSendReceiveQuotaGB ProhibitSendQuotaGB IssueWarningQuotaGB
+    ----           -------------------------- ------------------- -------------------
+    database2      12.000                     10.000              9.000
+    Retrieve local org on-prem MailboxDatabase quotas and assign to a variable, with verbose outputs. Then output the retrieved quotas from the indexed hash returned, for the mailboxdatabase named 'database2'.
+    .EXAMPLE
+    PS> $pltGXML=[ordered]@{
+            #TenOrg= $TenOrg;
+            verbose=$($VerbosePreference -eq "Continue") ;
+            #credential= $pltRXO.credential ;
+            #(Get-Variable -name cred$($tenorg) ).value ;
+        } ;
+    PS> $smsg = "$($tenorg):get-ExoMailboxLicenses w`n$(($pltGXML|out-string).trim())" ;
+    PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS> $objRet = $null ;
+    PS> $objRet = get-ExoMailboxLicenses @pltGXML ;
+    PS> switch -regex ($objRet.GetType().FullName){
+            "(System.Collections.Hashtable|System.Collections.Specialized.OrderedDictionary)" {
+                if( ($objRet|Measure-Object).count ){
+                    $smsg = "get-ExoMailboxLicenses:$($tenorg):returned populated ExMbxLicenses" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $ExMbxLicenses = $objRet ;
+                } else {
+                    $smsg = "get-ExoMailboxLicenses:$($tenorg):FAILED TO RETURN populated ExMbxLicenses" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    THROW $SMSG ; 
+                    break ; 
+                } ;
+            }
+            default {
+                $smsg = "get-ExoMailboxLicenses:$($tenorg):RETURNED UNDEFINED OBJECT TYPE!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Exit ;
+            } ;
+        } ;  
+    PS> $smsg = "$(($ExMbxLicenses.Values|measure).count) EXO UserMailbox-supporting License summaries returned)" ;
+    PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+    PS> $aadu = get-azureaduser -obj someuser@domain.com ; 
+    PS> $IsExoLicensed = $false ;
+    PS> foreach($pLic in $aadu.AssignedLicenses){
+    PS>     $smsg = "--(LicSku:$($plic): checking EXO UserMailboxSupport)" ; 
+    PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;                                     
+    PS>     if($ExMbxLicenses[$plic]){
+    PS>         $hSummary.IsExoLicensed = $true ;
+    PS>         $smsg = "$($mbx.userprincipalname) HAS EXO UserMailbox-supporting License:$($ExMbxLicenses[$sku].SKU)|$($ExMbxLicenses[$sku].Label)" ; 
+    PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+    PS> } ; 
+    PS> if(-not $hSummary.IsExoLicensed){
+    PS>     $smsg = "$($mbx.userprincipalname) WAS FOUND TO HAVE *NO* EXO UserMailbox-supporting License!" ; 
+    PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+    PS> } ;
+    Expanded example with testing of returned object, and demoes use of the returned hash against a mailbox spec, steering via .UseDatabaseQuotaDefaults
+    .LINK
+    https://github.com/tostka/verb-ex2010
+    #>
+    #Requires -Modules verb-IO, verb-logging, verb-Text
+    [OutputType('System.Collections.Hashtable')]
+    [CmdletBinding()]
+    PARAM(
+        [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
+        [ValidateNotNullOrEmpty()]
+        [string]$TenOrg = 'TOR',
+        [Parameter(HelpMessage="Credential to use for this connection [-credential [credential obj variable]")]
+        [System.Management.Automation.PSCredential]$Credential = $global:credTORSID
+    ) ;
+    
+    ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+    $verbose = ($VerbosePreference -eq "Continue") ;
+    
+    # check if using Pipeline input or explicit params:
+    if ($PSCmdlet.MyInvocation.ExpectingInput) {
+        write-verbose "Data received from pipeline input: '$($InputObject)'" ;
+    } else {
+        # doesn't actually return an obj in the echo
+        #write-verbose "Data received from parameter input: '$($InputObject)'" ;
+    } ;
+    
+
+    # input table of Exchange Online assignable licenses that include a UserMailbox:
+    $ExMbxLicensesTbl = @"
+|SKU|Label|Notes|
+|ENTERPRISEPACK|Office 365 Enterprise E3|OfficE; EXO (OL,OWA,OM,100G mbx)|
+|EXCHANGESTANDARD|Exchange Online Plan 1|No Office; no Services; 50G mbx, No ArchiveMbx|
+|SPE_F1|Microsoft 365 F3| OfficeWeb, OfficeMobile; EXO (OWA,OM 2G Mbx)|(formerly Microsoft 365 F1, renamed Mar2020)
+|STANDARDPACK|OFFICE 365 E1| OfficeWeb, OfficeMobile; EXO (OWA,OM 50G Mbx)
+|EXCHANGEENTERPRISE_FACULTY|Exch Online Plan 2 for Faculty|No Office; no Services; 100G mbx, +ArchiveMbx, +vmail, +DLP|
+|EXCHANGE_L_STANDARD|Exchange Online (Plan 1)|No Office; no Services; 50G mbx, No ArchiveMbx|
+|EXCHANGE_S_ENTERPRISE|Exchange Online Plan 2 S|No Office; no Services; 100G mbx, +ArchiveMbx, +vmail, +DLP|
+|EXCHANGEENTERPRISE|Exchange Online Plan 2|No Office; no Services; 50G mbx, +ArchiveMbx, +vmail, +DLP|
+|STANDARDWOFFPACK_STUDENT|O365 Education E1 for Students|OfficeWeb, OfficeMobile; EXO (OWA,OM 50G Mbx)|
+|STANDARDWOFFPACK_IW_FACULTY|O365 Education for Faculty||
+|STANDARDWOFFPACK_IW_STUDENT|O365 Education for Students||
+|STANDARDPACK_STUDENT|Office 365 (Plan A1) for Students||
+|ENTERPRISEPACKLRG|Office 365 (Plan E3)||
+|STANDARDWOFFPACK_FACULTY|Office 365 Education E1 for Faculty|OfficeWeb, OfficeMobile; EXO (OWA,OM 50G Mbx)|
+|ENTERPRISEWITHSCAL_FACULTY|Office 365 Education E4 for Faculty||
+|ENTERPRISEWITHSCAL_STUDENT|Office 365 Education E4 for Students||
+|STANDARDPACK|Office 365 Enterprise E1|OfficeWeb, OfficeMobile; EXO (OWA,OM 50G Mbx)|
+|STANDARDWOFFPACK|Office 365 Enterprise E2|OfficeWeb, OfficeMobile; EXO (OWA,OM 50G Mbx), No ArchiveMbx|
+|ENTERPRISEPACKWITHOUTPROPLUS|Office 365 Enterprise E3 without ProPlus Add-on||
+|ENTERPRISEWITHSCAL|Office 365 Enterprise E4||
+|ENTERPRISEPREMIUM|Office 365 Enterprise E5|OfficE; EXO (OL,OWA,OM,100G mbx),AAD P1 & P2, Az Info Protection Plan 2; UC; ATP|
+|DESKLESSPACK_YAMMER|Office 365 Enterprise K1 with Yammer||
+|DESKLESSPACK|Office 365 Enterprise K1 without Yammer||
+|DESKLESSWOFFPACK|Office 365 Enterprise K2||
+|MIDSIZEPACK|Office 365 Midsize Business||
+|STANDARDWOFFPACKPACK_FACULTY|Office 365 Plan A2 for Faculty||
+|STANDARDWOFFPACKPACK_STUDENT|Office 365 Plan A2 for Students||
+|ENTERPRISEPACK_FACULTY|Office 365 Plan A3 for Faculty||
+|ENTERPRISEPACK_STUDENT|Office 365 Plan A3 for Students||
+|OFFICESUBSCRIPTION_FACULTY|Office 365 ProPlus for Faculty||
+|LITEPACK_P2|Office 365 Small Business Premium||
+|SPE_E3|MICROSOFT 365 E3|OfficeWeb, OfficeMobile; EXO (OL,OWA,OM 2G Mbx)||
+|SPE_E5|MICROSOFT 365 E5||
+"@ ;
+    $ExMbxLicenses = $ExMbxLicensesTbl | convertfrom-markdowntable ;
+
+    # building a CustObj (actually an indexed hash) with the default quota specs from all db's. The 'index' for each db, is the db's Name (which is also stored as Database on the $mbx)
+    $smsg = "(converting $(($ExMbxLicenses|measure).count) UserMailbox-supporting o365 Licenses to indexed hash)" ;     
+    if($verbose){
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+    } ; 
+    if($host.version.major -gt 2){$hExMbxLicenses = [ordered]@{} } 
+    else { $hExMbxLicenses = @{} } ;
+    
+    $ttl = ($ExMbxLicenses|measure).count ; $Procd = 0 ; 
+    foreach ($Sku in $ExMbxLicenses){
+        $Procd ++ ; 
+        $sBnrS="`n#*------v PROCESSING : ($($Procd)/$($ttl)) $($Sku.SKU) v------" ; 
+        $smsg = $sBnrS ; 
+        if($verbose){
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; 
+        
+        $name =$($Sku | select -expand SKU) ; 
+        $hExMbxLicenses[$name] = $Sku ; 
+
+        $smsg = "$($sBnrS.replace('-v','-^').replace('v-','^-'))" ;
+        if($verbose){
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; 
+    } ;  # loop-E
+
+    if($hExMbxLicenses){
+        $smsg = "(Returning summary objects to pipeline)" ; 
+        if($verbose){
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; 
+        $hExMbxLicenses | Write-Output ; 
+    } else {
+        $smsg = "NO RETURNABLE `$hExMbxLicenses OBJECT!" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        THROW $smsg ;
+    } ; 
+}
+
+#*------^ get-ExoMailboxLicenses.ps1 ^------
 
 #*------v get-EXOMsgTraceDetailed.ps1 v------
 function get-EXOMsgTraceDetailed {
@@ -12814,6 +13010,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:55 PM 2/22/2022 extended the cloud federate test code, to include an INT block (though there's no hybrid to arbitrate, the users are onprem in AD at INT)
     * 12:24 PM 2/1/2022 updated CBH, added a crlf on the console echo (headers weren't lining up); added -getMobile & get-exoMobileDeviceStats support, with conditional md output block; added full aliased xo cmds, implementing full -exov2 support.
     * 2:51 PM 12/27/2021 flipped DN & Desc from md tbl to fl (drops a crlf) ; 
          flipped $propsMailx output to md fmt split lines (condensed output vertically) ; 
@@ -13683,6 +13880,10 @@ function resolve-user {
                                 $smsg="(VEN USER, fed:$($venmeta.o365_TenantLabel))" ;
                                 $hSum.Federator = $VENMETA.o365_TenantLabel ;
                             }
+                            $INTMeta.rgxOPFederatedDom {
+                                $smsg="(INT USER, fed:$($INTmeta.o365_TenantLabel))" ;
+                                $hSum.Federator = $INTMETA.o365_TenantLabel ;
+                            }
 
                         } ;
                     } elseif($hSum.xoMuser.IsDirSynced){
@@ -13698,6 +13899,10 @@ function resolve-user {
                             $VENMeta.rgxOPFederatedDom {
                                 $smsg="(VEN USER, fed:$($venmeta.o365_TenantLabel))" ;
                                 $hSum.Federator = $VENMETA.o365_TenantLabel ;
+                            }
+                            $INTMeta.rgxOPFederatedDom {
+                                $smsg="(INT USER, fed:$($INTmeta.o365_TenantLabel))" ;
+                                $hSum.Federator = $INTMETA.o365_TenantLabel ;
                             }
                         } ;
                     }else{
@@ -16251,14 +16456,14 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Test-Uri,Connect-EXO,Connect-EXO2,Test-Uri,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-ADUsersWithSoftDeletedxoMailboxes,get-EXOMsgTraceDetailed,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,remove-EXOLicense,resolve-Name,resolve-user,Resolve-xoRcps,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,test-xoMailbox,_cleanup -Alias *
+Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-ExchangeOnlineTargetedPurge,Test-Uri,Connect-EXO,Connect-EXO2,Test-Uri,connect-EXO2old,Connect-EXOPSSession,connect-EXOv2RAW,Connect-IPPSSessionTargetedPurge,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxo2cmw,cxo2TOL,cxo2TOR,cxo2VEN,cxoCMW,cxoTOL,cxoTOR,cxoVEN,Disconnect-ExchangeOnline,Disconnect-EXO,Disconnect-EXO2,get-ADUsersWithSoftDeletedxoMailboxes,get-ExoMailboxLicenses,get-EXOMsgTraceDetailed,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,Invoke-ExoOnlineConnection,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,Print-Details,Reconnect-EXO,Reconnect-EXO2,Reconnect-EXO2old,RemoveExistingEXOPSSession,RemoveExistingPSSessionTargeted,Remove-EXOBrokenClosed,remove-EXOLicense,resolve-Name,resolve-user,Resolve-xoRcps,rxo2CMW,rxo2TOL,rxo2TOR,rxo2VEN,rxoCMW,rxoTOL,rxoTOR,rxoVEN,test-ExoPSession,test-EXOToken,test-xoMailbox,_cleanup -Alias *
 
 
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvkJSjs03rEP/AywnsTSwOUAF
-# Jt2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvg5goq6+Peghb+KnyoC0dGgU
+# LomgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -16273,9 +16478,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT875P8
-# 0u8xUmzSdUWrqbO3EnLImTANBgkqhkiG9w0BAQEFAASBgFHKJHlJOBQl6SxzzXXJ
-# VMpS5flR770HOYu9oCuQrPxclZlstjpM2RJMG7sriDn0hzfjyjtxPklGBTXTK2AJ
-# Q1bvo17BLlwscoYsPB8dYd5V/uWa2B6o9P4ZG76tN3xs92O+Bui8bNbjyRUb61XW
-# FLXLR0mo+lrNdY+riuSwKeP4
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSUUYf4
+# 8QckTn1NIpHSTzysxZS+UjANBgkqhkiG9w0BAQEFAASBgH9nDgZFYntFvErLQ2or
+# ZqAZfXxWJfJTDBxpJL5TBhn0Vei+iNYVEaXea40sDHszCrzZTctSqn6+M6qCZczf
+# YnJ/duBazHPhqrsQDGpDiRP/1pqLa/ntGDSnLtYWk1xseufmlWMwJLHKtL96oajq
+# ZQXqlcVQCf1OJj2RXp3mTCzn
 # SIG # End signature block
