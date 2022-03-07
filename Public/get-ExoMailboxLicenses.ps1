@@ -16,6 +16,7 @@ function get-ExoMailboxLicenses {
     Github      : https://github.com/tostka/verb-ex2010
     Tags        : Powershell
     REVISIONS
+    * 4:14 PM 3/7/2022 updated CBH exmpl
     * 2:21 PM 3/1/2022 updated CBH
     * 4:27 PM 2/25/2022 init vers
     .DESCRIPTION
