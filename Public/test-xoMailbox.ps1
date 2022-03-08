@@ -15,6 +15,7 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
     * 8:41 AM 8/27/2021 cleanup comments
     * 1:51 PM 5/19/2021 expanded $pltGHOpCred= to include 'ESVC','SID'; verbose=$($verbose)} ;
@@ -41,7 +42,9 @@ Function test-xoMailbox {
     .LINK
     https://github.com/tostka/verb-EXO
     #>
-    #Requires -Modules ActiveDirectory,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-Network,verb-AAD,verb-ADMS,verb-Ex2010,verb-logging
+    ##Requires -Modules ActiveDirectory,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-Network,verb-AAD,verb-ADMS,verb-Ex2010,verb-logging
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
+    #Requires -Modules ActiveDirectory,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-Network,verb-AAD,verb-ADMS,verb-logging
     [CmdletBinding()]
     PARAM(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]

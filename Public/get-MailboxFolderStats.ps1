@@ -15,6 +15,7 @@ function get-MailboxFolderStats {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     # 12:17 PM 5/14/2021 updated passstatus code to curr, and added -ea to the gv's (suppress errors when not present)
     * 11:54 AM 4/2/2021 updated wlt & recstat support, updated catch blocks
     * 3:28 PM 3/16/2021 added multi-tenant support
@@ -53,7 +54,8 @@ function get-MailboxFolderStats {
     https://github.com/tostka/verb-ex2010
     #>
     #Requires -Version 3
-    #Requires -Modules verb-ex2010
+    ##Requires -Modules verb-ex2010
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag values, indicating Tenant to Create DDG WITHIN[-TenOrg 'TOL']")]

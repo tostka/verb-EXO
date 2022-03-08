@@ -1,4 +1,4 @@
-#*----------v Function get-ADUsersWithSoftDeletedxoMailboxes() v----------
+#*------v get-ADUsersWithSoftDeletedxoMailboxes.ps1 v------
 function get-ADUsersWithSoftDeletedxoMailboxes {
     <#
     .SYNOPSIS
@@ -18,6 +18,7 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:51 PM 1/14/2022 init
     .DESCRIPTION
     get-ADUsersWithSoftDeletedxoMailboxes.ps1 - Get *existing* ADUsers with SoftDeleted xoMailboxes
@@ -35,12 +36,8 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
     .LINK
     https://github.com/tostka/verb-EXO
     #>
-    ##Requires -Version 2.0
-    ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Network, verb-Text
-    ##requires -PSEdition Core
-    ##Requires -PSSnapin Microsoft.Exchange.Management.PowerShell.E2010
-    ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, MicrosoftTeams, SkypeOnlineConnector, Lync,  verb-AAD, verb-ADMS, verb-Auth, verb-Azure, VERB-CCMS, verb-Desktop, verb-dev, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Mods, verb-Network, verb-L13, verb-SOL, verb-Teams, verb-Text, verb-logging
-    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-IO, verb-logging, verb-Network, verb-Text
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
+    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-IO, verb-logging, verb-Network, verb-Text
     #Requires -RunasAdministrator
     #Requires -Version 3
     #requires -PSEdition Desktop
@@ -450,8 +447,6 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
         # clean-up dyn-created vars & those created by a dot sourced script.
         #((Compare-Object -ReferenceObject (Get-Variable).Name -DifferenceObject $DefVaris).InputObject).foreach{Remove-Variable -Name $_} ; 
     } ;  # END-E
-} ; 
-#*------^ END Function get-ADUsersWithSoftDeletedxoMailboxes() ^------
+}
 
-
-
+#*------^ get-ADUsersWithSoftDeletedxoMailboxes.ps1 ^------

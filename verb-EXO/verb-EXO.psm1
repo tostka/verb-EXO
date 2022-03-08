@@ -1,11 +1,11 @@
-﻿# verb-exo.psm1
+﻿# verb-Exo.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 3.2.0.0
+  Version     : 3.2.2.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -3835,6 +3835,7 @@ function copy-XPermissionGroupToCloudOnly {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
     * 3:51 PM 8/17/2021 added $MembersCloudOnly | select -unique - kept leaking in duplicates in the inputs.
     * 1:40 PM 8/11/2021 ADDED & debugged -Mailbox param (spec target of grants), and code to add-mailboxperm/add-(ad|recipient)permission to OP or EXO target mailbox, and more detailed follow up dump report. Ran against exo-mailbox wio issues. Need to dbug against a still onprem mbx next.
@@ -3892,7 +3893,9 @@ function copy-XPermissionGroupToCloudOnly {
     .LINK
     #>
     ###Requires -Version 5
-    #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010, verb-Text
+    ##Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010, verb-Text
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
+    #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Text
     #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.COMPANY\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
@@ -4598,6 +4601,7 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:51 PM 1/14/2022 init
     .DESCRIPTION
     get-ADUsersWithSoftDeletedxoMailboxes.ps1 - Get *existing* ADUsers with SoftDeleted xoMailboxes
@@ -4615,12 +4619,8 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
     .LINK
     https://github.com/tostka/verb-EXO
     #>
-    ##Requires -Version 2.0
-    ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Network, verb-Text
-    ##requires -PSEdition Core
-    ##Requires -PSSnapin Microsoft.Exchange.Management.PowerShell.E2010
-    ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, MicrosoftTeams, SkypeOnlineConnector, Lync,  verb-AAD, verb-ADMS, verb-Auth, verb-Azure, VERB-CCMS, verb-Desktop, verb-dev, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Mods, verb-Network, verb-L13, verb-SOL, verb-Teams, verb-Text, verb-logging
-    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-IO, verb-logging, verb-Network, verb-Text
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
+    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-IO, verb-logging, verb-Network, verb-Text
     #Requires -RunasAdministrator
     #Requires -Version 3
     #requires -PSEdition Desktop
@@ -5052,6 +5052,8 @@ function get-ExoMailboxLicenses {
     Github      : https://github.com/tostka/verb-ex2010
     Tags        : Powershell
     REVISIONS
+    * 4:14 PM 3/7/2022 updated CBH exmpl
+    * 2:21 PM 3/1/2022 updated CBH
     * 4:27 PM 2/25/2022 init vers
     .DESCRIPTION
     get-ExoMailboxLicenses - Provides a prefab array indexed hash of Exchange-Online mailbox-supporting licenses (at least one of which is required to accomodate an EXO Usermailbox - Note: This is a static non-query-based list of license. The function must be manually updated to accomodate MS licensure changes over time).
@@ -5065,58 +5067,51 @@ TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']
     database2      12.000                     10.000              9.000
     Retrieve local org on-prem MailboxDatabase quotas and assign to a variable, with verbose outputs. Then output the retrieved quotas from the indexed hash returned, for the mailboxdatabase named 'database2'.
     .EXAMPLE
-    PS> $pltGXML=[ordered]@{
-            #TenOrg= $TenOrg;
-            verbose=$($VerbosePreference -eq "Continue") ;
-            #credential= $pltRXO.credential ;
-            #(Get-Variable -name cred$($tenorg) ).value ;
-        } ;
-    PS> $smsg = "$($tenorg):get-ExoMailboxLicenses w`n$(($pltGXML|out-string).trim())" ;
-    PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    PS> $objRet = $null ;
-    PS> $objRet = get-ExoMailboxLicenses @pltGXML ;
-    PS> switch -regex ($objRet.GetType().FullName){
-            "(System.Collections.Hashtable|System.Collections.Specialized.OrderedDictionary)" {
-                if( ($objRet|Measure-Object).count ){
-                    $smsg = "get-ExoMailboxLicenses:$($tenorg):returned populated ExMbxLicenses" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    $ExMbxLicenses = $objRet ;
-                } else {
-                    $smsg = "get-ExoMailboxLicenses:$($tenorg):FAILED TO RETURN populated ExMbxLicenses" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
-                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    THROW $SMSG ; 
-                    break ; 
-                } ;
-            }
-            default {
-                $smsg = "get-ExoMailboxLicenses:$($tenorg):RETURNED UNDEFINED OBJECT TYPE!" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Exit ;
-            } ;
-        } ;  
-    PS> $smsg = "$(($ExMbxLicenses.Values|measure).count) EXO UserMailbox-supporting License summaries returned)" ;
-    PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+    PS>  $pltGXML=[ordered]@{
+    PS>      #TenOrg= $TenOrg;
+    PS>      verbose=$($VerbosePreference -eq "Continue") ;
+    PS>      #credential= $pltRXO.credential ;
+    PS>      #(Get-Variable -name cred$($tenorg) ).value ;
+    PS>  } ;
+    PS>  $smsg = "$($tenorg):get-ExoMailboxLicenses w`n$(($pltGXML|out-string).trim())" ;
+    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>  else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>  $objRet = $null ;
+    PS>  $objRet = get-ExoMailboxLicenses @pltGXML ;
+    PS>  if( ($objRet|Measure-Object).count -AND $objRet.GetType().FullName -match $rgxHashTableTypeName ){
+    PS>      $smsg = "get-ExoMailboxLicenses:$($tenorg):returned populated ExMbxLicenses" ;
+    PS>      if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>      else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>      $ExMbxLicenses = $objRet ;
+    PS>  } else {
+    PS>      $smsg = "get-ExoMailboxLicenses:$($tenorg):FAILED TO RETURN populated [hashtable] ExMbxLicenses" ;
+    PS>      if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
+    PS>      else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>      THROW $SMSG ; 
+    PS>      break ; 
+    PS>  } ;
+    PS>  $smsg = "$(($ExMbxLicenses.Values|measure).count) EXO UserMailbox-supporting License summaries returned)" ;
+    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>  else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;    
+    PS>  $smsg = "$(($ExMbxLicenses.Values|measure).count) EXO UserMailbox-supporting License summaries returned)" ;
+    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>  else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
     PS> $aadu = get-azureaduser -obj someuser@domain.com ; 
     PS> $IsExoLicensed = $false ;
     PS> foreach($pLic in $aadu.AssignedLicenses){
     PS>     $smsg = "--(LicSku:$($plic): checking EXO UserMailboxSupport)" ; 
     PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;                                     
+    PS>     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;                                     
     PS>     if($ExMbxLicenses[$plic]){
     PS>         $hSummary.IsExoLicensed = $true ;
     PS>         $smsg = "$($mbx.userprincipalname) HAS EXO UserMailbox-supporting License:$($ExMbxLicenses[$sku].SKU)|$($ExMbxLicenses[$sku].Label)" ; 
     PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+    PS>         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
     PS> } ; 
     PS> if(-not $hSummary.IsExoLicensed){
     PS>     $smsg = "$($mbx.userprincipalname) WAS FOUND TO HAVE *NO* EXO UserMailbox-supporting License!" ; 
     PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+    PS>     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
     PS> } ;
     Expanded example with testing of returned object, and demoes use of the returned hash against a mailbox spec, steering via .UseDatabaseQuotaDefaults
     .LINK
@@ -5913,6 +5908,7 @@ function get-MailboxFolderStats {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     # 12:17 PM 5/14/2021 updated passstatus code to curr, and added -ea to the gv's (suppress errors when not present)
     * 11:54 AM 4/2/2021 updated wlt & recstat support, updated catch blocks
     * 3:28 PM 3/16/2021 added multi-tenant support
@@ -5951,7 +5947,8 @@ function get-MailboxFolderStats {
     https://github.com/tostka/verb-ex2010
     #>
     #Requires -Version 3
-    #Requires -Modules verb-ex2010
+    ##Requires -Modules verb-ex2010
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag values, indicating Tenant to Create DDG WITHIN[-TenOrg 'TOL']")]
@@ -6190,6 +6187,7 @@ function get-MsgTrace {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
      * 12:17 PM 5/14/2021 updated passstatus code to curr, and added -ea to the gv's (suppress errors when not present)
     * 2:23 PM 3/16/2021 added multi-tenant support ; debugged both exOP & exo, added -ReportFail & -ReportRowsLimit params. At this point Exclusive params are only partially configured
@@ -6251,7 +6249,8 @@ function get-MsgTrace {
     https://github.com/tostka/verb-ex2010
     #>
     #Requires -Version 3
-    #Requires -Modules verb-ex2010
+    ##Requires -Modules verb-ex2010
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.COMPANY\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding(DefaultParameterSetName='SendRec')]
     <# $isplt=@{  ticket="347298" ;  uid="wilinaj";  days=7 ;  Sender="quotes@bossplow.com" ;  Recipients="" ;  MessageSubject="" ;  EventID='' ;  Connectorid="" ;  Source="" ;} ; 
@@ -7860,6 +7859,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
     * 11:24 AM 9/16/2021 encoded eml
     # 10:46 AM 6/2/2021 sub'd verb-logging for v-trans
@@ -7947,7 +7947,9 @@ function move-MailboxToXo{
     Perform immediate move of specified mailbox, suppress MEP tests (-NoTest), showdebug output & whatif pass
     .LINK
     #>
-    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Ex2010, verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-logging
+    ##Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Ex2010, verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-logging
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
+    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS,verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-logging
     [CmdletBinding()]
     Param(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
@@ -9123,6 +9125,7 @@ function new-DgTor {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,DistributionGroup,DistributionList,Hybrid
     REVISIONS
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
     * 4:54 PM 9/30/2021 updated CloudFirst code, and used to create functional 
     exoDG, also added code to dynamically create onprem unreplicated MailContacts 
@@ -9295,7 +9298,9 @@ function new-DgTor {
     https://github.com/tostka/verb-exo        
     #>
     ###Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Text, verb-logging
-    #Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-IO, verb-logging, verb-Text, verb-logging
+    ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-IO, verb-logging, verb-Text, verb-logging
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
+    #Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-IO, verb-logging, verb-Text, verb-logging
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.DOMAIN\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
@@ -12494,6 +12499,7 @@ Function resolve-Name {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell,ExchangeOnline,Exchange,MsolUser,AzureADUser,ADUser
     REVISIONS
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
     * 1:17 PM 6/10/2021 added missing $exMProps add lic grp memberof check for aadu, for x-hyb users; add missing $rgxLicGrp, as $rgxLicGrpDN & $rgxLicGrpDName (aduser & aaduser respectively); pulled datestamps on echo's, simplified echo's (removed "$($smsg)")
     * 4:00 PM 6/9/2021 added alias 'nlu' (7nlu is still ahk macro) ; fixed typo; expanded echo for $lic;flipped -displayname to -identifier, and handle smtpaddr|alias|displayname lookups ; init; 
@@ -12525,7 +12531,9 @@ Function resolve-Name {
     .LINK
     https://github.com/tostka/verb-EXO
     #>
-    #Requires -Modules ActiveDirectory,AzureAD,MSOnline,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-AAD,verb-ADMS,verb-Ex2010,verb-logging
+    ##Requires -Modules ActiveDirectory,AzureAD,MSOnline,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-AAD,verb-ADMS,verb-Ex2010,verb-logging
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
+    #Requires -Modules ActiveDirectory,AzureAD,MSOnline,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-AAD,verb-ADMS,verb-logging
     [CmdletBinding()]
     [Alias('nlu')]
     PARAM(
@@ -13010,6 +13018,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 3:55 PM 2/22/2022 extended the cloud federate test code, to include an INT block (though there's no hybrid to arbitrate, the users are onprem in AD at INT)
     * 12:24 PM 2/1/2022 updated CBH, added a crlf on the console echo (headers weren't lining up); added -getMobile & get-exoMobileDeviceStats support, with conditional md output block; added full aliased xo cmds, implementing full -exov2 support.
     * 2:51 PM 12/27/2021 flipped DN & Desc from md tbl to fl (drops a crlf) ; 
@@ -13108,7 +13117,9 @@ function resolve-user {
     https://github.com/tostka/verb-exo
     #>
     ###Requires -Version 5
-    #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
+    ##Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
+    #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS
     #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.DOMAIN\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
@@ -15008,6 +15019,7 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
+    # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
     * 8:41 AM 8/27/2021 cleanup comments
     * 1:51 PM 5/19/2021 expanded $pltGHOpCred= to include 'ESVC','SID'; verbose=$($verbose)} ;
@@ -15034,7 +15046,9 @@ Function test-xoMailbox {
     .LINK
     https://github.com/tostka/verb-EXO
     #>
-    #Requires -Modules ActiveDirectory,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-Network,verb-AAD,verb-ADMS,verb-Ex2010,verb-logging
+    ##Requires -Modules ActiveDirectory,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-Network,verb-AAD,verb-ADMS,verb-Ex2010,verb-logging
+    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
+    #Requires -Modules ActiveDirectory,verb-Auth,verb-IO,verb-Mods,verb-Text,verb-Network,verb-AAD,verb-ADMS,verb-logging
     [CmdletBinding()]
     PARAM(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
@@ -16462,8 +16476,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUvg5goq6+Peghb+KnyoC0dGgU
-# LomgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUGJfBKdxjOZFvbMfC9CJ6zz6H
+# I82gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -16478,9 +16492,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSUUYf4
-# 8QckTn1NIpHSTzysxZS+UjANBgkqhkiG9w0BAQEFAASBgH9nDgZFYntFvErLQ2or
-# ZqAZfXxWJfJTDBxpJL5TBhn0Vei+iNYVEaXea40sDHszCrzZTctSqn6+M6qCZczf
-# YnJ/duBazHPhqrsQDGpDiRP/1pqLa/ntGDSnLtYWk1xseufmlWMwJLHKtL96oajq
-# ZQXqlcVQCf1OJj2RXp3mTCzn
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBT10PbQ
+# jdaGJ+E5/wb/85OCShImRzANBgkqhkiG9w0BAQEFAASBgK1l4P6nXayLDIX60FFD
+# eEyabx7jImfQ8Uyi2x0MjiJ9OtyXWKccSQrt69vo1JUO9JGzPLZPpSbhtISEDwt4
+# TXUl3Y84yPX4JJd7cYRvkNrE9rYrSj5sbt6AMuBS6MNmeKLFE6wYRL7FGcEp2Vz4
+# KBapBhxV8cRl1HkfsoQQg4MW
 # SIG # End signature block
