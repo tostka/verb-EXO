@@ -9,6 +9,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    # 12:41 PM 3/14/2022 sync'd to latest mods of move-EXOmailboxNow, largely rem'ing the xo AD material, long-broken by undocumented fw chgs.
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
     * 11:24 AM 9/16/2021 encoded eml
@@ -119,7 +120,7 @@ function move-MailboxToXo{
         $Credential,
         # = $global:$credO365TORSID,
         [Parameter(HelpMessage = "Role of account (SID|CSID|UID|B2BI|CSVC|ESvc|LSvc)[-UserRole SID]")]
-        [ValidateSet('SID','CSID','UID','B2BI','CSVC')]
+        [ValidateSet('SID','CSID','UID','B2BI','CSVC','ESVC','LSVC')]
         [string]$UserRole='SID',
         [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
         [switch] $useEXOv2,
@@ -414,6 +415,13 @@ function move-MailboxToXo{
         #Configure default logging from parent script name
         # logfile                        C:\usr\work\o365\scripts\logs\move-MailboxToXo-(TOR)-LASTPASS-LOG-BATCH-WHATIF-log.txt
         # transcript                     C:\usr\work\o365\scripts\logs\move-MailboxToXo-(TOR)-LASTPASS-Transcript-BATCH-WHATIF-trans-log.txt
+        if($Ticket){
+            $logfile=$logfile.replace("-BATCH","-$($Ticket)-BATCH") ;
+            $transcript=$transcript.replace("-BATCH","-$($Ticket)-BATCH") ;
+        } else {
+            $logfile=$logfile.replace("-BATCH","-nnnnnn") ;
+            $transcript=$transcript.replace("-BATCH","-nnnnnn") ;
+        } ;
         $logfile = $logfile.replace('-LASTPASS','').replace('BATCH',(Remove-InvalidFileNameChars -name $BatchName )) ;
         $transcript = $transcript.replace('-LASTPASS','').replace('BATCH',(Remove-InvalidFileNameChars -name $BatchName )) ;
         if(Test-TranscriptionSupported){start-transcript -Path $transcript }
@@ -423,7 +431,8 @@ function move-MailboxToXo{
     $smsg= "#*======v START PASS:$($ScriptBaseName) v======" ;
     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
+    
+    <# disable cross-org handling, post tenant migr, no need
     # seeing Curly & Cheech turn up in EX10 queries, pre-purge *any* AD psdrive
     if($existingADPSDrives = get-psdrive -PSProvider ActiveDirectory -ea 0){
         $smsg = "Purging *existing* AD PSDrives found:$(($existingADPSDrives| ft -auto name,provider,root,globalcatalog|out-string).trim())" ;
@@ -466,7 +475,7 @@ function move-MailboxToXo{
             BREAK ;
         } ;
     } ;
-
+    #>
     # $XXXMeta.ExOPAccessFromToro & Ex10Server
     # steer all onprem code
     $UseOP=$false ;
@@ -616,14 +625,14 @@ function move-MailboxToXo{
     # multi-org AD
     <#still needs ADMS mount-ADForestDrives() and set-location code @ 395 (had to recode mount-admforestdrives and debug cred production code & infra-string inputs before it would work; will need to dupe to suspend variant on final completion
     #>
-
+    <# 12:25 PM 3/14/2022 disable no x-org
     if(!$global:ADPsDriveNames){
         $smsg = "(connecting X-Org AD PSDrives)" ;
         if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
         $global:ADPsDriveNames = mount-ADForestDrives -verbose:$($verbose) ;
     } ;
-
+    #>
     # EXO connection
 
 
@@ -671,6 +680,7 @@ function move-MailboxToXo{
         } ;
         # pre-clear dc, before querying
         $domaincontroller = $null ;
+        <#
         # we don't know which subdoms may be in play
         pushd ; # cache pwd
         if( $tPsd = "$((Get-Variable  -name "$($TenOrg)Meta").value.ADForestName -replace $rgxDriveBanChars):" ){
@@ -717,6 +727,8 @@ function move-MailboxToXo{
             Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
         } ;
         popd ; # cd to prior dir
+        #>
+        
     } ; # $useOP
     #-=-=-=-=-=-=-
 
@@ -806,6 +818,7 @@ function move-MailboxToXo{
 
         # use new get-GCFastXO cross-org dc finder
         #$domaincontroller = get-GCFastXO -TenOrg $TenOrg -ADObject $tMbxId -verbose:$($verbose) ;
+        <# post tenantmigr, no point
         #-=-=use new get-GCFastXO cross-org dc finder against a TenOrg and -ADObject-=-=-=-=-=-=
         $domaincontroller = $null ; # pre-clear, ensure no xo carryover
         if($tMbxId){
@@ -813,6 +826,8 @@ function move-MailboxToXo{
             $domaincontroller = get-GCFastXO -TenOrg $TenOrg -ADObject $tMbxId -verbose:$($verbose) |?{$_.length} ;
         } else {throw "unpopulated `$TargetMailboxes parameter, unable to resolve a matching OR OP_ExADRoot property" ; } ;
         #-=-=-=-=-=-=-=-=
+        #>
+        
         # issue is that 2 objects are coming back: first is null, 2nd is the dc spec
         $Exit = 0 ;
         Do {
