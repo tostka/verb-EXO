@@ -1,5 +1,4 @@
-﻿#*------v add-EXOLicense.ps1 v------
-function add-EXOLicense {
+﻿{
     <#
     .SYNOPSIS
     add-EXOLicense.ps1 - Add a temporary o365 license to specified MsolUser account. Returns updated MSOLUser object to pipeline.
@@ -18,6 +17,18 @@ function add-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 5:00 PM 3/22/2022 extensive rewrite: Sec mandate to disable all basic auth == complete loss of the long-standing MS MSOnline powershell module: 
+     net effect: have to reimplement & rewraite all verb-MsolNoun cmdlet calls into 
+        the new AzureAD module's equivelents (which fail to match msol cmdlets names, 
+        parameters, or even the data returned, and property names) 
+        - had to write 3 new functions, ground up, to reimplement loss of the 1-liner Set-MsolUserLicense cmdlet functions:
+        - wrote verb-aad: add-AADUserLicense()
+        - wrote verb-aad: remove-AADUserLicense()
+        - wrote verb-aad: set-AADUserUsageLocation()
+        - wrote verb-aad: get-AADlicensePlanList, to workaround loss of useful sku reporting from the prior equiv msol sku cmdlet (new output is unformatted json [facepalm])
+        - rewrote most of the license testing & handling code in this verb-exo:Add-EXOLicense() (roughly 11:20am 3/21/2022 to 5:03 PM 3/22/2022, and I still have a verbose state bug to workout on this script). 
+    * 11:51 AM 3/2 1/2022 update: because *any* licenes, including worthless FLOWFREE, toggles IsLicensed:$true, logic below fails to detect the lack of an EXO lic. 
+    Have to splice over from get-mailboxuserStatus, that evaluates existing aaduser/msolu licenses against the ones that actually support a UserMailbox type.
     * 12:57 PM 1/31/2022 addded -ea 0 to gv PassStatus_$($tenorg) (spurious error suppress)
     * 2:14 PM 1/18/2022 updated Example 1 to include echo of the returned msolu.licenses value.
     * 12:08 PM 1/11/2022 ren add-EXOLicenseTemp -> add-EXOLicense ; add 
@@ -188,50 +199,6 @@ PS> $whatif=$true ;
             $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName) ;
         } ;
         if ($showDebug) { write-debug -verbose:$true "`$ScriptDir:$($ScriptDir)`n`$ScriptBaseName:$($ScriptBaseName)`n`$ScriptNameNoExt:$($ScriptNameNoExt)`n`$PSScriptRoot:$($PSScriptRoot)`n`$PSCommandPath:$($PSCommandPath)" ; } ;
-
-        #$NoProf = [bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); #
-
-        #region EMAIL_HANDLING_BOILERPLATE ; #====== v EMAIL HANDLING BOILERPLATE (USE IN SUB MAIN) v==================================
-        $bodyAsHtml=$true ;
-        $smtpPriority="Normal";
-        # SMTP port (default is 25)
-        $smtpPort = 25 ;
-        $smtpToFailThru="dG9kZC5rYWRyaWVAdG9yby5jb20="| convertfrom-Base64String
-        # pull the notifc smtpto from the xxxMeta.NotificationDlUs value
-        if(!$showdebug){
-            if((Get-Variable  -name "$($TenOrg)Meta").value.NotificationDlUs){
-                $smtpTo = (Get-Variable  -name "$($TenOrg)Meta").value.NotificationDlUs ;
-            }elseif((Get-Variable  -name "$($TenOrg)Meta").value.NotificationAddr1){
-                $smtpTo = (Get-Variable  -name "$($TenOrg)Meta").value.NotificationAddr1 ;
-            } else {$smtpTo=$smtpToFailThru} ;
-        } else {
-            # debug pass, don't send to main dl, use NotificationAddr1    if((Get-Variable  -name "$($TenOrg)Meta").value.NotificationDlUs){
-            if((Get-Variable  -name "$($TenOrg)Meta").value.NotificationAddr1){
-                #set-variable -Name $meta.name -Value ((get-variable -name $meta.name).value  += @{'o365_AcceptedDomains' = (Get-exoAcceptedDomain).domainname} )
-                $smtpTo = (Get-Variable  -name "$($TenOrg)Meta").value.NotificationAddr1 ;
-            } else {$smtpTo=$smtpToFailThru } ;
-        } ;
-        $smtpFrom = (($scriptBaseName.replace(".","-")) + "@$( (Get-Variable  -name "$($TenOrg)Meta").value.o365_OPDomain )") ;
-        $smtpSubj= "Proc Rpt:"
-        if($whatif) {$smtpSubj+="WHATIF:" }
-        else {$smtpSubj+="PROD:" } ;
-        $smtpSubj+= "$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
-        if(!($bodyAsHtml)){
-            # if not inline attachment in body, need to load report as attachment
-            $smtpAttachment=$rptfile ;
-        } else {
-            #9:49 AM 3/26/2015 just blank the attachment if we're not mailing it
-            $smtpAttachment=$null;
-        };
-        # setup body as a hash
-        $smtpBody = @() ;
-        # (`n = CrLf in body)
-        #endregion EMAIL_HANDLING_BOILERPLATE ; #====== ^ EMAIL HANDLING BOILERPLATE (USE IN SUB MAIN) ^ ==================================
-
-        # email trigger vari, and email body aggretating log
-        $PassStatus = $MailBody = $null ;
-        if(get-variable -Name PassStatus_$($tenorg) -scope Script -ea 0){Remove-Variable -Name PassStatus_$($tenorg) -scope Script } ; # pre-clear any prior instance: -WhatIf:$($whatif)
-        New-Variable -Name PassStatus_$($tenorg) -scope Script -Value $null ;
 
         # finally if we're using pipeline, and aggregating, we need to aggreg outside of the process{} block
         if($PSCmdlet.MyInvocation.ExpectingInput){
@@ -665,8 +632,10 @@ PS> $whatif=$true ;
                     Try {
                         connect-msol @pltRXO;
                         $oMSUsr=$null ;
-
-                        $oMSUsr = get-msoluser -UserPrincipalName $tUPN -EA STOP
+                        $TenantShortName = ((Get-AzureADTenantDetail).verifieddomains |?{$_._default}).name.split('.')[0] ; 
+                        $oMSUsr = get-msoluser -UserPrincipalName $tUPN -EA STOP ; 
+                        $pltGAADU=[ordered]@{ ObjectId = $tUPN ; ErrorAction = 'STOP' ; verbose = $($VerbosePreference -eq "Continue") ; } ; 
+                        $AADUser = Get-AzureADUser @pltGAADU ; 
                         $Exit = $Retries ;
                     } Catch {
                         Start-Sleep -Seconds $RetrySleep ;
@@ -685,148 +654,231 @@ PS> $whatif=$true ;
                 } Until ($Exit -eq $Retries) ;
 
                 # confirm/set UsageLoc (reqd for updates)
-                if (-not $oMSUsr.UsageLocation) {
-                    $smsg = "MISSING USAGELOCATION, FORCING" ;
+                if (-not $AADUser.UsageLocation) {
+                    $smsg = "AADUser: MISSING USAGELOCATION, FORCING" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-                    $spltMUsr = [ordered]@{ UserPrincipalName = $oMSUsr.UserPrincipalName ; UsageLocation = "US" ; ErrorAction = 'Stop' ; } ;
-                    
-                    $smsg = "Set-MsolUser with:`n$(($spltMUsr|out-string).trim())`n" ; ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    if (!$whatif) {
+                    $spltSAADUUL = [ordered]@{ 
+                        ObjectID = $AADUser.UserPrincipalName ;
+                        UsageLocation = "US" ;
+                        whatif = $($whatif) ;
+                        verbose = ($VerbosePreference -eq "Continue") ;
+                    } ;
+                    $smsg = "set-AADUserUsageLocationw`n$(($spltSAADUUL|out-string).trim())" ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    $bRet = set-AADUserUsageLocation @spltSAADUUL ; 
+                    if($bRet.Success){
+                        $smsg = "set-AADUserUsageLocation updated UsageLocation:$($bRet.AzureADuser.UsageLocation)" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        # update the local AADUser to reflect the updated AADU returned
+                        $AADUser = $bRet.AzureADuser ; 
+                        #$Report.FixedUsageLocation = $true ; 
+                    } else { 
+                        $smsg = "set-AADUserUsageLocation: FAILED TO UPDATE USAGELOCATION!" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #$Report.FixedUsageLocation = $false ; 
+                        if(-not $whatif){
+                            BREAK; 
+                        } 
+                    } ; 
+                } ;                     
+                # 
 
-                        $Exit = 0 ;
-                        Do {
-                            Try {
-                                Set-MsolUser @spltMUsr ;
-                                $oMSUsr = get-msoluser -UserPrincipalName $tUPN -EA STOP
-                                $smsg = "POST:Confirming UsageLocation -eq US:$($oMSUsr.UsageLocation)" ; 
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                $Exit = $Retries ;
-                            }
-                            Catch {
-                                $ErrTrapd=$Error[0] ;
-                                Start-Sleep -Seconds $RetrySleep ;
-                                $Exit ++ ;
-                                $smsg = "Failed to exec cmd because: $($ErrTrapd)" ;
-                                $smsg += "`nTry #: $Exit" ;
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-                                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                #-=-record a STATUSWARN=-=-=-=-=-=-=
-                                $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
-                                if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
-                                if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
-                                #-=-=-=-=-=-=-=-=
-                                If ($Exit -eq $Retries) {
-                                    $smsg =  "Unable to exec cmd!" ; 
-                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-                                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                } ;
-                            }  ;
-                        } Until ($Exit -eq $Retries) ;
-
-                    } else {
-                        $smsg = "(-whatif: skipping exec (set-msoluser lacks proper -whatif support))" ; ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    }  ;
-                } ;                
 
                 # if lic'd and has a mailbox, shouldn't need a new license
-                if($oMSUsr.isLicensed -eq $true -AND (ps1GetxMbx -id $oMSUsr.UserPrincipalName -ea stop)){
+                #if($oMSUsr.isLicensed -eq $true -AND (ps1GetxMbx -id $oMSUsr.UserPrincipalName -ea stop)){
+                # nope!: IsLicensed:true, even if nothing but FLOWFREE is set. Worthless, for determining why there's no mailbox. 
+                # have to splice over the full exolic-testing code from verb-ex2010:get-mailboxUserStatus():
+                
+                $pltGLPList=[ordered]@{ TenOrg= $TenOrg; verbose=$($VerbosePreference -eq "Continue") ; credential= $pltRXO.credential ; } ; 
+
+                $skus  = get-AADlicensePlanList @pltGLPList ;
+
+                $ExMbxLicenses = get-ExoMailboxLicenses -verbose:$($VerbosePreference -eq "Continue") ;
+                if($skus -AND $ExMbxLicenses){
+                    $IsExoLicensed = $false ;
+                    foreach($pLic in $AADUser.AssignedLicenses.skuid){
+                        if($ExMbxLicenses[$plic]){
+                            $IsExoLicensed = $true ;
+                            $smsg = "$($mbx.userprincipalname) HAS EXO UserMailbox-supporting License:$($ExMbxLicenses[$sku].SKU)|$($ExMbxLicenses[$sku].Label)" ;
+                            write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)"  ;
+                            break ; 
+                        } ;
+                    } ;
+                } else { 
+                    throw "Unable to resolve either get-AADlicensePlanList OR -ExoMailboxLicenses!" ; 
+                    Break ; 
+                } ; 
+
+                if((ps1GetxMbx -id $AADUser.UserPrincipalName -ea continue)){
                     $MSOLLicDetails = get-MsolUserLicenseDetails -UPNs $oMSUsr.userprincipalname -showdebug:$($showdebug) -Verbose:$($VerbosePreference -eq "Continue") ;
                     $smsg= "`MSOLLicDetails`n$(($MSOLLicDetails|out-string).trim())" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-                } else {
-                    $smsg="confirmed $($oMSUsr.UserPrincipalName):is unlicensed" ;
+                } elseif(-not $IsExoLicensed){
+                    if($oMSUsr.isLicensed -eq $true){
+                        # has a bozo lic that doesn't support a mailbox
+                        $smsg = "AADUser:$($tUPN): has .isLicensed:true, but has *NO* EXO UserMailbox-supporting license!" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    } ; 
+                    $smsg="confirmed $($oMSUsr.UserPrincipalName):is unlicensed/underlicensed" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
                     # 9:55 AM 11/15/2019 per Bruce, apply a license, and notify Janel to record
                     #$bRet = add-o365License -MsolUser $oMSUsr -whatif:$($whatif) -showDebug:$($showdebug) -Verbose:$($VerbosePreference -eq "Continue") ;
 
-                    $smsg = "(Get-MsolAccountSku...)" ; 
+                    #$smsg = "(Get-MsolAccountSku...)" ; 
+                    # get-AADlicensePlanList does a formatted return of Get-AzureADSubscribedSku, returns an indexed hash on skuid, for quick lookups
+                    <#$smsg = "(Get-AzureADSubscribedSku...)" ; 
+                    $smsg = "(get-AADlicensePlanList...)" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    #>
+                    #$skus = Get-MsolAccountSku -ea STOP ;
+                    #$skus = Get-AzureADSubscribedSku -ea STOP ; 
+                    #$skus = get-AADlicensePlanList ;
+                    <# raw Get-AzureADSubscribedSku return
+                        LicenseName     = (Convert-LicenseSku -LicenseSku $License.SkuPartNumber)
+                        LicenseSku      = $License.SkuPartNumber
+                        LicenseConsumed = $License.ConsumedUnits
+                        LicenseTotal    = $License.PrepaidUnits.Enabled
+                        LicenseFree     = ($License.PrepaidUnits.Enabled - $License.ConsumedUnits)
+                        LicenseEnabled  = if ($License.CapabilityStatus -eq 'Enabled') { $true }else { $false }
+                        PlanName        = $Plan.ServicePlanName
+                        PlanDescription = (Convert-ServicePlan -ServicePlanID $Plan.ServicePlanID)
+                        PlanId          = $Plan.ServicePlanID
+                        PlanStatus      = $Plan.ProvisioningStatus
+                        AppliesTo       = $Plan.AppliesTo
 
-                    $skus = Get-MsolAccountSku -ea STOP ;
+                    # get-AADlicensePlanList return, with indexed-hashlookup on the SkuPartNumber/plan name (default out: summary table, default index on skuid)
+                    $skus['18181a46-0d4e-45cd-891e-60aabd171b4e'] | ft -auto ;
+                    SkuId                                SkuPartNumber    Enabled Consumed Available Warning Suspended
+                    -----                                -------------    ------- -------- --------- ------- ---------
+                    4b9405b0-7788-4568-add1-99614e613b69 EXCHANGESTANDARD      58       53         5       0         0
+                    #>
 
-                    $pltALic=[ordered]@{UserPrincipalName=$oMSUsr.userprincipalname ; AddLicenses=$null ;} ;
+                    <# AADv2 lic assign:
+                    # terrible prime doc assign lic example
+                    $userUPN="<user sign-in name (UPN)>" ;
+                    $planName="<license plan name from the list of license plans>" ;
+                    $License = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicense ; 
+                    $License.SkuId = (Get-AzureADSubscribedSku | Where-Object -Property SkuPartNumber -Value $planName -EQ).SkuID
+                    $LicensesToAssign = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicenses
+                    $LicensesToAssign.AddLicenses = $License ;
+                    Set-AzureADUserLicense -ObjectId $userUPN -AssignedLicenses $LicensesToAssign ;
+
+                    # better route to a named pack lic
+                    # get the pack skuid's you want to target:
+                    Get-AzureADSubscribedSku | Select Sku*
+ 
+                    SkuId                                SkuPartNumber
+                    -----                                -------------
+                    6fd2c87f-b296-42f0-b197-1e91e994b900 ENTERPRISEPACK
+                    efccb6f7-5641-4e0e-bd10-b4976e1bf68e EMS
+                    # new lic obj for ea pack
+                    $E3License = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicense ;
+                    $EMSLicense = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicense
+                    # set each lic skuid with the matching skuid from the above dump (pulls in the mapping)
+                    $E3License.SkuId = "6fd2c87f-b296-42f0-b197-1e91e994b900"
+                    $EMSLicense.SkuId = "efccb6f7-5641-4e0e-bd10-b4976e1bf68e"
+                    # new lic2assign obj:
+                    $LicensesToAssign = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicenses ;
+                    # stack the array of licenses
+                    $LicensesToAssign.AddLicenses = $E3License,$EMSLicense ;
+                    Set-AzureADUserLicense -ObjectId $User.ObjectId -AssignedLicenses $LicensesToAssign ;
+                    Get-AzureADUser -ObjectId $User.ObjectId | Select -ExpandProperty AssignedPlans
+
+                    # loop out a list to assign
+                    $tpacks = 'ENTERPRISEPACK','EMS'  ; 
+                    $askus = Get-AzureADSubscribedSku ; 
+                    $licAssignArray=@() ; 
+                    foreach($tpk in $tpacks){
+                        $newLicense = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicense ;
+                        $newLicense.SkuId = $askus|?{$_.skupartnumber -eq 'ENTERPRISEPACK'} | select -expand SkuId ;
+                        $licAssignArray+= $newLicense ; 
+                    } ; 
+                    $LicensesToAssign = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicenses ;
+                    $LicensesToAssign.AddLicenses = $licAssignArray ;
+                    Set-AzureADUserLicense -ObjectId $User.ObjectId -AssignedLicenses $LicensesToAssign ;
+                    Get-AzureADUser -ObjectId $User.ObjectId | Select -ExpandProperty AssignedPlans
+                    
+                    # lic removal
+                    PS C:\> $User = Get-AzureAdUser -SearchString sue.cooper@exchangeserverpro.net
+                    PS C:\> $License = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicense
+                    PS C:\> $License.SkuId = "6fd2c87f-b296-42f0-b197-1e91e994b900"
+                    PS C:\> $LicensesToAssign = New-Object -TypeName Microsoft.Open.AzureAD.Model.AssignedLicenses
+                    PS C:\> $LicensesToAssign.AddLicenses = @()
+                    PS C:\> $LicensesToAssign.RemoveLicenses = $License.SkuId
+                    PS C:\> Set-AzureADUserLicense -ObjectId $User.ObjectId -AssignedLicenses $LicensesToAssign
+
+                    #>
+
+                    <# #$LicenseSkuIds=$TORMETA.o365LicSkuF1;
+                    toroco:SPE_F1
+                    #> 
+
+                    #$pltALic=[ordered]@{ObjectId=$oMSUsr.userprincipalname ; AddLicenses=$null ;} ;
+                    # Set-AzureADUserLicense  vers
+                    $pltALic=[ordered]@{UserPrincipalName=$oMSUsr.userprincipalname ; AssignedLicenses=$null ;} ;
+
                     foreach($LicenseSkuId in $LicenseSkuIds){
+                        if( $LicenseSkuId.contains(':') ){
+                            $LicenseSkuId = $LicenseSkuId.split(':')[1] ;
+                            # need the skuid, not the name, could pull another licplan list indiexedonName, but can also post-filter the hashtable, and get it.
+                            $LicenseSkuId = ($skus.values | ?{$_.SkuPartNumber -eq $LicenseSkuId}).skuid ; 
+                        } ; 
                         $smsg = "(attempting license:$($LicenseSkuId)...)" ;
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-                        if($tsku = $skus|?{$_.AccountSkuId -eq $LicenseSkuId}){
-                            $smsg = "($($LicenseSkuId) is present in Tenant SKUs)" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #$bRes = add-AADUserLicense -Users $AADUser.UserPrincipalName -skuid $LicenseSkuId -verbose -whatif
+                        $pltAAADUL=[ordered]@{
+                            Users=$AADUser.UserPrincipalName ;
+                            skuid=$LicenseSkuId ;
+                            verbose = $($VerbosePreference -eq "Continue") ;
+                            erroraction = 'STOP' ;
+                            whatif = $($whatif) ;
+                        } ;
+                        $smsg = "add-AADUserLicense w`n$(($pltAAADUL|out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-                            if($tsku.activeunits -gt $tsku.consumedunits){
-
-                                $smsg = "($($LicenseSkuId) has available units in Tenant $($tsku.consumedunits)/$($tsku.activeunits))"
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
-                                $pltALic.AddLicenses = $LicenseSkuId  ;
-
-                                if(-not ( $oMSUsr | select -expand licenses| ?{$_.AccountSkuId  -eq $LicenseSkuId})){
-                                    $smsg = "`$oMSUsr.userprincipalname:$($oMSUsr.userprincipalname): LACKS $($LicenseSkuId) lic`n" ;
-                                    $smsg += "`nSet-MsolUserLicense with:`n$(($pltALic|out-string).trim())`n" ;
-                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                    if(-not $whatif){
-                                        Set-MsolUserLicense @pltALic ; 
-
-                                        Do {
-                                            connect-msol @pltRXO;
-                                            write-host "." -NoNewLine; Start-Sleep -m (1000 * 5)
-                                            $oMSUsr = get-msoluser -UserPrincipalName $tUPN -EA STOP ; 
-
-                                        } Until ($oMSUsr.IsLicensed) ;
-
-                                        if ($oMSUsr.LicenseReconciliationNeeded){
-                                            $smsg = "$($MsolUser.UserPrincipalName) LicenseReconciliationNeeded STILL AN ISSUE" ;
-                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-                                            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                        }
-                                        else {
-                                            $smsg = "$($MsolUser.UserPrincipalName) LicenseReconciliationNeeded CLEARED" ; ;
-                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                        } ;
-
-
-
-                                    } else {
-                                        $smsg = "(whatif detected, skipping update, NO -WHATIF SUPPORT WITH verb-MSOL*!)"
-                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                    } ;
-
-                                    $smsg = "POST:`n$(($oMSUsr|ft -a UserPrincipalName,DisplayName,isLicensed | out-string).trim())`n" ;
-                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                    BREAK ; 
-                                } else {
-                                    $smsg = "`$oMSUsr.userprincipalname:$($oMSUsr.userprincipalname): is ALREADY LICENSED WITH TARGET LICENSE!`n" ;
-                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                    BREAK ;
-                                } ;
-                            } else {
-                                #$smsg = "`$oMSUsr.userprincipalname:$($oMSUsr.userprincipalname): d LICENSED!`n" ;
-                                $smsg = "($($LicenseSkuId) has *NO* available units in Tenant $($tsku.consumedunits)/$($tsku.activeunits))"
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                BREAK ;
-                            } ;
-
-                        } ;  # if-E
+                        $bRet = add-AADUserLicense @pltAAADUL ; 
+                        if($bRet.Success){
+                            $smsg = "add-AADUserLicense added  Licenses:$($bRet.AddedLicense)" ; 
+                            # $AADUser.AssignedLicenses.skuid
+                            $smsg += "`n$(($AADUser.AssignedLicenses.skuid|out-string).trim())" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            
+                            $smsg = "Detailed Return:`n$(($bRet|out-string).trim())" ; 
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            # update the local AADUser to reflect the updated AADU returned
+                            #$AADUser = $bRet.AzureADuser ; 
+                            #$Report.FixedUsageLocation = $true ; 
+                            BREAK ; # abort further loops if one successfully applied
+                        } elseif($whatif){
+                            $smsg = "(whatif pass, exec skipped), " ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        } else { 
+                            $smsg = "add-AADUserLicense : FAILED TO UPDATE USAGELOCATION!" ;
+                            $smsg += "`n$(($bRet|out-string).trim())" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #$Report.FixedUsageLocation = $false ; 
+                            if(-not $whatif){
+                                BREAK; 
+                            } 
+                        } ; 
+                        
                     } ;  # loop-E $LicenseSkuIds
 
                 }
