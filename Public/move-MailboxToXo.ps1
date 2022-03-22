@@ -66,6 +66,8 @@ function move-MailboxToXo{
     } ;
     .DESCRIPTION
     move-MailboxToXo.ps1 - Non-Suspend Onprem-> EXO mailbox move
+    .PARAMETER TenOrg
+    TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']
     .PARAMETER TargetMailboxes
     Mailbox identifiers(array)[-Targetmailboxes]
     .PARAMETER BatchFile
