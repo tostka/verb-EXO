@@ -21,6 +21,7 @@ Function Connect-EXO2 {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    * 1:24 PM 3/15/2022 moved $minvers to a param: -MinimumVersion
     * 2:40 PM 12/10/2021 more cleanup 
     # 11:23 AM 9/16/2021 string
     # 1:31 PM 7/21/2021 revised Add-PSTitleBar $sTitleBarTag with TenOrg spec (for prompt designators)
@@ -66,6 +67,10 @@ Function Connect-EXO2 {
     .PARAMETER
     ConnectionUri
     Connection Uri for the Remote PowerShell endpoint [-ConnectionUri 'https://outlook.office365.com/powershell-liveid/']
+    .PARAMETER ExchangeEnvironmentName
+    Exchange Environment name [-ExchangeEnvironmentName 'O365Default']
+    .PARAMETER MinimumVersion
+    MinimumVersion to be used when ipmo'ing ExchangeOnlineManagement module[-MinimumVersion '2.0.5']
     .PARAMETER PSSessionOption
     PowerShell session options to be used when opening the Remote PowerShell session
     .PARAMETER BypassMailboxAnchoring
@@ -76,6 +81,8 @@ Function Connect-EXO2 {
     Flag to enable or disable showing the number of objects written
     .PARAMETER Pagesize
     Pagesize Param
+    .PARAMETER showDebug
+    Debugging Flag [-showDebug]
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
@@ -108,6 +115,8 @@ Function Connect-EXO2 {
         [Parameter(HelpMessage = "Exchange Environment name [-ExchangeEnvironmentName 'O365Default']")]
         [Microsoft.Exchange.Management.RestApiClient.ExchangeEnvironment]
         $ExchangeEnvironmentName = 'O365Default',
+        [Parameter(HelpMessage = "MinimumVersion to be used when ipmo'ing ExchangeOnlineManagement module[-MinimumVersion '2.0.5']")]
+        [string] $MinimumVersion = '2.0.5',
         [Parameter(HelpMessage = "PowerShell session options to be used when opening the Remote PowerShell session [-PSSessionOption `$PsSessObj]")]
         [System.Management.Automation.Remoting.PSSessionOption]
         $PSSessionOption = $null,
@@ -172,7 +181,7 @@ Function Connect-EXO2 {
 
         # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
         $modname = 'ExchangeOnlineManagement' ;
-        $minvers = '1.0.1' ;
+        #$MinimumVersion = '1.0.1' ;
         Try { Get-Module -name $modname -listavailable -ErrorAction Stop | out-null } Catch {
             $pltInMod = [ordered]@{Name = $modname ; verbose=$false ;} ;
             if ( $env:COMPUTERNAME -match $rgxMyBoxUID ) { $pltInMod.add('scope', 'CurrentUser') } else { $pltInMod.add('scope', 'AllUsers') } ;
@@ -180,7 +189,7 @@ Function Connect-EXO2 {
             Install-Module @pltIMod ;
         } ; # IsInstalled
         $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$false} ;
-        if ($minvers) { $pltIMod.add('MinimumVersion', $minvers) } ;
+        if ($MinimumVersion) { $pltIMod.add('MinimumVersion', $MinimumVersion) } ;
         Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
             write-verbose "Import-Module w`n$(($pltIMod|out-string).trim())" ;
             Import-Module @pltIMod ;
