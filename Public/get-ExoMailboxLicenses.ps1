@@ -16,8 +16,6 @@ function get-ExoMailboxLicenses {
     Github      : https://github.com/tostka/verb-ex2010
     Tags        : Powershell
     REVISIONS
-    * 1:15 PM 3/21/2022 refactored, updated CBH example
-    * 4:14 PM 3/7/2022 updated CBH exmpl
     * 2:21 PM 3/1/2022 updated CBH
     * 4:27 PM 2/25/2022 init vers
     .DESCRIPTION
@@ -25,94 +23,60 @@ function get-ExoMailboxLicenses {
     .PARAMETER TenOrg
     TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']
     .EXAMPLE
-    PS>  $hSummary=[ordered]@{ AADUAssignedLicenses = $null ; AADUserPrincipalName = $null ; IsExoLicensed = $false ; } ;
-    PS>  $pltGLPList=[ordered]@{ TenOrg= $TenOrg; verbose=$($VerbosePreference -eq "Continue") ; credential= $pltRXO.credential ; } ;
-    PS>  $smsg = "$($tenorg):get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ;
-    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
-    PS>  else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    PS>  $licensePlanListHash = get-AADlicensePlanList @pltGLPList ;
-    PS>  $smsg = "$($tenorg):get-ExoMailboxLicenses" ;
-    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
-    PS>  else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    PS>  $ExMbxLicenses = get-ExoMailboxLicenses -verbose:$($VerbosePreference -eq "Continue") ;
-    PS>  $smsg = "$(($ExMbxLicenses.Values|measure).count) EXO UserMailbox-supporting License summaries returned)" ;
-    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
-    PS>  else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    PS>  $hSummary.AADUserPrincipalName = $UserPrincipalName ;
-    PS>  $pltGAADU=[ordered]@{ ObjectId = $UserPrincipalName ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ; 
-    PS>  $smsg = "Get-AzureADUser on UPN:`n$(($pltGAADU|out-string).trim())" ;
-    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
-    PS>  else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    PS>  if($AADUser = Get-AzureADUser @pltGAADU){
-    PS>      $userList = $AADUser | Select -ExpandProperty AssignedLicenses | Select SkuID  ;
-    PS>      $userLicenses=@() ;
-    PS>      $userList | ForEach {
-    PS>          $sku=$_.SkuId ;
-    PS>          $userLicenses+=$licensePlanListHash[$sku].SkuPartNumber ;
-    PS>      } ;
-    PS>      $hSummary.AADUAssignedLicenses = $userLicenses ;
-    PS>      $IsExoLicensed = $false ;
-    PS>      foreach($pLic in $hSummary.AADUAssignedLicenses){
-    PS>          $smsg = "--(LicSku:$($plic): checking EXO UserMailboxSupport)" ;
-    PS>          if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
-    PS>          else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    PS>          if($ExMbxLicenses[$plic]){
-    PS>              $hSummary.IsExoLicensed = $true ;
-    PS>              $smsg = "$($mbx.userprincipalname) HAS EXO UserMailbox-supporting License:$($ExMbxLicenses[$sku].SKU)|$($ExMbxLicenses[$sku].Label)" ;
-    PS>              if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
-    PS>              else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    PS>              break ; # no sense running whole set, break on 1st mbx-support match
-    PS>          } ;
-    PS>      } ;
-    PS>      if(-not $hSummary.IsExoLicensed){
-    PS>          $smsg = "$($mbx.userprincipalname) WAS FOUND TO HAVE *NO* EXO UserMailbox-supporting License!" ;
-    PS>          if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
-    PS>          else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    PS>      } ;
-    PS>  } else {
-    PS>      $smsg = "=>Get-AzureADUser NOMATCH" ;
-    PS>      $smsg = $recursetag,$smsg -join '' ;
-    PS>      if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
-    PS>      else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    PS>  } ;
-    PS>  $hSummary | write-output ;
-    Expanded demo leveraging verb-AAD:get-AADlicensePlanList & verb-EXO:get-ExoMailboxLicenses, 
-    to evaluate an AADUser.AssignedLicenses list for a license that supports a UserMailbox. 
-    Demoes use of the get-ExoMailboxLicenses() hash returned, to perform license lookups for EXO support. 
+    PS> $hQuotas = get-ExoMailboxLicenses -verbose ; 
+    PS> $hQuotas['database2']
+    Name           ProhibitSendReceiveQuotaGB ProhibitSendQuotaGB IssueWarningQuotaGB
+    ----           -------------------------- ------------------- -------------------
+    database2      12.000                     10.000              9.000
+    Retrieve local org on-prem MailboxDatabase quotas and assign to a variable, with verbose outputs. Then output the retrieved quotas from the indexed hash returned, for the mailboxdatabase named 'database2'.
     .EXAMPLE
-    PS>  $hSummary=[ordered]@{ AADUAssignedLicenses = $null ; AADUserPrincipalName = $null ; IsExoLicensed = $false ; } ;
-    PS>  $pltGLPList=[ordered]@{ TenOrg= $TenOrg; verbose=$($VerbosePreference -eq "Continue") ; credential= $pltRXO.credential ; } ;
-    PS>  $licensePlanListHash = get-AADlicensePlanList @pltGLPList ;
-    PS>  $ExMbxLicenses = get-ExoMailboxLicenses -verbose:$($VerbosePreference -eq "Continue") ;
-    PS>  $hSummary.AADUserPrincipalName = $UserPrincipalName ;
-    PS>  $pltGAADU=[ordered]@{ ObjectId = $UserPrincipalName ; ErrorAction = 'STOP' ; verbose = ($VerbosePreference -eq "Continue") ; } ;
-    PS>  if($AADUser = Get-AzureADUser @pltGAADU){
-    PS>      $userList = $AADUser | Select -ExpandProperty AssignedLicenses | Select SkuID  ;
-    PS>      $userLicenses=@() ;
-    PS>      $userList | ForEach {
-    PS>          $sku=$_.SkuId ;
-    PS>          $userLicenses+=$licensePlanListHash[$sku].SkuPartNumber ;
-    PS>      } ;
-    PS>      $hSummary.AADUAssignedLicenses = $userLicenses ;
-    PS>      $IsExoLicensed = $false ;
-    PS>      foreach($pLic in $hSummary.AADUAssignedLicenses){
-    PS>          if($ExMbxLicenses[$plic]){
-    PS>              $hSummary.IsExoLicensed = $true ;
-    PS>              $smsg = "$($mbx.userprincipalname) HAS EXO UserMailbox-supporting License:$($ExMbxLicenses[$sku].SKU)|$($ExMbxLicenses[$sku].Label)" ;
-    PS>              write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)"  ;
-    PS>              break ;
-    PS>          } ;
-    PS>      } ;
-    PS>      if(-not $hSummary.IsExoLicensed){
-    PS>          $smsg = "$($mbx.userprincipalname) WAS FOUND TO HAVE *NO* EXO UserMailbox-supporting License!" ;
-    PS>          write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
-    PS>      } ;
-    PS>  } else {
-    PS>      $smsg = "=>Get-AzureADUser NOMATCH" ;
-    PS>      write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+    PS>  $pltGXML=[ordered]@{
+    PS>      #TenOrg= $TenOrg;
+    PS>      verbose=$($VerbosePreference -eq "Continue") ;
+    PS>      #credential= $pltRXO.credential ;
+    PS>      #(Get-Variable -name cred$($tenorg) ).value ;
     PS>  } ;
-    PS>  $hSummary | write-output ;
-    Simplfied 'terse' example that does the above, wo the echoing or testing. 
+    PS>  $smsg = "$($tenorg):get-ExoMailboxLicenses w`n$(($pltGXML|out-string).trim())" ;
+    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>  else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>  $objRet = $null ;
+    PS>  $objRet = get-ExoMailboxLicenses @pltGXML ;
+    PS>  if( ($objRet|Measure-Object).count -AND $objRet.GetType().FullName -match $rgxHashTableTypeName ){
+    PS>      $smsg = "get-ExoMailboxLicenses:$($tenorg):returned populated ExMbxLicenses" ;
+    PS>      if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>      else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>      $ExMbxLicenses = $objRet ;
+    PS>  } else {
+    PS>      $smsg = "get-ExoMailboxLicenses:$($tenorg):FAILED TO RETURN populated [hashtable] ExMbxLicenses" ;
+    PS>      if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error } 
+    PS>      else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>      THROW $SMSG ; 
+    PS>      break ; 
+    PS>  } ;
+    PS>  $smsg = "$(($ExMbxLicenses.Values|measure).count) EXO UserMailbox-supporting License summaries returned)" ;
+    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>  else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;    
+    PS>  $smsg = "$(($ExMbxLicenses.Values|measure).count) EXO UserMailbox-supporting License summaries returned)" ;
+    PS>  if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+    PS>  else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+    PS> $aadu = get-azureaduser -obj someuser@domain.com ; 
+    PS> $IsExoLicensed = $false ;
+    PS> foreach($pLic in $aadu.AssignedLicenses){
+    PS>     $smsg = "--(LicSku:$($plic): checking EXO UserMailboxSupport)" ; 
+    PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    PS>     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;                                     
+    PS>     if($ExMbxLicenses[$plic]){
+    PS>         $hSummary.IsExoLicensed = $true ;
+    PS>         $smsg = "$($mbx.userprincipalname) HAS EXO UserMailbox-supporting License:$($ExMbxLicenses[$sku].SKU)|$($ExMbxLicenses[$sku].Label)" ; 
+    PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    PS>         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+    PS> } ; 
+    PS> if(-not $hSummary.IsExoLicensed){
+    PS>     $smsg = "$($mbx.userprincipalname) WAS FOUND TO HAVE *NO* EXO UserMailbox-supporting License!" ; 
+    PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+    PS>     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+    PS> } ;
+    Expanded example with testing of returned object, and demoes use of the returned hash against a mailbox spec, steering via .UseDatabaseQuotaDefaults
     .LINK
     https://github.com/tostka/verb-ex2010
     #>

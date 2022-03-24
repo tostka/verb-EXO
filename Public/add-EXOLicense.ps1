@@ -1,4 +1,5 @@
-﻿{
+﻿#*------v add-EXOLicense.ps1 v------
+function add-EXOLicense {
     <#
     .SYNOPSIS
     add-EXOLicense.ps1 - Add a temporary o365 license to specified MsolUser account. Returns updated MSOLUser object to pipeline.
@@ -17,8 +18,10 @@
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 5:17 PM 3/23/2022 more retooling to remove msonline module dependance, and shift to AzureAD (crappy implementation GraphAPI) module
+    * 1:50 PM 3/23/2022 hunting the VerbosePreference toggle midway through, found 2 more verbose tests lacking leading verbose = $($VerbosePreference -eq "Continue"); prefixed examples with PS>
     * 5:00 PM 3/22/2022 extensive rewrite: Sec mandate to disable all basic auth == complete loss of the long-standing MS MSOnline powershell module: 
-     net effect: have to reimplement & rewraite all verb-MsolNoun cmdlet calls into 
+        net effect: have to reimplement & rewraite all verb-MsolNoun cmdlet calls into 
         the new AzureAD module's equivelents (which fail to match msol cmdlets names, 
         parameters, or even the data returned, and property names) 
         - had to write 3 new functions, ground up, to reimplement loss of the 1-liner Set-MsolUserLicense cmdlet functions:
@@ -61,31 +64,32 @@
     Process an array of users, with default 'hunting' -LicenseSkuIds array. 
     .EXAMPLE
     PS> $updatedMSOLU = add-EXOLicense -users 'Test@domain.com','Test2@domain.com' -verbose ;
-        if($updatedMSOLU.islicensed){'Y' ; $updatedMSOLU.licenses } else { 'N' } ; 
+    PS> if($updatedMSOLU.islicensed){'Y' ; $updatedMSOLU.licenses } else { 'N' } ; 
     Process license add for specified user, and post-test isLicensed status, using default license array configured on the -LicenseSkuIDs default value. Then echo the current licenses list (as returned in the updated MSOLUser object). 
     .EXAMPLE
-PS> $whatif=$true ;
-    $target = 'TICKETNUMBER,USERUPN' ;
-    if($target.contains(',')){
-        $ticket,$trcp = $target.split(',') ;
-        $updatedmsolu = add-EXOLicense -users $trcp -Ticket $ticket -whatif:$($whatif) ;
-        $props1 = 'UserPrincipalName','DisplayName','IsLicensed' ;
-        $props2 = @{Name='Licenses';
-        Expression={$_.licenses.accountskuid -join ', '}}  ;
-        $smsg = "UpdatedMsolU: w`n$(($updatedmsolu| ft -auto $props1 |out-string).trim())" ;
-        $smsg += "`n:$(($updatedmsolu| fl $props2 |out-string).trim())" ;
-        write-host -foregroundcolor green $smsg ;
-        if(!$whatif){
-            write-host "dawdling until License reinflates mbx..." ;
-            $1F=$false ;
-            Do {
-                if($1F){Sleep -s 30} ;
-                write-host "." -NoNewLine ;
-                $1F=$true ;
-            } Until (get-exomailbox -id $trcp  -EA 0) ;
-            write-host "Mailbox reattached: Ready for conversion!" ;
-        } ;
-    } else { write-warning "`$target does *not* contain comma delimited ticket,UPN string!"} ;
+    PS> $whatif=$true ;
+    PS>  $target = 'TICKETNUMBER,USERUPN' ;
+    PS>  if($target.contains(',')){
+    PS>      $ticket,$trcp = $target.split(',') ;
+    PS>      $updatedmsolu = add-EXOLicense -users $trcp -Ticket $ticket -whatif:$($whatif) ;
+    PS>      $props1 = 'UserPrincipalName','DisplayName','IsLicensed' ;
+    PS>      $props2 = @{Name='Licenses';
+    PS>      Expression={$_.licenses.accountskuid -join ', '}}  ;
+    PS>      $smsg = "UpdatedMsolU: w`n$(($updatedmsolu| ft -auto $props1 |out-string).trim())" ;
+    PS>      $smsg += "`n:$(($updatedmsolu| fl $props2 |out-string).trim())" ;
+    PS>      write-host -foregroundcolor green $smsg ;
+    PS>      if(!$whatif){
+    PS>          write-host "dawdling until License reinflates mbx..." ;
+    PS>          $1F=$false ;
+    PS>          Do {
+    PS>              if($1F){Sleep -s 30} ;
+    PS>              write-host "." -NoNewLine ;
+    PS>              $1F=$true ;
+    PS>          } Until (get-exomailbox -id $trcp  -EA 0) ;
+    PS>          write-host "Mailbox reattached: Ready for conversion!" ;
+    PS>      } ;
+    PS>  } else { write-warning "`$target does *not* contain comma delimited ticket,UPN string!"} ;
+
     Fancier variant of above, with more post-confirm reporting
     .EXAMPLE
     PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $TORMETA.o365LicSkuExStd -ticket TICKETNUMBER;
@@ -663,7 +667,7 @@ PS> $whatif=$true ;
                         ObjectID = $AADUser.UserPrincipalName ;
                         UsageLocation = "US" ;
                         whatif = $($whatif) ;
-                        verbose = ($VerbosePreference -eq "Continue") ;
+                        verbose = $($VerbosePreference -eq "Continue") ;
                     } ;
                     $smsg = "set-AADUserUsageLocationw`n$(($spltSAADUUL|out-string).trim())" ; 
                     if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
