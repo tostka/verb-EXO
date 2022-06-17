@@ -18,24 +18,31 @@ function remove-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:10 PM 6/7/2022 updated cbh params
     * 5:17 PM 3/23/2022 retooling to remove msonline module dependance, and shift to AzureAD (crappy implementation GraphAPI) module
     * 12:57 PM 1/31/2022 addded -ea 0 to gv PassStatus_$($tenorg) (spurious error suppress)
     * 3:14 PM 1/18/2022 REM'D EXOP conn's (match add-exolic), this is pure msolu & exo. 
     * 1:02 PM 1/17/2022 port of add-EXOLicense to removal process
     .DESCRIPTION
     remove-EXOLicense.ps1 - Remove a temporary o365 license from specified MsolUser account. Returns updated MSOLUser object to pipeline.
+    .PARAMETER users
+    Array of UserPrincipalNames (or MSOLUser objects) to have a temporary Exchange License applied
     .PARAMETER Ticket
     Ticket Number [-Ticket '999999']
+    .PARAMETER LicenseSkuIds
+    Array, in preference order, of Tenant-specific LicenseSku names (first working lic assignment will be applied)[-LicenseSkuIds 'tenantname:SPE_F1','tenantname:ENTERPRISEPACK']
     .PARAMETER TenOrg
     TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']
-    .PARAMETER  users
-    Array of UserPrincipalNames (or MSOLUser objects) to have a temporary Exchange License applied
-    .PARAMETER Credential
-    Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]
     .PARAMETER useEXOv2
     Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
-    .PARAMETER outObject
-    switch to return a system.object summary to the pipeline[-outObject]
+    .PARAMETER Credential
+    Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]
+    .PARAMETER UserRole
+    Credential User Role spec (SID|CSID|UID|B2BI|CSVC)[-UserRole SID]
+    .PARAMETER showDebug
+    switch to show extended debugging output [-showdebug]
+    .PARAMETER whatIf
+    Whatif Flag  [-whatIf]
     .INPUTS
     None. Does not accepted piped input.(.NET types, can add description)
     .OUTPUTS
