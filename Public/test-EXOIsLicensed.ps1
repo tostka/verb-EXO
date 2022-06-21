@@ -1,9 +1,9 @@
-﻿# test-EXOIsLicensed
-
-#*----------v Function test-EXOIsLicensed() v----------
+﻿#*----------v Function test-EXOIsLicensed() v----------
 function test-EXOIsLicensed {
     <#
     .SYNOPSIS
+    VERB-NOUN.ps1 - 1LINEDESC
+    .NOTES
     test-EXOIsLicensed.ps1 - Evaluate IsLicensed status, to indicate license support for Exchange online UserMailbox type, on passed in AzureADUser object
     .NOTES
     Version     : 1.0.0
@@ -17,6 +17,7 @@ function test-EXOIsLicensed {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell
     REVISIONS
+    * 12:45 PM 6/21/2022 added cbh expl that rolls up a rgx to use for independant manual tests against 
     3:08 PM 3/23/2022 init
     .DESCRIPTION
     test-EXOIsLicensed.ps1 - Evaluate IsLicensed status, to indicate license support for Exchange online UserMailbox type, on passed in AzureADUser object
@@ -34,16 +35,6 @@ function test-EXOIsLicensed {
 
     Not to mention get-AzureADuser's complete lack of any native evaluation on either front. [facepalm]
     Nor any similar native support in the gap from the ExchangeOnlineManagement module. 
-
-    <rant>
-        I *love* coding coverage for slipshod MS module providers that write to replace *force*-deprecated critical infra tools, 
-        but can't be bothered to deliver equiv function, equiv parameters, or even similar outputs, 
-        for long-standing higher-functioning tools, when they write the half-implemented *new* ones.
-
-        And no, "Just make calls to GraphAPI!", is not a viable answer, for *working* admins, mandated to deliver working solutions on tight schedules. 
-        If we wanted to be REST web devs, we wouldn't be running o365 services!
-    </rant>
-
     .PARAMETER  User
     AzureADUser [Microsoft.Open.AzureAD.Model.User] object
     .PARAMETER TenOrg
@@ -56,6 +47,10 @@ function test-EXOIsLicensed {
     PS> $isEXOLicensed = test-EXOIsLicensed -User $AADUser user@domain.com -verbose
     PS> if($isEXOLicensed){write-host 'Has EXO Usermailbox Type License'} else { write-warning 'NO EXO USERMAILBOX TYPE LICENSE!'} ; 
     Evaluate IsLicensed status on passed UPN object
+    .EXAMPLE
+    PS> $ExMbxLicenses = get-ExoMailboxLicenses ;
+    PS> [regex]$rgxExLics = ('(' + (($ExMbxLicenses.GetEnumerator().name |%{[regex]::escape($_)}) -join '|') + ')') ; 
+    Demo pulling the underlying licenses list and building a regex for static use
     .LINK
     https://github.com/tostka/verb-EXO
     #>
