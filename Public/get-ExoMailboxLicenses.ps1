@@ -16,6 +16,7 @@ function get-ExoMailboxLicenses {
     Github      : https://github.com/tostka/verb-ex2010
     Tags        : Powershell
     REVISIONS
+    * 12:45 PM 6/21/2022 added cbh expl that rolls up a rgx to use for independant manual tests against 
     * 2:21 PM 3/1/2022 updated CBH
     * 4:27 PM 2/25/2022 init vers
     .DESCRIPTION
@@ -77,6 +78,10 @@ function get-ExoMailboxLicenses {
     PS>     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
     PS> } ;
     Expanded example with testing of returned object, and demoes use of the returned hash against a mailbox spec, steering via .UseDatabaseQuotaDefaults
+    EXAMPLE
+    PS> $ExMbxLicenses = get-ExoMailboxLicenses ;
+    PS> [regex]$rgxExLics = ('(' + (($ExMbxLicenses.GetEnumerator().name |%{[regex]::escape($_)}) -join '|') + ')') ; 
+    Demo pulling the underlying licenses list and building a regex for static use
     .LINK
     https://github.com/tostka/verb-ex2010
     #>
