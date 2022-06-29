@@ -18,6 +18,10 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    # 3:57 PM 6/29/2022 fundemental retool for exov2 requirements; pulled all 
+        aliasing (wasn't functional for exov2, didn't want to rewrite, and with hard 
+        mfa req, exov2 is only way forward, there'll never be verb-EXOnoun use again, 
+        due to MS fundemental seizure of the prefix for their 13 'special' cmdlets. 
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 3:55 PM 2/22/2022 extended the cloud federate test code, to include an INT block (though there's no hybrid to arbitrate, the users are onprem in AD at INT)
     * 12:24 PM 2/1/2022 updated CBH, added a crlf on the console echo (headers weren't lining up); added -getMobile & get-exoMobileDeviceStats support, with conditional md output block; added full aliased xo cmds, implementing full -exov2 support.
@@ -135,7 +139,7 @@ function resolve-user {
         [Parameter(HelpMessage="switch to return mobiledevice info for target user[-getMobile]")]
         [switch] $getMobile,
         [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
-        [switch] $useEXOv2,
+        [switch] $useEXOv2=$true,
         [Parameter(HelpMessage="switch to return a system.object summary to the pipeline[-outObject]")]
         [switch] $outObject
     ) ;
@@ -259,7 +263,15 @@ function resolve-user {
             write-verbose "($(($users|measure).count)) user(s) specified:`n'$($users -join "','")'" ;
         } ;
         #>
-        rx10 -Verbose:$false ; rxo  -Verbose:$false ; cmsol  -Verbose:$false ;
+        # 3:19 PM 6/23/2022: for exo2, this is going to have to be rearranged, if not shifted into smarter cxo2.
+        <#rx10 -Verbose:$false ;
+        rxo  -Verbose:$false ;
+        cmsol  -Verbose:$false ;
+        #>
+        dx10 ; 
+        rxo2 ; 
+        rx10 ; 
+        caad ;
 
         # finally if we're using pipeline, and aggregating, we need to aggreg outside of the process{} block
         if($PSCmdlet.MyInvocation.ExpectingInput){
@@ -270,19 +282,21 @@ function resolve-user {
         # simple loop to stock the set, no set->get conversion, roughed in $Exov2 exo->xo replace. Do specs in exo, and flip to suit under $exov2
         #configure EXO EMS aliases to cover useEXOv2 requirements
         # have to preconnect, as it gcm's the targets
-        if ($script:useEXOv2) { reconnect-eXO2 }
+        #if ($script:useEXOv2) { reconnect-eXO2 }
+        <# disable entire aliasing, xo2 is only way forward
+        # pull scope
+        if ($useEXOv2) { reconnect-eXO2 }
         else { reconnect-EXO } ;
         # aliased ExOP|EXO|EXOv2 cmdlets (permits simpler single code block for any of the three variants of targets & syntaxes)
         # each is '[aliasname];[exOcmd] (xOv2cmd & exop are converted from [exocmd])
-        [array]$cmdletMaps = 'ps1GetxRcp;get-exorecipient;', 'ps1GetxMbx;get-exomailbox;', 'ps1GetxMobilDevStats;Get-exoMobileDeviceStatistics', 
-            'ps1GetxMUsr;Get-exoMailUser', 'ps1GetxUser;get-exoUser;', 'ps1TestxMapi;Test-exoMAPIConnectivity' ;
+        [array]$cmdletMaps = '', '', '', 
+            '', '', '' ;
         [array]$XoOnlyMaps = 'ps1GetxMsgTrcDtl','ps1TestxOAuthConn' ; # cmdlet alias names from above that are skipped for aliasing in EXOP
         # cmdlets from above that have diff names EXO v EXoP: these each have  schema: [alias];[xoCmdlet];[opCmdlet]; op Aliases use the opCmdlet as target
-        [array]$XoRenameMaps = 'ps1GetxMsgTrc;get-exoMessageTrace;get-MessageTrackingLog','ps1AddRcpPrm;Add-exoRecipientPermission;Add-AdPermission',
-                'ps1GetRcpPrm;Get-exoRecipientPermission;Get-AdPermission','ps1RmvRcpPrm;Remove-exoRecipientPermission;Remove-ADPermission' ;
-        [array]$Xo2VariantMaps =   'ps1GetxCasMbx;Get-exoCASMailbox', 'ps1GetxMbx;get-exomailbox;', 'ps1GetxMbxFldrPerm;get-exoMailboxfolderpermission;',
-            'ps1GetxMbxFldrStats;get-exoMailboxfolderStatistics', 'ps1GetxMbxPrm;Get-exoMailboxPermission', 'ps1GetxMbxStat;Get-exoMailboxStatistics',
-            'ps1GetxMobilDevStats;Get-exoMobileDeviceStatistics', 'ps1GetxRcp;get-exorecipient;', 'ps1AddRcpPrm;Add-exoRecipientPermission' ;
+        [array]$XoRenameMaps = '','',
+                '' ;
+        [array]$Xo2VariantMaps =   '', '',
+            '', '' ;
         # cmdlets above have XO2 enhanced variant-named versions to target (they never are prefixed verb-xo[noun], always/only verb-exo[noun])
         # code to summarize & indexed-hash the renamed cmdlets for variant processing
         $XoRenameMapNames = @() ;
@@ -295,11 +309,13 @@ function resolve-user {
         #$cmdletMapsFltrd += $cmdletmaps|?{$_.split(';')[1] -like '*recipient'}
         $cmdletMapsFltrd = $cmdletmaps ; # or use full set
         foreach($cmdletMap in $cmdletMapsFltrd){
-            if($script:useEXOv2){
+            if($useEXOv2){
                 if($Xo2VariantMapNames -contains $cmdletMap.split(';')[0]){
                     write-verbose "$($cmdletMap.split(';')[1]) has an XO2-VARIANT cmdlet, renaming for XOV2 enhanced variant" ;
                     # sub -exoNOUN -> -NOUN using ExOP variant cmdlet
-                    if(!($cmdlet= Get-Command $oXo2VariantMaps[($cmdletMap.split(';')[0])][2] )){ throw "unable to gcm Alias definition!:$($oxoRenameMaps[($cmdletMap.split(';')[0])][2])" ; break }
+                    #if(!($cmdlet= Get-Command $oXo2VariantMaps[($cmdletMap.split(';')[0])][2] )){ throw "unable to gcm Alias definition!:$($oxoRenameMaps[($cmdletMap.split(';')[0])][2])" ; break }
+                    # .replace('-exo','-xo')
+                    if(!($cmdlet= Get-Command $oXo2VariantMaps[$cmdletMap.split(';')[1].replace('-exo','-xo')][2] )){ throw "unable to gcm Alias definition!:$($oxoRenameMaps[($cmdletMap.split(';')[0])][2])" ; break }
                     $nAName = ($cmdletMap.split(';')[0]);
                     if(-not(get-alias -name $naname -ea 0 |?{$_.Definition -eq $cmdlet.name})){
                         $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
@@ -324,7 +340,7 @@ function resolve-user {
             } ;
         } ;# ...
         #*------^ END ALIAS XO CMDLETS FOR EXOV2 ^------
-
+        #>
     }
     PROCESS{
         #$dname= 'Todd Kadrie' ;
@@ -374,6 +390,7 @@ function resolve-user {
                 MsolUser = $null ;
                 AADUser = $null ; # added for MailUser variant
                 AADUserMgr = $null ;
+                AADUserLics = $null ; 
                 LicenseGroup = $null ;
                 isDirSynced = $null 
                 isNoBrain = $false ;
@@ -512,9 +529,10 @@ function resolve-user {
             } ;
 
 
-            write-verbose "$((get-alias ps1GetxRcp).definition) w`n$(($pltGMailObj|out-string).trim())" ;
-            rxo  -Verbose:$false -silent ;
-            if($hSum.xoRcp=ps1GetxRcp @pltGMailObj -ea 0 | select -first $MaxRecips ){
+            #write-verbose "$((get-alias ps1GetxRcp).definition) w`n$(($pltGMailObj|out-string).trim())" ;
+            write-verbose "get-xorecipient  w`n$(($pltGMailObj|out-string).trim())" ;
+            #rxo  -Verbose:$false -silent ;
+            if($hSum.xoRcp=get-xorecipient @pltGMailObj -ea 0 | select -first $MaxRecips ){
                 write-verbose "`$hSum.xoRcp found" ;
             } elseif($isDname -and $hsum.lname) {
                 $smsg = "Failed:RETRY: detected 'LName':$($hsum.lname) for near matches..." ;
@@ -522,12 +540,13 @@ function resolve-user {
                 $lname = $hsum.lname ;
                 $fltrB = "displayname -like '*$lname*'" ;
                 write-verbose "RETRY:get-recipient -filter {$($fltr)}" ;
-                if($hSum.xoRcp=ps1GetxRcp -filter $fltr -ea 0 -ResultSize $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 -ResultSize $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
                     write-verbose "`$hSum.xoRcp found" ;
                 } ;
             }
             if(!$hsum.xoRcp){
-                $smsg = "Failed to $((get-alias ps1GetxRcp).definition) on:$($usr)"
+                #$smsg = "Failed to $((get-alias ps1GetxRcp).definition) on:$($usr)"
+                $smsg = "get-xorecipient on:$($usr)"
                 if($isDname){$smsg += " or *$($hsum.lname )*"} ;
                 write-host $smsg ;
             } else {
@@ -711,8 +730,9 @@ function resolve-user {
                     TRY {
                         switch -regex ($txR.recipienttypedetails){
                             "UserMailbox" {
-                                write-verbose "$((get-alias ps1GetxMbx).definition) w`n$(($pltGMailObj|out-string).trim())" ;
-                                if($hSum.xoMailbox=ps1GetxMbx @pltGMailObj -ea 0 | select -first $MaxRecips ){
+                                #write-verbose "$((get-alias ps1GetxMbx).definition) w`n$(($pltGMailObj|out-string).trim())" ;
+                                write-verbose "get-exomailbox w`n$(($pltGMailObj|out-string).trim())" ;
+                                if($hSum.xoMailbox=get-xomailbox @pltGMailObj -ea 0 | select -first $MaxRecips ){
                                     write-verbose "`$hSum.xoMailbox:`n$(($hSum.xoMailbox|out-string).trim())" ;
                                     if($outObject){
 
@@ -731,8 +751,8 @@ function resolve-user {
                                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                                         } ;
-                                        write-verbose "'xoUserMailbox':$((get-alias ps1TestxMapi).definition) $($xmbx.userprincipalname)"
-                                        $hSum.xoMapiTest = ps1TestxMapi -identity $xmbx.userprincipalname ;
+                                        write-verbose "'xoUserMailbox':Test-exoMAPIConnectivity $($xmbx.userprincipalname)"
+                                        $hSum.xoMapiTest = Test-xoMAPIConnectivity -identity $xmbx.userprincipalname ;
                                         $smsg = "Outlook (xoMAPI) Access Test Result:$($hsum.xoMapiTest.result)" ;
                                         if($hsum.xoMapiTest.result -eq 'Success'){
                                             write-host -foregroundcolor green $smsg ;
@@ -741,12 +761,13 @@ function resolve-user {
                                         } ;
                                         if($getMobile){
                                             # $devstats = Get-exoMobileDeviceStatistics -Mailbox UPN
-                                            $smsg = "'xoMobileDeviceStats':$((get-alias ps1GetxMobilDevStats).definition) -Mailbox $($xmbx.userprincipalname)"
+                                            #$smsg = "'xoMobileDeviceStats':$((get-alias ps1GetxMobilDevStats).definition) -Mailbox $($xmbx.userprincipalname)"
+                                            $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.userprincipalname)"
                                             if($verbose){
                                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                                                 else{ write-verbose $smsg } ; 
                                             } ; 
-                                            $hsum.xoMobileDeviceStats = ps1GetxMobilDevStats -Mailbox $xmbx.userprincipalname -ea STOP ; 
+                                            $hsum.xoMobileDeviceStats = Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ; 
                                             $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMapiTest|measure).count)" ;
                                             write-host -foregroundcolor green $smsg ;
                                         } ; 
@@ -758,10 +779,12 @@ function resolve-user {
                                 # external mail recipient, *not* in TTC - likely in other rgs, and migrated to remote EXOP enviro
                                 #$hSum.OPRemoteMailbox=get-remotemailbox $txR.identity  ;
                                 caad -silent -verbose:$false ;
-                                write-verbose "`$txR | $((get-alias ps1GetxMUsr).definition)..." ;
-                                $hSum.xoMUser = $txR | ps1GetxMUsr -ResultSize $MaxRecips | select -first $MaxRecips ;
-                                write-verbose "`$txR | $((get-alias ps1GetxUser).definition)..." ;
-                                $hSum.xoUser = $txR | get-exouser -ResultSize $MaxRecips | select -first $MaxRecips ;
+                                #write-verbose "`$txR | $((get-alias ps1GetxMUsr).definition)..." ;
+                                write-verbose "`$txR | Get-xoMailUser..." ;
+                                $hSum.xoMUser = $txR | Get-xoMailUser -ResultSize $MaxRecips | select -first $MaxRecips ;
+                                #write-verbose "`$txR | $((get-alias ps1GetxUser).definition)..." ;
+                                write-verbose "`$txR | get-xoUser ..." ;
+                                $hSum.xoUser = $txR | get-xouser -ResultSize $MaxRecips | select -first $MaxRecips ;
                                 write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
                                 #write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ;
                                 #$hSum.AADUser  = get-AzureAdUser  -objectid $hSum.xoMUser.userPrincipalName -Top $MaxRecips ;
@@ -778,8 +801,9 @@ function resolve-user {
                             "GuestMailUser" {
                                 #$hSum.OPRemoteMailbox=get-remotemailbox $txR.identity  ;
                                 caad -silent -verbose:$false ;
-                                write-verbose "`$txR | $((get-alias ps1GetxUser).definition)..." ;
-                                $hSum.xoUser = $txR | get-exouser -ResultSize $MaxRecips | select -first $MaxRecips ;
+                                #write-verbose "`$txR | $((get-alias ps1GetxUser).definition)..." ;
+                                write-verbose "`$txR | get-xoUser..." ; 
+                                $hSum.xoUser = $txR | get-xouser -ResultSize $MaxRecips | select -first $MaxRecips ;
                                 write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
                                 write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ;
                                 $hSum.txGuest = get-AzureAdUser  -objectid $hSum.xoUser.userPrincipalName -Top $MaxRecips | select -first $MaxRecips ;
@@ -933,8 +957,9 @@ function resolve-user {
                 if(!$hSum.xoUser){
                     $ino = 0 ;
                     foreach($xmbx in $hSum.xoMailbox){
-                        write-verbose "$((get-alias ps1GetxUser).definition) -id $($xmbx.UserPrincipalName)"
-                        $hSum.xoUser += get-exouser -id $xmbx.UserPrincipalName -ResultSize $MaxRecips ;
+                        #write-verbose "$((get-alias ps1GetxUser).definition) -id $($xmbx.UserPrincipalName)"
+                        write-verbose "get-xoUser -id $($xmbx.UserPrincipalName)"
+                        $hSum.xoUser += get-xouser -id $xmbx.UserPrincipalName -ResultSize $MaxRecips ;
                         write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|out-string).trim())" ;
                     } ;
                 }
@@ -980,8 +1005,9 @@ function resolve-user {
                     write-host "=get-AADU:>`n$(($hSum.txGuest |fl userp*,PhysicalDeliveryOfficeName,JobTitle|out-string).trim())"
                 } ;
                 TRY {
-                    write-verbose "$((get-alias ps1GetxRcp).definition) -Filter {Members -eq '$($hSum.xoUser.DistinguishedName)'}`n -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup"
-                    $hSum.xoMemberOf = ps1GetxRcp -Filter "Members -eq '$($hSum.xoUser.DistinguishedName)'" -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup ;
+                    #write-verbose "$((get-alias ps1GetxRcp).definition) -Filter {Members -eq '$($hSum.xoUser.DistinguishedName)'}`n -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup"
+                    write-verbose "get-xorecipient -Filter {Members -eq '$($hSum.xoUser.DistinguishedName)'}`n -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup"
+                    $hSum.xoMemberOf = get-xorecipient -Filter "Members -eq '$($hSum.xoUser.DistinguishedName)'" -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup ;
                     write-verbose "`$hSum.xoMemberOf:`n$(($hSum.xoMemberOf|out-string).trim())" ;
                 } CATCH {
                     $ErrTrapd=$Error[0] ;
@@ -1007,8 +1033,9 @@ function resolve-user {
                         # $propsRcpTbl
                         write-host -foregroundcolor yellow "`n$(($hSum.Rcp | ft -a $propsRcpTbl |out-string).trim())" ;
                     } ;
-                    write-host "$((get-alias ps1GetxRcp).definition) -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} : "
-                    if($hSum.xoRcp=ps1GetxRcp -id $substring -ea 0 -ResultSize $MaxRecips | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                    #write-host "$((get-alias ps1GetxRcp).definition) -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} : "
+                    write-host "get-xorecipient -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} : "
+                    if($hSum.xoRcp=get-xorecipient -id $substring -ea 0 -ResultSize $MaxRecips | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
                         #$hSum.xoRcp | write-output ;
                         write-host -foregroundcolor yellow "`n$(($hSum.xoRcp | ft -a $propsRcpTbl |out-string).trim())" ;
                     } ;
@@ -1023,8 +1050,9 @@ function resolve-user {
             #if($hSum.xoRcp.recipienttypedetails -eq 'UserMailbox' -AND -not($hSum.xoMailbox)){
             # accomodate array xorcp
             if(($hSum.xoRcp|?{$_.recipienttypedetails -eq 'UserMailbox'}) -AND -not($hSum.xoMailbox)){
-                write-verbose "$((get-alias ps1GetxMbx).definition) w`n$(($pltGMailObj|out-string).trim())" ;
-                if($hSum.xoMailbox=ps1GetxMbx @pltGMailObj -ea 0| select -first $MaxRecips ){
+                #write-verbose "$((get-alias ps1GetxMbx).definition) w`n$(($pltGMailObj|out-string).trim())" ;
+                write-verbose "get-xomailbox w`n$(($pltGMailObj|out-string).trim())" ;
+                if($hSum.xoMailbox=get-xomailbox @pltGMailObj -ea 0| select -first $MaxRecips ){
                     $ino = 0 ;
                     $mapiResults = @() ;
                     foreach($xmbx in $hSum.xoMailbox){
@@ -1034,9 +1062,9 @@ function resolve-user {
                         } else { $msgprefix = $null } ;
                         $smsg = $msgprefix, "`$hSum.xoMailbox:`n$(($xmbx|out-string).trim())" -join ' ' ;
                         write-verbose $smsg ;
-                        $smsg = $msgprefix,"'xoUserMailbox':$((get-alias ps1TestxMapi).definition) $($xmbx.userprincipalname)"  -join ' ' ;
+                        $smsg = $msgprefix,"'xoUserMailbox':Test-exoMAPIConnectivity $($xmbx.userprincipalname)"  -join ' ' ;
                         write-verbose $smsg ;
-                       $mapiResults += ps1TestxMapi -identity $xmbx.userprincipalname ;
+                       $mapiResults += Test-xoMAPIConnectivity -identity $xmbx.userprincipalname ;
                         $smsg = "Outlook (xoMAPI) Access Test Result:$($mapiResults[$ino - 1].result)" ;
                         if($mapiResults[$ino - 1].result -eq 'Success'){
                             write-host -foregroundcolor green $smsg ;
@@ -1059,9 +1087,11 @@ function resolve-user {
             else{} ;
 
             if($pltgMsoUsr.UserPrincipalName){
+                <# msonline mod is deprecated, drop the MsolUser pull
                 write-host -foregroundcolor yellow "=get-msoluser $($pltgMsoUsr.UserPrincipalName):(licences)>:" ;
                 TRY{
-                    cmsol  -Verbose:$false -silent ;
+                    #cmsol  -Verbose:$false -silent ;
+                    caad -Verbose:$false -silent ;
                     write-verbose "get-msoluser w`n$(($pltgMsoUsr|out-string).trim())" ;
                     # have to postfilter, if want specific count -maxresults catch's with no $error[0]
                     $hSum.MsolUser=get-msoluser @pltgMsoUsr | select -first $MaxRecips;  ;
@@ -1075,6 +1105,7 @@ function resolve-user {
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Continue ;
                 } ;
+                #>
 
                 if(-not($hSum.AADUser)){
                     #write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ;
@@ -1103,6 +1134,10 @@ function resolve-user {
                         #>
                         #write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser|out-string).trim())" ;
                         # ObjectId                             DisplayName   UserPrincipalName      UserType
+
+                        #lic pull: $hSum.AADUser | Get-AzureADUserLicenseDetail -ea STOP | select -exp SkuPartNumber
+                        write-verbose "`$hsum.AADUserLics = AADU | Get-AzureADUserLicenseDetail -ea STOP | select -exp SkuPartNumber" ;
+                        $hsum.AADUserLics =  $hSum.AADUser | Get-AzureADUserLicenseDetail -ea STOP | select -exp SkuPartNumber ; 
 
                     } CATCH {
                         $ErrTrapd=$Error[0] ;
@@ -1205,6 +1240,7 @@ function resolve-user {
                 } ;
                 if($hSum.ADUser){$hSum.LicenseGroup = $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
 
+                <# msonline mod is deprecated, drop the MsolUser pull
                 $smsg = "$(($hSum.MsolUser|Format-List $propsLic|out-string).trim())`n" ;
                 $smsg += "Licenses Assigned:$(($hSum.MsolUser.licenses.AccountSkuId -join '; '|out-string).trim())" ;
                 if($hSum.MsolUser.LicenseReconciliationNeeded){
@@ -1212,9 +1248,14 @@ function resolve-user {
                 } else {
                     write-host $smsg ;
                 } ;
+                #>
                 if($hSum.ADUser){$hSum.LicenseGroup = $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
                 elseif($hSum.xoMemberOf){$hSum.LicenseGroup = $hSum.xoMemberOf.Name |?{$_ -match $rgxXLic}}
-                if(!($hSum.LicenseGroup) -AND ($hSum.MsolUser.licenses.AccountSkuId -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup = '(direct-assigned E3)'} ;
+                #if(!($hSum.LicenseGroup) -AND ($hSum.MsolUser.licenses.AccountSkuId -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup = '(direct-assigned E3)'} ;
+                # $hSum.AADUser ; $aadu | Get-AzureADUserLicenseDetail  | select -exp SkuPartNumber
+                #if(!($hSum.LicenseGroup) -AND ( $hsum.AADUserLics  -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup = '(direct-assigned E3)'} ;
+                # no dom, with aadu licenses
+                if(!($hSum.LicenseGroup) -AND ( $hsum.AADUserLics  -contains "ENTERPRISEPACK")){$hSum.LicenseGroup = '(direct-assigned E3)'} ;
                 if($hSum.LicenseGroup){$smsg = "LicenseGroup:$($hSum.LicenseGroup)"}
                 else{$smsg = "LicenseGroup:(unresolved, direct-assigned other?)" } ;
                 write-host $smsg ;
@@ -1277,31 +1318,39 @@ function resolve-user {
             } else {
                 write-verbose "(no AADUser found)" ;
             } ;
+            <# msonline mod is deprecated, drop the MsolUser pull
             if($hSum.MsolUser){
                 $hsum.IsLicensed = [boolean]($hSum.MsolUser.IsLicensed -eq $true)
             } else {
                 write-verbose "(no MsolUser found)" ;
             } ;
+            #>
+            # shift test to aadu
+            if($hSum.AADUser){
+                $hsum.IsLicensed = [boolean]($hSum.AADUser.assignedlicenses.count -gt 0)
+            } else {
+                write-verbose "(no AADUser found)" ;
+            } ;
 
             $smsg = "`n"
-            if(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
+            if(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hsum.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
                 <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
                 $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!" ;
                 #write-warning $smsg ;
                 $hsum.IsSplitBrain = $true ;
-            }elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hSum.MsolUser.IsLicensed) -AND $hSum.xomailbox -AND $hSum.OPMailbox){
+            }elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hsum.IsLicensed) -AND $hSum.xomailbox -AND $hSum.OPMailbox){
                 <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
                 $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!`nAND is *UNLICENSED!*" ;
                 #write-warning $smsg ;
                 $hsum.IsSplitBrain = $true ;
-            } elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hSum.MsolUser.IsLicensed -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
+            } elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hsum.IsLicensed -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
                 $smsg += "NOBRAIN! W LICENSE!:$($hSum.ADUser.userprincipalname).IsLic'd &  has *NEITHER* xoMbx OR opMbx!" ;
                 #write-warning $smsg ;
                 $hsum.IsNoBrain = $true ;
-            } elseif (($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hSum.MsolUser.IsLicensed) -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
+            } elseif (($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hsum.IsLicensed) -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
                 $smsg += "NOBRAIN! *WO* LICENSE! (TERM?):$($hSum.ADUser.userprincipalname) NOT licensed'd &  has *NEITHER* xoMbx OR opMbx!" ;
                 $hsum.IsNoBrain = $true ;
-            } elseif($hSum.MsolUser.IsLicensed -eq $false){
+            } elseif($hsum.IsLicensed -eq $false){
                 $smsg += "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
                 write-warning $smsg ;
                 $hsum.IsLicensed = $false ;
