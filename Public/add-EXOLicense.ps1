@@ -18,6 +18,7 @@ function add-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:29 PM 8/12/2022 sync'd back to last _func.ps1 chgs as well ; fixed inacc warning, when lic's all burned (was echo'ing failure to update usageloc, not lic fail).
     * 5:17 PM 3/23/2022 more retooling to remove msonline module dependance, and shift to AzureAD (crappy implementation GraphAPI) module
     * 1:50 PM 3/23/2022 hunting the VerbosePreference toggle midway through, found 2 more verbose tests lacking leading verbose = $($VerbosePreference -eq "Continue"); prefixed examples with PS>
     * 5:00 PM 3/22/2022 extensive rewrite: Sec mandate to disable all basic auth == complete loss of the long-standing MS MSOnline powershell module: 
@@ -48,6 +49,10 @@ function add-EXOLicense {
     TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']
     .PARAMETER  users
     Array of UserPrincipalNames (or MSOLUser objects) to have a temporary Exchange License applied
+    .PARAMETER LicenseSkuIds
+    Array, in preference order, of Tenant-specific LicenseSku names (first working lic assignment will be applied)[-LicenseSkuIds 'tenantname:SPE_F1','tenantname:ENTERPRISEPACK']
+    .PARAMETER UserRole
+    Credential User Role spec (SID|CSID|UID|B2BI|CSVC)[-UserRole SID]
     .PARAMETER Credential
     Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]
     .PARAMETER useEXOv2
@@ -109,11 +114,6 @@ function add-EXOLicense {
     .LINK
     https://github.com/tostka/verb-exo
     #>
-    ###Requires -Version 5
-    ###Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
-    ##Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-logging
-    # stripped down, doesn't really need AAD, may not need balance.
-    ##Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-Auth, verb-EXO, verb-IO, verb-logging, verb-Mods, verb-Text
     # migr to verb-exo, pull the dupe spec...
     #Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-Auth, verb-IO, verb-logging, verb-Mods, verb-Text
     #Requires -RunasAdministrator
@@ -872,8 +872,14 @@ function add-EXOLicense {
                             $smsg = "(whatif pass, exec skipped), " ; 
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        } elseif( -not [boolean]($bRet.AddedLicenses)){
+                            # failed add
+                            $smsg = "Failed Lic Add:$($LicenseSkuId) (exhausted units?, moving on to next if avail...)" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                            Continue ; 
                         } else { 
-                            $smsg = "add-AADUserLicense : FAILED TO UPDATE USAGELOCATION!" ;
+                            $smsg = "add-AADUserLicense : UNAVAIL LIC UNIT, OR FAILED TO UPDATE USAGELOCATION!" ;
                             $smsg += "`n$(($bRet|out-string).trim())" ; 
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
                             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
