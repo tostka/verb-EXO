@@ -1,4 +1,4 @@
-#*------v rxo2tor.ps1 v------
+﻿#*------v rxo2tor.ps1 v------
 function rxo2TOR {
     <#
     .SYNOPSIS

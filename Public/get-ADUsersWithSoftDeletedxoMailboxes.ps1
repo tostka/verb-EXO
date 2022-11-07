@@ -1,4 +1,4 @@
-#*------v get-ADUsersWithSoftDeletedxoMailboxes.ps1 v------
+﻿#*------v get-ADUsersWithSoftDeletedxoMailboxes.ps1 v------
 function get-ADUsersWithSoftDeletedxoMailboxes {
     <#
     .SYNOPSIS

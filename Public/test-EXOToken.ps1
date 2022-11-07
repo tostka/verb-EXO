@@ -1,4 +1,4 @@
-#*------v test-EXOToken.ps1 v------
+﻿#*------v test-EXOToken.ps1 v------
 function test-EXOToken {
     <#
     .SYNOPSIS

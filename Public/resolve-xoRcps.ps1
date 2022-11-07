@@ -1,4 +1,4 @@
-#*------v Function Resolve-xoRcps v------
+﻿#*------v Function Resolve-xoRcps v------
 function Resolve-xoRcps {
     <#
     .SYNOPSIS

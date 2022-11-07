@@ -1,4 +1,4 @@
-#*------v connect-EXOv2RAW.ps1 v------
+﻿#*------v connect-EXOv2RAW.ps1 v------
 function connect-EXOv2RAW {
     <#
     .SYNOPSIS

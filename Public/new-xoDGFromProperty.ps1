@@ -1,4 +1,4 @@
-#*------v Function new-xoDGFromProperty v------
+﻿#*------v Function new-xoDGFromProperty v------
 function new-xoDGFromProperty{
     <#
     .SYNOPSIS
