@@ -2,7 +2,7 @@
 Function Disconnect-EXO2 {
     <#
     .SYNOPSIS
-    Disconnect-EXO2 - Remove all the existing exchange online PSSessions
+    Disconnect-EXO2 - Remove all the existing exchange online PSSessions (closes anything ConfigurationName: Microsoft.Exchange -AND Name: ExchangeOnlineInternalSession*)
     .NOTES
     Version     : 1.0.0
     Author      : Todd Kadrie
@@ -15,78 +15,167 @@ Function Disconnect-EXO2 {
     Github      : https://github.com/tostka
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 3:59 PM 8/2/2022 got through dbugging EOM v205 SID interactive pass, working ; added -MinNoWinRMVersion ; fully works from mybox w v206p6, cEOM connection, with functional prefix.
+    * 4:07 PM 7/26/2022 found that MS code doesn't chk for multi vers's installed, when building .dll paths: wrote in code to take highest version.
+    * 3:30 PM 7/25/2022 tests against CBA & SID interactive creds on EOM v205, need to debug now against EOM v206p6, to accomodate PSSession-less connect & test code.
+    * 10:34 AM 4/4/2022 updated CBH; added -MinimumVersion, defaulted, to support on-the-fly exemption
+    * 3:54 PM 4/1/2022 add missing $silent param (had support, but no param)
+    * 3:03 PM 3/29/2022 rewrote to reflect current specs in v2.0.5 of ExchangeOnlineManagement:Disconnect-ExchangeOnlineManagement cmds
     * 11:55 AM 3/31/2021 suppress verbose on module/session cmdlets
     * 1:14 PM 3/1/2021 added color reset
     * 9:55 AM 7/30/2020 EXO v2 version, adapted from Disconnect-EXO, + some content from RemoveExistingPSSession
     .DESCRIPTION
-    Disconnect-EXO2 - Remove all the existing exchange online PSSessions
+    Disconnect-EXO2 - Remove all the existing exchange online PSSessions (closes anything ConfigurationName: Microsoft.Exchange -AND Name: ExchangeOnlineInternalSession*)
+    Updated to match v2.0.5 of ExchangeOnlineMangement: Unlike the  v1.0.1 'disconnect', 
+     this also implements new Clear-ActiveToken support, to reset the token as well as the session. 
+     Doesn't support targeting session id, just wacks all sessions matching the configurationname & name of an EXOv2 pssession.
+    .PARAMETER MinimumVersion
+    MinimumVersion required for ExchangeOnlineManagement module (defaults to '2.0.5')[-MinimumVersion '2.0.6']
+    .PARAMETER MinNoWinRMVersion
+    MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']
+    .PARAMETER silent
+    Switch to suppress all non-error echos
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
     None. Returns no objects or output.
     .EXAMPLE
     Disconnect-EXO2;
+    Disconnect all EXOv2 ConfigurationName: Microsoft.Exchange -AND Name: ExchangeOnlineInternalSession* pssession
+    .EXAMPLE
+    Disconnect-EXO2 -silent;
+    Demos use of the silent parameter to suppress output of details
     .LINK
     #>
     [CmdletBinding()]
     [Alias('dxo2')]
-    Param() 
+    Param(
+        [Parameter(HelpMessage = "MinimumVersion required for ExchangeOnlineManagement module (defaults to '2.0.5')[-MinimumVersion '2.0.6']")]
+        [version] $MinimumVersion = '2.0.5',
+        [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']")]
+        [version] $MinNoWinRMVersion = '2.0.6',
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+        [switch] $silent
+
+    ) 
     $verbose = ($VerbosePreference -eq "Continue") ; 
-    <#
-    if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
-    if($Global:EOLModule){$Global:EOLModule | Remove-Module -Force ; } ;
-    if($global:EOLSession){$global:EOLSession | Remove-PSSession ; } ;
-    Get-PSSession |Where-Object{$_.ComputerName -match $rgxExoPsHostName } | Remove-PSSession ;
-    Disconnect-PssBroken -verbose:$($verbose) ;
-    Remove-PSTitlebar 'EXO' -verbose:$($VerbosePreference -eq "Continue");
-    #>
+
+    $EOMmodname = 'ExchangeOnlineManagement' ;
+    $ExoPowershellGalleryModule = "Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll" ; # in EOM v205 hosts test|clear-ActiveToken( both nonexist in v206+)
+    #*------v PSS & GMO VARIS v------
+    # get-pssession session varis
+    $EXOv1ConfigurationName = $EXOv2ConfigurationName = $EXoPConfigurationName = "Microsoft.Exchange" ;
+
+    if(-not $EXOv1ConfigurationName){$EXOv1ConfigurationName = "Microsoft.Exchange" };
+    if(-not $EXOv2ConfigurationName){$EXOv2ConfigurationName = "Microsoft.Exchange" };
+    if(-not $EXoPConfigurationName){$EXoPConfigurationName = "Microsoft.Exchange" };
+
+    if(-not $EXOv1ComputerName){$EXOv1ComputerName = 'ps.outlook.com' };
+    if(-not $EXOv1runspaceConnectionInfoAppName){$EXOv1runspaceConnectionInfoAppName = '/PowerShell-LiveID'  };
+    if(-not $EXOv1runspaceConnectionInfoPort){$EXOv1runspaceConnectionInfoPort -eq '443' };
+
+    if(-not $EXOv2ComputerName){$EXOv2ComputerName = 'outlook.office365.com' ;}
+    if(-not $EXOv2Name){$EXOv2Name = "ExchangeOnlineInternalSession*" ; }
+    if(-not $rgxEXoPrunspaceConnectionInfoAppName){$rgxEXoPrunspaceConnectionInfoAppName = '^/(exadmin|powershell)$'}; 
+    if(-not $EXoPrunspaceConnectionInfoPort){$EXoPrunspaceConnectionInfoPort = '80' } ; 
+    # gmo varis
+    if(-not $rgxEXOv1gmoDescription){$rgxEXOv1gmoDescription = "^Implicit\sremoting\sfor\shttps://ps\.outlook\.com/PowerShell" }; 
+    if(-not $EXOv1gmoprivatedataImplicitRemoting){$EXOv1gmoprivatedataImplicitRemoting = $true };
+    if(-not $rgxEXOv2gmoDescription){$rgxEXOv2gmoDescription = "^Implicit\sremoting\sfor\shttps://outlook\.office365\.com/PowerShell" }; 
+    if(-not $EXOv2gmoprivatedataImplicitRemoting){$EXOv2gmoprivatedataImplicitRemoting = $true } ;
+    if(-not $rgxExoPsessionstatemoduleDescription){$rgxExoPsessionstatemoduleDescription = '/(exadmin|powershell)$' };
+     if(-not $EXOv1GmoFilter){$EXOv1GmoFilter = 'tmp_*' } ; 
+    if(-not $EXOv2GmoNoWinRMFilter){$EXOv2GmoNoWinRMFilter = 'tmpEXO_*' };
+    #*------^ END PSS & GMO VARIS ^------
+
+    $pssProps = 'Id','Name','ComputerType','ComputerName','ConfigurationName','State','Availability',
+        @{name="TokenExpiryTime";expression={get-date $_.TokenExpiryTime.date -format 'yyyyMMdd-HHmmtt'}};
     
-    # lifted from connect-EXO2 
-    # .dll etc loads, from connect-exchangeonline: (should be installed with the above)
-    if (-not($ExchangeOnlineMgmtPath)) {
-        $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list).Path ;
+
+    # it's pulling the verb-EXO vers of disconnect-exchangeonline, force load the v206:
+    # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
+    $modname = $EOMmodname ;
+    $error.clear() ;
+    Try { Get-Module -name $modname -listavailable -ErrorAction Stop | out-null } Catch {
+        $pltInMod = [ordered]@{Name = $modname ; verbose=$false ;} ;
+        if ( $env:COMPUTERNAME -match $rgxMyBoxUID ) { $pltInMod.add('scope', 'CurrentUser') } else { $pltInMod.add('scope', 'AllUsers') } ;
+        $smsg = "Install-Module w scope:$($pltInMod.scope)`n$(($pltInMod|out-string).trim())" ;
+        if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        Install-Module @pltIMod ;
+    } ; # IsInstalled
+    $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$false} ;
+    # this forces a specific rev into the ipmo!
+    if ($MinimumVersion) { $pltIMod.add('MinimumVersion', $MinimumVersion.tostring()) } ;
+    $error.clear() ;
+    Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
+        $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
+        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        Import-Module @pltIMod ;
+    } ; # IsImported
+
+    [boolean]$UseConnEXO = [boolean]([version](get-module $modname).version -ge $MinNoWinRMVersion) ; 
+
+    if($useConnExo){
+        # 2:28 PM 8/1/2022 issue: it sometimes defers to the verb-EXO obsolete disconnect-exchangeonline (which doesn't properly resolve .dll paths, and doesn't exist/conflict in EOMv205), force load it out of the module
+        if(-not (get-command -mod 'ExchangeOnlineManagement' -name Disconnect-ExchangeOnline -ea 0 )){
+            $smsg = "(found dxo2, *not* sourced from EOM: ipmo -forcing EOM)" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            import-module -Name 'ExchangeOnlineManagement' -force -RequiredVersion $MinNoWinRMVersion ; 
+        } ; 
+        # just alias disconnect-ExchangeOnline, it retires token etc as well as closing PSS, but biggest reason is it's got a confirm, hard-coded, needs a function to override
+        # flip back to the old d-eom call.
+        Disconnect-ExchangeOnline -confirm:$false ; 
+        # just use the updated RemoveExistingEXOPSSession
+        #PRIOR: RemoveExistingEXOPSSession -Verbose:$false ;
+        # v2.0.5 3:01 PM 3/29/2022 no longer exists
+    } else { 
+        $smsg = "(EXOv2 EOM v205 nonWinRM code in use...)" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        #$EOMmodname = 'ExchangeOnlineManagement' ;
+        #if(-not $EXOv2Name){$EXOv2Name = "ExchangeOnlineInternalSession*" ; } ; 
+        #if(-not $EXOv2ConfigurationName){$EXOv2ConfigurationName = "Microsoft.Exchange" };
+        $EOMgmtModulePath = split-path (get-module $EOMmodname -list | sort Version | select -last 1).Path ;
         if($IsCoreCLR){
             $EOMgmtModulePath = resolve-path -Path $EOMgmtModulePath\netcore ;
             $smsg = "(.netcore path in use:" ; 
         } else { 
-            $EOMgmtModulePath = resolve-path -Path $EOMgmtModulePath\netFramework
+            $EOMgmtModulePath = resolve-path -Path $EOMgmtModulePath\netFramework ; 
             $smsg = "(.netnetFramework path in use:" ;                 
         } ; 
-        $smsg += "$($EOMgmtModulePath))" ; 
-        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-    } ;
-    #the verb-*token functions are in here    
-    if (-not $ExoPowershellGalleryModule) { $ExoPowershellGalleryModule = "Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll" } ;
-    if (-not $ExoPowershellGalleryModulePath) {
+        #$ExoPowershellGalleryModule = "Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll" ;
         $ExoPowershellGalleryModulePath = join-path -path $EOMgmtModulePath -childpath $ExoPowershellGalleryModule ;
-        if(-not (test-path $ExoPowershellGalleryModulePath)){
-            $smsg = "UNABLE TO test-path `$ExoPowershellGalleryModulePath!:`n$($ExoPowershellGalleryModulePathz)" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
-            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            THROW $smsg
-            BREAK ;
-        } ;
-    } ;
-    # full path: C:\Users\USER\Documents\WindowsPowerShell\Modules\ExchangeOnlineManagement\1.0.1\Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll
-    # Name: Microsoft.Exchange.Management.ExoPowershellGalleryModule
-    if (-not(get-module $ExoPowershellGalleryModule.replace('.dll','') )) {
-        Import-Module $ExoPowershellGalleryModulePath -Verbose:$false ;
-    } ;    
-    
-    # confirm module present
-    $modname = 'ExchangeOnlineManagement' ; 
-    #Try {Get-Module $modname -listavailable -ErrorAction Stop | out-null } Catch {Install-Module $modname -scope CurrentUser ; } ;                 # installed
-    Try {Get-Module $modname -ErrorAction Stop | out-null } Catch {Import-Module -Name $modname -MinimumVersion '1.0.1' -ErrorAction Stop -verbose:$false; } ; # imported
-    
-    $existingPSSession = Get-PSSession | Where-Object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*"} ;
+        if (-not(get-module $ExoPowershellGalleryModule.replace('.dll','') )) {
+            Import-Module $ExoPowershellGalleryModulePath -Verbose:$false -ErrorAction 'STOP';
+        } ;    
+        if(-not (get-command -module $ExoPowershellGalleryModule.replace('.dll','') | ? Name -match '(clear|test)-ActiveToken')){
+            throw "Unable to GCM clear-ActiveToken cmdlet!`n(as provided by:$($ExoPowershellGalleryModulePath))" ; 
+        } ; 
+    } ; 
+    # poll session types
+    $existingPSSession = Get-PSSession | 
+        Where-Object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*"} ;
     if ($existingPSSession.count -gt 0) {
         for ($index = 0; $index -lt $existingPSSession.count; $index++){
             $session = $existingPSSession[$index]
+            $smsg = "Remove-PSSession w`n$(($session | format-table -a  $pssprops|out-string).trim())" ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             Remove-PSSession -session $session
-            Write-Host "Removed the PSSession $($session.Name) connected to $($session.ComputerName)"
+            $smsg = "Removed the PSSession $($session.Name) connected to $($session.ComputerName)"
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             # Remove any active access token from the cache
-            Clear-ActiveToken -TokenProvider $session.TokenProvider
+            $pltCAT=[ordered]@{
+                TokenProvider=$session.TokenProvider ; 
+            } ;
+            $smsg = "Clear-ActiveToken w`n$(($pltCAT|out-string).trim())" ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            Clear-ActiveToken @pltCAT ;
             # Remove any previous modules loaded because of the current PSSession
             if ($session.PreviousModuleName -ne $null){
                 if ((Get-Module $session.PreviousModuleName).Count -ne 0){
@@ -103,15 +192,8 @@ Function Disconnect-EXO2 {
         } ;  # loop-E
     } ; # if-E $existingPSSession.count -gt 0
     
-    # just alias disconnect-ExchangeOnline, it retires token etc as well as closing PSS, but biggest reason is it's got a confirm, hard-coded, needs a function to override
-    
-    #Disconnect-ExchangeOnline -confirm:$false ; 
-    # just use the updated RemoveExistingEXOPSSession
-    #RemoveExistingEXOPSSession -Verbose:$false ;
-    # v2.0.5 3:01 PM 3/29/2022 no longer exists
-    
     Disconnect-PssBroken -verbose:$false ;
-    Remove-PSTitlebar 'EXO' -verbose:$($VerbosePreference -eq "Continue");
+    Remove-PSTitlebar 'EXO2' #-verbose:$($VerbosePreference -eq "Continue");
     #[console]::ResetColor()  # reset console colorscheme
 } ; 
 
