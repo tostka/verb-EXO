@@ -21,6 +21,8 @@ Function Connect-EXO {
     AddedWebsite2:	https://github.com/JeremyTBradshaw
     AddedTwitter2:
     REVISIONS   :
+    # 3:47 PM 11/23/2022 added silent param supp
+    * 1:57 PM 6/23/2022 #188: $mfa{added auto diversion to cxo2 w specd creds}
     * 2:40 PM 12/10/2021 more cleanup 
     * 11:21 AM 9/16/2021 string clean
     * 1:20 PM 7/21/2021 enabled TOR titlebar tagging with TenOrg (prompt tagging by scraping TitleBar values)
@@ -61,6 +63,10 @@ Function Connect-EXO {
     [verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-CommandPrefix tag]
     .PARAMETER  Credential
     Credential to use for this connection [-credential 'SOMEACCT@DOMAIN.COM']
+    .PARAMETER NoMFA
+    Switch to override profile/global MFA specification[-NoMFA]
+    .PARAMETER silent
+    Switch to suppress all non-error echos
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
@@ -70,7 +76,7 @@ Function Connect-EXO {
     Connect using defaults, and leverage any pre-set $global:credo365TORSID variable
     .EXAMPLE
     connect-exo -CommandPrefix exo -credential (Get-Credential -credential user@domain.com)  ;
-    Connect an explicit credential, and use 'exolab' as the cmdlet prefix
+    Connect an explicit credential, and use 'exo' as the cmdlet prefix
     .EXAMPLE
     $cred = get-credential -credential $o365_Torolab_SIDUpn ;
     connect-exo -credential $cred ;
@@ -89,13 +95,24 @@ Function Connect-EXO {
         [string]$CommandPrefix = 'exo',
         [Parameter(HelpMessage = "Credential to use for this connection [-credential [credential obj variable]")]
         [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage = "Switch to override profile/global MFA specification[-NoMFA]")]
+        [switch]$NoMFA,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+        [switch] $silent,
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
         [switch] $showDebug
     ) ;
     BEGIN{
         $verbose = ($VerbosePreference -eq "Continue") ; 
         if(!$rgxExoPsHostName){$rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" } ;
-        $MFA = get-TenantMFARequirement -Credential $Credential ;
+        if($NoMFA){ 
+            $smsg = "-NoMFA: Forcing `$MFA:`$false" ; 
+            if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;  
+          
+            $MFA = $false ;
+        }
+        else {$MFA = get-TenantMFARequirement -Credential $Credential ;}
 
         # disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
         if (!$CommandPrefix) {
@@ -144,7 +161,7 @@ Function Connect-EXO {
                 # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
                 }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                     $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     $bExistingEXOGood = $true ;
                 } else { 
@@ -170,9 +187,15 @@ Function Connect-EXO {
 
             if ($MFA) {
                 
-                throw "MFA is not currently supported by the connect-exo cmdlet!. Use connect/disconnect/reconnect-exo2 instead" ; 
-                Break 
+                #throw "MFA is not currently supported by the connect-exo cmdlet!. Use connect/disconnect/reconnect-exo2 instead" ; 
+                #Break 
+                $smsg = "MFA is not currently supported by the connect-exo cmdlet!. Use connect/disconnect/reconnect-exo2 instead" ;  
+                $smsg +="`n(redirecting to connect-exo2())" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 <# 4:24 PM 7/30/2020 HAD TO UNINSTALL THE EXOMFA module, a bundled cmdlet fundementally conflicted with ExchangeOnlineManagement#>
+                connect-exo2 -Credential $Credential -Verbose:$($VerbosePreference -eq "Continue") ; 
+                break ; 
 
             } else {
                 $EXOsplat = @{
@@ -263,7 +286,7 @@ Function Connect-EXO {
                     #>
                     $EXOsplat.ConnectionUri = 'https://outlook.office365.com/powershell-liveid?SerializationLevel=Full' ;
                     $smsg = "Get-FormatData command is not in the expected format' EXO bug: Retrying with '&SerializationLevel=Full'ConnectionUri`n(details at https://answers.microsoft.com/en-us/msoffice/forum/all/cannot-connect-to-exchange-online-via-powershell/)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
                     else{ write-Warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     #-=-record a STATUSWARN=-=-=-=-=-=-=
                     $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
@@ -278,7 +301,7 @@ Function Connect-EXO {
                     } CATCH {
                         $ErrTrapd=$Error[0] ;
                         $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
                         else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         #-=-record a STATUSWARN=-=-=-=-=-=-=
                         $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
@@ -287,7 +310,7 @@ Function Connect-EXO {
                         #-=-=-=-=-=-=-=-=
                         $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
                     } ; 
                     
@@ -304,7 +327,7 @@ Function Connect-EXO {
                     } CATCH {
                         $ErrTrapd=$Error[0] ;
                         $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
                         else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         #-=-record a STATUSWARN=-=-=-=-=-=-=
                         $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
@@ -313,7 +336,7 @@ Function Connect-EXO {
                         #-=-=-=-=-=-=-=-=
                         $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
                     } ; 
                     # reenable VerbosePreference:Continue, if set, during mod loads 
@@ -326,7 +349,7 @@ Function Connect-EXO {
                 } CATCH {
                         $ErrTrapd=$Error[0] ;
                         $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
                         else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         #-=-record a STATUSWARN=-=-=-=-=-=-=
                         $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
@@ -335,7 +358,7 @@ Function Connect-EXO {
                         #-=-=-=-=-=-=-=-=
                         $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
                 } ; 
             
@@ -372,13 +395,13 @@ Function Connect-EXO {
             if((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
                 # validate that the connected EXO is to the $Credential tenant    
                 $smsg = "(EXO Authenticated & Functional(AccDom):$($Credential.username.split('@')[1].tostring()))" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 $bExistingEXOGood = $true ; 
             # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
             }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                 $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 $bExistingEXOGood = $true ; 
             } else { 
