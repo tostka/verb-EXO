@@ -15,6 +15,16 @@ function test-EXOToken {
     Github      : https://github.com/tostka/verb-aad
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS
+    * 10:12 AM 11/28/2022 add: test of get-command -name Test-ActiveToken) before using it (only avail in EOM v205 and less)
+    * 3:59 PM 8/2/2022 got through dbugging EOM v205 SID interactive pass, working ; added NoWinRM test and -MinNoWinRMVersion, to bypass attempts with this, post EOM v205 (as v206 completely drops the dependant test|clear-ActiveToken())
+    # 10:25 AM 8/2/2022 NOPE! get-msaltoken *authenticates* a fresh connection, like Connect-EOM, 
+    - _if_ you spec the PS EXO client guid, as the 
+     - so it can sort of 'act' like a token validator, but as it fully authenticates if there's no token, it's *not equive to test-ActiveToken* 
+     from ExchangeOnlineManagement v205. and *it completely lacks -Prefix support*! Can't use this for hybrid prefix-tagged coexist with onprem Exch ps sessions.
+     fundemental break there. 
+    - So I coded out any use of this from connect-exo2/reconnect-exo2, for NoWinRM EOM v206p6+ use.
+    * 3:30 PM 7/25/2022 tests against CBA & SID interactive creds on EOM v205, need to debug now against EOM v206p6, to accomodate PSSession-less connect & test code.
+    * 8:30 AM 7/11/2022 rewrite for a post-PSS basicauth, EOM v206p6 world: can't use EOM:get-activetoken; add $Credential (needed for msal.ps:get-msaltoken()
     * 4:08 PM 3/29/2022 updated, got test-Activetoken call into gallery mod working again (token time is pulled off of the active setsion and looks like it id's which token /sesion you're closing to remove-Activetoken etc). 
     * 3:41 PM 3/28/2022 update for v2.05, supporting .netcore & .netframework subdirs in the ExchangeOnlineManagement module, failing on trailing test-activetoken code - wants -TokenExpiryTime now.
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
@@ -24,6 +34,10 @@ function test-EXOToken {
     .DESCRIPTION
     test-EXOToken - Retrieve and summarize EXOv2 OAuth Active Token (leverages ExchangeOnlineManagement 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll', OAuth isn't used for EXO legacy basic-auth connections)
     Trying to find a way to verify status of token, wo any interactive EXO traffic. Lifted concept from EXOM UpdateImplicitRemotingHandler().
+    .PARAMETER Credential
+    Credential to be used for connection
+     .PARAMETER MinNoWinRMVersion
+    MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']
     Test-ActiveToken doesn't appear to normally be exposed anywhere but with explicit load of the .dll
     .OUTPUT
     System.Boolean
@@ -39,32 +53,52 @@ function test-EXOToken {
     .LINK
     https://github.com/tostka/verb-aad
     #>
-    #Requires -Modules ExchangeOnlineManagement
+    #Requires -Modules MSAL.PS,ExchangeOnlineManagement
     [CmdletBinding()] 
-    Param() ;
-    BEGIN {$verbose = ($VerbosePreference -eq "Continue") } ;
+    Param(
+        [Parameter(Mandatory=$True,HelpMessage="Credentials [-Credentials [credential object]]")]
+        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']")]
+        [version] $MinNoWinRMVersion = '2.0.6'
+    ) ;
+    BEGIN {
+        $verbose = ($VerbosePreference -eq "Continue") ;
+        if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' ; } ;
+
+    } ;
     PROCESS {
         $hasActiveToken = $false ; 
         # Save time and pretest for *any* EXOv2 PSSession, before bothering to test (no session - even closed/broken => no OAuth token)
-        $exov2 = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -AND $_.Name -like "ExchangeOnlineInternalSession*"} ; 
-        if($exov2){
+        # w EOM v206p5, there's no longer even a PSS to detect at all, so this loses function as well.
+        # 8:52 AM 7/11/2022 this ^ is equiv to EOM code: $existingPSSession = Get-PSSession | Where-Object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*"}
         
-            # ==load dependancy module:
-            # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
-            $modname = 'ExchangeOnlineManagement' ;
-            $minvers = '2.0.5' ; 
-            Try {Get-Module -name $modname -listavailable -ErrorAction Stop | out-null } Catch {
-                $pltInMod=[ordered]@{Name=$modname} ; 
-                if( $env:COMPUTERNAME -match $rgxMyBoxUID ){$pltInMod.add('scope','CurrentUser')} else {$pltInMod.add('scope','AllUsers')} ;
-                write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):Install-Module w scope:$($pltInMod.scope)`n$(($pltInMod|out-string).trim())" ; 
-                Install-Module @pltIMod ; 
-            } ; # IsInstalled
-            $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$false } ;
-            if($minvers){$pltIMod.add('MinimumVersion',$minvers) } ; 
-            Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
-                write-verbose "Import-Module w`n$(($pltIMod|out-string).trim())" ; 
-                Import-Module @pltIMod ; 
-            } ; # IsImported
+        
+        # ==load dependancy module:
+        # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
+        $modname = 'ExchangeOnlineManagement' ;
+        $minvers = '2.0.5' ; 
+        Try {Get-Module -name $modname -listavailable -ErrorAction Stop | out-null } Catch {
+            $pltInMod=[ordered]@{Name=$modname} ; 
+            if( $env:COMPUTERNAME -match $rgxMyBoxUID ){$pltInMod.add('scope','CurrentUser')} else {$pltInMod.add('scope','AllUsers')} ;
+            write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):Install-Module w scope:$($pltInMod.scope)`n$(($pltInMod|out-string).trim())" ; 
+            Install-Module @pltIMod ; 
+        } ; # IsInstalled
+        $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$false } ;
+        if($minvers){$pltIMod.add('MinimumVersion',$minvers) } ; 
+        Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
+            write-verbose "Import-Module w`n$(($pltIMod|out-string).trim())" ; 
+            Import-Module @pltIMod ; 
+        } ; # IsImported
+
+
+        [boolean]$UseConnEXO = [boolean]([version](get-module $modname).version -ge $MinNoWinRMVersion) ; 
+
+        if($UseConnEXO){
+            $smsg = "$($modname) v$($MinNoWinRMVersion)+ detected: No dependancy test-ActiveToken() available in later EOM builds" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
+        } elseif ($exov2 = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -AND $_.Name -like "ExchangeOnlineInternalSession*"}){
 
             $error.clear() ;
             TRY {
@@ -101,7 +135,7 @@ function test-EXOToken {
             # targeted load example: # Import the module once more to ensure that Test-ActiveToken is present
             # Import-Module $global:_EXO_ModulePath -Cmdlet Test-ActiveToken;
             # ipmo $EOMgmtModulePath -Cmdlet Test-ActiveToken;
-            if(gcm -name Test-ActiveToken){
+            if(get-command -name Test-ActiveToken){
                 $error.clear() ;
                 TRY {
                     #$hasActiveToken = Test-ActiveToken ; 
@@ -134,10 +168,15 @@ function test-EXOToken {
                 } ; 
             } else { throw "missing:gcm -name Test-ActiveToken" } 
 
-        } else { 
-            write-verbose "No Token: No existing EXOv2 PSSession (ConfigurationName -like 'Microsoft.Exchange' -AND Name -like 'ExchangeOnlineInternalSession*')" ; 
-        } ; 
-    } ; 
+            
+        } else {
+            $smsg = "Neither NoWinRM (EOM v206+) or existing EXOv2 (v205) PSSession found to confirm!" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } ;  
+
+} # E-PROC
+    
     END{ $hasActiveToken | write-output } ;
 }
 
