@@ -10,6 +10,9 @@ Function Reconnect-EXO2 {
     Based on original function Author: ExactMike Perficient, Global Knowl... (Partner)
     Website:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     REVISIONS   :
+    # * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
+    * 3:14 pm 3/29/2023: REN'D $modname => $EOMModName
+    * 11:01 AM 12/21/2022 moved $pltCXO2 def out to always occur (was only when !$bExistingEXOGood )
     * 3:59 PM 8/2/2022 got through dbugging EOM v205 SID interactive pass, working ; added -MinimumVersion & - MinNoWinRMVersion ; fully works from mybox w v206p6, cEOM connection, with functional prefix.
     * 3:30 PM 7/25/2022 tests against CBA & SID interactive creds on EOM v205, need to debug now against EOM v206p6, to accomodate PSSession-less connect & test code.
     * 3:54 PM 4/1/2022 add missing $silent param (had support, but no param)
@@ -115,44 +118,76 @@ Function Reconnect-EXO2 {
             Import-Module @pltIMod ;
         } ; # IsImported
 
-        $modname = 'ExchangeOnlineManagement' ; 
-        #Try {Get-Module $modname -listavailable -ErrorAction Stop | out-null } Catch {Install-Module $modname -scope CurrentUser ; } ;                 # installed
-        Try {Get-Module $modname -ErrorAction Stop | out-null } Catch {Import-Module -Name $modname -MinimumVersion '1.0.1' -ErrorAction Stop -verbose:$false  } ; # imported
+        $EOMmodname = 'ExchangeOnlineManagement' ;
         
         #*------v PSS & GMO VARIS v------
         # get-pssession session varis
         $EXOv1ConfigurationName = $EXOv2ConfigurationName = $EXoPConfigurationName = "Microsoft.Exchange" ;
 
-        if(-not $EXOv1ConfigurationName){$EXOv1ConfigurationName = "Microsoft.Exchange" };
-        if(-not $EXOv2ConfigurationName){$EXOv2ConfigurationName = "Microsoft.Exchange" };
-        if(-not $EXoPConfigurationName){$EXoPConfigurationName = "Microsoft.Exchange" };
+        if(-not (gv EXOv1ConfigurationName -ea 0)){$EXOv1ConfigurationName = "Microsoft.Exchange" };
+        if(-not (gv EXOv2ConfigurationName -ea 0)){$EXOv2ConfigurationName = "Microsoft.Exchange" };
+        if(-not (gv EXoPConfigurationName -ea 0)){$EXoPConfigurationName = "Microsoft.Exchange" };
 
-        if(-not $EXOv1ComputerName){$EXOv1ComputerName = 'ps.outlook.com' };
-        if(-not $EXOv1runspaceConnectionInfoAppName){$EXOv1runspaceConnectionInfoAppName = '/PowerShell-LiveID'  };
-        if(-not $EXOv1runspaceConnectionInfoPort){$EXOv1runspaceConnectionInfoPort -eq '443' };
+        if(-not (gv EXOv1ComputerName -ea 0)){$EXOv1ComputerName = 'ps.outlook.com' };
+        if(-not (gv EXOv1runspaceConnectionInfoAppName -ea 0)){$EXOv1runspaceConnectionInfoAppName = '/PowerShell-LiveID'  };
+        if(-not (gv EXOv1runspaceConnectionInfoPort -ea 0)){$EXOv1runspaceConnectionInfoPort -eq '443' };
 
-        if(-not $EXOv2ComputerName){$EXOv2ComputerName = 'outlook.office365.com' ;}
-        if(-not $EXOv2Name){$EXOv2Name = "ExchangeOnlineInternalSession*" ; }
-        if(-not $rgxEXoPrunspaceConnectionInfoAppName){$rgxEXoPrunspaceConnectionInfoAppName = '^/(exadmin|powershell)$'}; 
-        if(-not $EXoPrunspaceConnectionInfoPort){$EXoPrunspaceConnectionInfoPort = '80' } ; 
+        if(-not (gv EXOv2ComputerName -ea 0)){$EXOv2ComputerName = 'outlook.office365.com' ;}
+        if(-not (gv EXOv2Name -ea 0)){$EXOv2Name = "ExchangeOnlineInternalSession*" ; }
+        if(-not (gv rgxEXoPrunspaceConnectionInfoAppName -ea 0)){$rgxEXoPrunspaceConnectionInfoAppName = '^/(exadmin|powershell)$'}; 
+        if(-not (gv EXoPrunspaceConnectionInfoPort -ea 0)){$EXoPrunspaceConnectionInfoPort = '80' } ; 
         # gmo varis
-        if(-not $rgxEXOv1gmoDescription){$rgxEXOv1gmoDescription = "^Implicit\sremoting\sfor\shttps://ps\.outlook\.com/PowerShell" }; 
-        if(-not $EXOv1gmoprivatedataImplicitRemoting){$EXOv1gmoprivatedataImplicitRemoting = $true };
-        if(-not $rgxEXOv2gmoDescription){$rgxEXOv2gmoDescription = "^Implicit\sremoting\sfor\shttps://outlook\.office365\.com/PowerShell" }; 
-        if(-not $EXOv2gmoprivatedataImplicitRemoting){$EXOv2gmoprivatedataImplicitRemoting = $true } ;
-        if(-not $rgxExoPsessionstatemoduleDescription){$rgxExoPsessionstatemoduleDescription = '/(exadmin|powershell)$' };
-        if(-not $EXOv1GmoFilter){$EXOv1GmoFilter = 'tmp_*' } ; 
-        if(-not $EXOv2GmoNoWinRMFilter){$EXOv2GmoNoWinRMFilter = 'tmpEXO_*' };
+        if(-not (gv rgxEXOv1gmoDescription -ea 0)){$rgxEXOv1gmoDescription = "^Implicit\sremoting\sfor\shttps://ps\.outlook\.com/PowerShell" }; 
+        if(-not (gv EXOv1gmoprivatedataImplicitRemoting -ea 0)){$EXOv1gmoprivatedataImplicitRemoting = $true };
+        if(-not (gv rgxEXOv2gmoDescription -ea 0)){$rgxEXOv2gmoDescription = "^Implicit\sremoting\sfor\shttps://outlook\.office365\.com/PowerShell" }; 
+        if(-not (gv EXOv2gmoprivatedataImplicitRemoting -ea 0)){$EXOv2gmoprivatedataImplicitRemoting = $true } ;
+        if(-not (gv rgxExoPsessionstatemoduleDescription -ea 0)){$rgxExoPsessionstatemoduleDescription = '/(exadmin|powershell)$' };
+        if(-not (gv EXOv1GmoFilter -ea 0)){$EXOv1GmoFilter = 'tmp_*' } ; 
+        if(-not (gv EXOv2GmoNoWinRMFilter -ea 0)){$EXOv2GmoNoWinRMFilter = 'tmpEXO_*' };
         #*------^ END PSS & GMO VARIS ^------
 
-        # if -ge EMO v2.0.6, use connect-ExchangeOnline, and drop all the PSSession matl
-        [boolean]$UseConnEXO = [boolean]([version](get-module $modname).version -ge $MinNoWinRMVersion) ; 
+        # * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
+        #region EOMREV ; #*------v EOMREV Check v------
+        #$EOMmodname = 'ExchangeOnlineManagement' ;
+        $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
+        if($xmod = Get-Module $EOMmodname -ErrorAction Stop){ } else {
+            $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            Try {
+                Import-Module @pltIMod | out-null ;
+                $xmod = Get-Module $EOMmodname -ErrorAction Stop ;
+            } Catch {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $smsg = $ErrTrapd.Exception.Message ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Break ;
+            } ;
+        } ; # IsImported
+        if([version]$xmod.version -ge $MinNoWinRMVersion){
+            $MinNoWinRMVersion = $xmod.version.tostring() ;
+            $IsNoWinRM = $true ; 
+        }
+        [boolean]$UseConnEXO = [boolean]([version]$xmod.version -ge $MinNoWinRMVersion) ; 
+        #endregion EOMREV ; #*------^ END EOMREV Check  ^------
+
         # test-exotoken only applies if $UseConnEXO  $false
         $TenOrg = get-TenantTag -Credential $Credential ;
 
+        # build the cred etc once, for all below:
+        $pltCXO2=[ordered]@{
+            Credential = $Credential ;
+            verbose = $($verbose) ; 
+            erroraction = 'STOP' ;
+        } ;
     } ;  # BEG-E
     PROCESS{
         $bExistingEXOGood = $false ; 
+        $exov2Good = $exov3Good = $null ; 
         if( $legXPSSession = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -AND $_.Name -match "^(Session|WinRM)\d*" } ){
             # ignore state & Avail, close the conflicting legacy conn's
             $smsg = "(existing legacy-EXO or Broken connections found, closing)" ; 
@@ -199,12 +234,23 @@ Function Reconnect-EXO2 {
              Disconnect-EXO2 @pltDXO2 ;
         };
         
-        # appears MFA may not properly support passing back a session vari, so go right to strict hostname matches
-        $exov2Good = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -AND (
-            $_.Name -like "ExchangeOnlineInternalSession*") -AND $_.State -like "*Opened*" -AND (
-            $_.Availability -eq 'Available')} ; 
+        if($IsNoWinRM){
+            if($xmod | Where-Object {$_.version -like "3.*"} ) {
+                if ((Get-ConnectionInformation).tokenStatus -eq 'Active') {
+                    $exov3Good = $bExistingEXOGood = $true ; 
+                } else { 
+                    $exov3Good = $bExistingEXOGood = $false ; 
+                } ; 
+            } else { 
 
-        if($exov2Good){
+            }
+        } else { 
+            # appears MFA may not properly support passing back a session vari, so go right to strict hostname matches
+            $exov2Good = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -AND (
+                $_.Name -like "ExchangeOnlineInternalSession*") -AND $_.State -like "*Opened*" -AND (
+                $_.Availability -eq 'Available')} ; 
+        } ; 
+        if($exov2Good -OR $exov3Good ){
             if( get-command Get-xoAcceptedDomain -ea 0) {
                 # add accdom caching
                 #$TenOrg = get-TenantTag -Credential $Credential ;
@@ -239,11 +285,7 @@ Function Reconnect-EXO2 {
         } ; 
 
         if($bExistingEXOGood -eq $false){
-            $pltCXO2=[ordered]@{
-                Credential = $Credential ;
-                verbose = $($verbose) ; 
-                erroraction = 'STOP' ;
-            } ;
+            
             $smsg = "connect-exo2 w $($credential.username):`n$(($pltCXO2|out-string).trim())" ; 
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
@@ -256,7 +298,7 @@ Function Reconnect-EXO2 {
         # if ( (get-module -name tmp_* | ForEach-Object { Get-Command -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }) -AND (test-EXOToken) ) {
         #if( (Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -AND $_.Name -like "ExchangeOnlineInternalSession*" -AND $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available')}) -AND (test-EXOToken) ){ 
         $validated = $false ;
-        if($UseConnEXO){
+        if($UseConnEXO -AND $exov3Good  ){
             #connexo should smoothly recycle connections; only v1 requires manual detect & reconnect with basic auth creds
             $validated = $true ; 
         } else { 
