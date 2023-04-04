@@ -15,6 +15,8 @@ function test-EXOToken {
     Github      : https://github.com/tostka/verb-aad
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS
+    * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
+    * 3:34 PM 3/29/2023 3:14 pm 3/29/2023: REN'D $modname => $EOMModName
     * 10:12 AM 11/28/2022 add: test of get-command -name Test-ActiveToken) before using it (only avail in EOM v205 and less)
     * 3:59 PM 8/2/2022 got through dbugging EOM v205 SID interactive pass, working ; added NoWinRM test and -MinNoWinRMVersion, to bypass attempts with this, post EOM v205 (as v206 completely drops the dependant test|clear-ActiveToken())
     # 10:25 AM 8/2/2022 NOPE! get-msaltoken *authenticates* a fresh connection, like Connect-EOM, 
@@ -63,7 +65,7 @@ function test-EXOToken {
     ) ;
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
-        if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' ; } ;
+        if(-not (gv rgxCertThumbprint -ea 0)){$rgxCertThumbprint = '[0-9a-fA-F]{40}' ; } ;
 
     } ;
     PROCESS {
@@ -72,46 +74,54 @@ function test-EXOToken {
         # w EOM v206p5, there's no longer even a PSS to detect at all, so this loses function as well.
         # 8:52 AM 7/11/2022 this ^ is equiv to EOM code: $existingPSSession = Get-PSSession | Where-Object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*"}
         
-        
-        # ==load dependancy module:
-        # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
-        $modname = 'ExchangeOnlineManagement' ;
-        $minvers = '2.0.5' ; 
-        Try {Get-Module -name $modname -listavailable -ErrorAction Stop | out-null } Catch {
-            $pltInMod=[ordered]@{Name=$modname} ; 
-            if( $env:COMPUTERNAME -match $rgxMyBoxUID ){$pltInMod.add('scope','CurrentUser')} else {$pltInMod.add('scope','AllUsers')} ;
-            write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):Install-Module w scope:$($pltInMod.scope)`n$(($pltInMod|out-string).trim())" ; 
-            Install-Module @pltIMod ; 
-        } ; # IsInstalled
-        $pltIMod = @{Name = $modname ; ErrorAction = 'Stop' ; verbose=$false } ;
-        if($minvers){$pltIMod.add('MinimumVersion',$minvers) } ; 
-        Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
-            write-verbose "Import-Module w`n$(($pltIMod|out-string).trim())" ; 
-            Import-Module @pltIMod ; 
+        # * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
+        #region EOMREV ; #*------v EOMREV Check v------
+        $EOMmodname = 'ExchangeOnlineManagement' ;
+        $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
+        if($xmod = Get-Module $EOMmodname -ErrorAction Stop){ } else {
+            $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            Try {
+                Import-Module @pltIMod | out-null ;
+                $xmod = Get-Module $EOMmodname -ErrorAction Stop ;
+            } Catch {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $smsg = $ErrTrapd.Exception.Message ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Break ;
+            } ;
         } ; # IsImported
-
-
-        [boolean]$UseConnEXO = [boolean]([version](get-module $modname).version -ge $MinNoWinRMVersion) ; 
+        if([version]$xmod.version -ge $MinNoWinRMVersion){$MinNoWinRMVersion = $xmod.version.tostring() ;}
+        [boolean]$UseConnEXO = [boolean]([version]$xmod.version -ge $MinNoWinRMVersion) ; 
+        #endregion EOMREV ; #*------^ END EOMREV Check  ^------
 
         if($UseConnEXO){
-            $smsg = "$($modname) v$($MinNoWinRMVersion)+ detected: No dependancy test-ActiveToken() available in later EOM builds" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+            $smsg = "$($EOMmodname) v$($MinNoWinRMVersion)+ detected: No dependancy test-ActiveToken() available in later EOM builds" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
         } elseif ($exov2 = Get-PSSession | where-object {$_.ConfigurationName -like "Microsoft.Exchange" -AND $_.Name -like "ExchangeOnlineInternalSession*"}){
 
             $error.clear() ;
             TRY {
                 #=load function module (subcomponent of dep module, pathed from same dir)
-                #$tmodpath = join-path -path (split-path (get-module $modname -list).path) -ChildPath 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll' ;
-                $EOMgmtModulePath = split-path (get-module $modname -list).Path ; 
+                #$tmodpath = join-path -path (split-path (get-module $EOMmodname -list).path) -ChildPath 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll' ;
+                $EOMgmtModulePath = split-path (get-module $EOMmodname -list).Path ; 
                 if($IsCoreCLR){
-                    $EOMgmtModulePath = resolve-path -Path $EOMgmtModulePath\netcore ;
-                    $smsg = "(.netcore path in use:" ; 
-                } else { 
-                    $EOMgmtModulePath = resolve-path -Path $EOMgmtModulePath\netFramework
-                    $smsg = "(.netnetFramework path in use:" ;                 
-                } ; 
+	                $EOMgmtModulePath = resolve-path -Path $EOMgmtModulePath\netcore ;
+	                $smsg = "(.netcore path in use:" ; 
+                } else {
+	                $EOMgmtModulePath = resolve-path -Path $EOMgmtModulePath\netFramework
+	                $smsg = "(.netnetFramework path in use:" ;
+                } ;
+                $smsg += "$($EOMgmtModulePath))" ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 $tmodpath = join-path -path $EOMgmtModulePath -ChildPath 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll' ;
 
                 if(test-path $tmodpath){ import-module -name $tmodpath -Cmdlet Test-ActiveToken -verbose:$false }
