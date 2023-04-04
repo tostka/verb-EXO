@@ -15,7 +15,10 @@ function test-EXOv2Connection {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell
     REVISIONS
-    * 3:54 PM 11/28/2022 move into verb-EXO; copied back from months of debugging in ISE on jb
+    * 3:58 PM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not; 
+    fixed flipped $IsNoWinRM ; supports EMOv2 v EMOv3 pss/no-pss connections, adds support for get-connectioninformation()
+    * 3:14 pm 3/29/2023: REN'D $modname => $EOMModName
+    * 3:54 PM 11/29/2022:  force the $MinNoWinRMVersion value to the currnet highest loaded:; 
     * 3:59 PM 8/2/2022 got through dbugging EOM v205 SID interactive pass, working ; fully works from mybox w v206p6, cEOM connection, with functional prefix. need to code in divert on cxo2 etc to avoid redundant tests and just do them here.
     * 3:30 PM 7/25/2022 fixed missing else for if #152; works in tests against CBA & SID interactive creds on EOM v205, need to debug now against EOM v206p6, to accomodate PSSession-less connect & test code.
     * 10:18 AM 6/24/2022 init ; ren test-EXOConnection -> test-EXOv2Connection, as this only validates EXOversion2 connections, not basic-auth-based EXOv1
@@ -91,44 +94,35 @@ function test-EXOv2Connection {
         if(-not $EXOv1GmoFilter){$EXOv1GmoFilter = 'tmp_*' } ; 
         if(-not $EXOv2GmoNoWinRMFilter){$EXOv2GmoNoWinRMFilter = 'tmpEXO_*' };
         $EOMmodname = 'ExchangeOnlineManagement' ;
-        $modname = $EOMmodname ;
-        # move into a param
-        #$MinNoWinRMVersion = '2.0.6' ;        
-        #*------^ END PSS & GMO VARIS ^------
-
-        Try { Get-Module $modname -ErrorAction Stop | out-null } Catch {
+        # * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
+        #region EOMREV ; #*------v EOMREV Check v------
+        #$EOMmodname = 'ExchangeOnlineManagement' ;
+        $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
+        if($xmod = Get-Module $EOMmodname -ErrorAction Stop){ } else {
             $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
-            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            Import-Module @pltIMod ;
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            Try {
+                Import-Module @pltIMod | out-null ;
+                $xmod = Get-Module $EOMmodname -ErrorAction Stop ;
+            } Catch {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $smsg = $ErrTrapd.Exception.Message ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Break ;
+            } ;
         } ; # IsImported
-        [boolean]$IsNoWinRM = [boolean]([version](get-module $modname).version -ge $MinNoWinRMVersion) ; 
+        if([version]$xmod.version -ge $MinNoWinRMVersion){
+            $MinNoWinRMVersion = $xmod.version.tostring() ;
+            $IsNoWinRM = $true ; 
+        }
+        [boolean]$UseConnEXO = [boolean]([version]$xmod.version -ge $MinNoWinRMVersion) ; 
+        #endregion EOMREV ; #*------^ END EOMREV Check  ^------
 
-        # 12:18 PM 9/17/2022 prestage cert-handling calcs:
-        if($credential.username -match $rgxCertThumbprint){
-		    $smsg =  "(UserName:Certificate Thumbprint detected)"
-		    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-		    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            # cert CBA non-basic auth
-		    <# CertificateThumbPrint = $Credential.UserName ;
-			    AppID = $Credential.GetNetworkCredential().Password ;
-			    Organization = 'TENANT.onmicrosoft.com' ; # org is on $xxxmeta.o365_TenantDomain
-		    #>
-            # want the friendlyname to display the cred source in use #$tcert.friendlyname
-		    if($tcert = get-childitem -path "Cert:\CurrentUser\My\$($credential.username)"){
-			    $certUname = $tcert.friendlyname ; 
-			    $certTag = [regex]::match($certUname,$rgxCertFNameSuffix).captures[0].groups[1].value ; 
-			    $smsg = "(calc'd CBA values:cred:$($certTag):$([string]$tcert.friendlyname))" ; 
-			    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-			    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            } else { 
-			    $smsg = "calc'd CBA values FAIL!: UNABLE TO locate cert matching Cert:\CurrentUser\My\`$credential.username" ;
-			    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-			    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-			    throw $smsg ; 
-			    Break ; 
-		    } ;
-        } ;
     } ;  # if-E BEGIN    
     PROCESS {
         $oReturn = [ordered]@{
@@ -195,7 +189,7 @@ function test-EXOv2Connection {
                 rxo2 ; 
             } ; 
             
-        } elseif($IsNoWinRM -AND ((get-module $EXOv2GmoNoWinRMFilter) -AND (get-module $modName))){
+        } elseif($IsNoWinRM -AND ((get-module $EXOv2GmoNoWinRMFilter) -AND (get-module $EOMmodname))){
             # no PSS and IsNoWinRM == v206+ PSS-less connection
             # verify the exov2 cmdlets actually imported as a tmp_ module w specifid prefix & 1st cmdlet
 
@@ -207,18 +201,32 @@ function test-EXOv2Connection {
             <# [PowerShell Gallery | MSAL.PS.psd1 4.1.0.2 - www.powershellgallery.com/](https://www.powershellgallery.com/packages/MSAL.PS/4.1.0.2/Content/MSAL.PS.psd1)
              nope, it's referring to 'virtual network address prefix'f
             #>
+            # 12:38 PM 4/4/2023 EOM v3 adds Get-ConnectionInformation, which has .tokenStatus -eq 'Active'
 
-            # it seamlessly reauths, wo prompts, so just validate a core cmdlet is loaded, plust the above
-            if([boolean](get-command -name Get-xoOrganizationConfig)){
-                $smsg = "(`IsNoWinRM:`$true`nget-module:$($EXOv2GmoNoWinRMFilter)`nget-module:$($modName)`ngcm:Get-xoOrganizationConfig`n=>Appears Valid)" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            if($xmod | Where-Object {$_.version -like "3.*"} ){
+                $smsg = "EOM v3+ connection detected" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                if ((Get-ConnectionInformation).tokenStatus -eq 'Active') {
+                    #write-host 'Connecting to Exchange Online' -ForegroundColor Cyan
+                    #Connect-ExchangeOnline -UserPrincipalName $adminUPN
+                    $bExistingEXOGood = $isEXOValid = $true ;
+                }
+            } else {  
+                $smsg = "EOM v205p6+ connection detected" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                # it seamlessly reauths, wo prompts, so just validate a core cmdlet is loaded, plust the above
+                if([boolean](get-command -name Get-xoOrganizationConfig)){
+                    $smsg = "(`IsNoWinRM:`$true`nget-module:$($EXOv2GmoNoWinRMFilter)`nget-module:$($EOMmodname)`ngcm:Get-xoOrganizationConfig`n=>Appears Valid)" ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
-                $bExistingEXOGood = $isEXOValid = $true ;
-                #$IsNoWinRM = $true ; # already tested above
-            } else { 
-                $bExistingEXOGood = $isEXOValid = $false ;
-            } ; 
+                    $bExistingEXOGood = $isEXOValid = $true ;
+                    #$IsNoWinRM = $true ; # already tested above
+                } else { 
+                    $bExistingEXOGood = $isEXOValid = $false ;
+                } ; 
 
             # v dead pss-based or msal.net-based code, that can't do prefixes properly. v
             <#
@@ -345,10 +353,9 @@ function test-EXOv2Connection {
 
             #> # ^ dead pss-based or msal.net-based code, that can't do prefixes properly. ^
 
-            
-
+            } ;
         } else { 
-            $smsg = "Unable to detect EXOv2 PSSession!" ; 
+            $smsg = "Unable to detect EXOv2 or EXOv3 PSSession!" ; 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
             else{ write-host -ForegroundColor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
             #throw $smsg ;
@@ -370,7 +377,6 @@ function test-EXOv2Connection {
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             
-            # spliced in block to precalc $certtag & $certUname up in begin{} (if $credential.username matches a certy thumbprint)
             if( ($credential.username -match $rgxCertThumbprint) -AND ((Get-Variable  -name "$($TenOrg)Meta").value.o365_Prefix -eq $certTag )){
                 # 9:59 AM 6/24/2022 need a case for CBA cert (thumbprint username)
                 # compare cert fname suffix to $xxxMeta.o365_Prefix
@@ -401,7 +407,7 @@ function test-EXOv2Connection {
 
             if($bExistingEXOGood -AND $isEXOValid){
                 $oReturn.PSSession = $pssEXOv2 ; 
-                if( ($IsNoWinRM = $false) -AND -not $pssEXOv2){
+                if( ($IsNoWinRM -eq $true) -AND -not $pssEXOv2){
                     $smsg = "IsNoWinRM & no detected EXO PsSession:" ; 
                     if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
