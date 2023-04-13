@@ -15,7 +15,8 @@ Function Connect-EXO2 {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
-    # * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not; added support for EMOv3 get-connectioninfo() etc, and differentiate EMOv2 from EMOv3 connections
+    * 2:40 PM 4/5/2023: force the Connect-ExchangeOnline banner hidden:$pltCEO.ShowBanner = $false ;
+    * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not; added support for EMOv3 get-connectioninfo() etc, and differentiate EMOv2 from EMOv3 connections
     * 3:14 pm 3/29/2023: REN'D $modname => $EOMModName
     * 3:59 PM 8/2/2022 got through dbugging EOM v205 SID interactive pass, working ; added Conn-EOM missing -prefix spec; fully works from mybox w v206p6, cEOM connection, with functional prefix.
     * 4:07 PM 7/26/2022 found that MS code doesn't chk for multi vers's installed, when building .dll paths: wrote in code to take highest version.
@@ -601,6 +602,41 @@ Function Connect-EXO2 {
                     ShowBanner = [switch]$false ;
                 } ;
 
+                ==2:43 PM 4/5/2023: V3.1.0 examples
+                -------------------------- Example 1 --------------------------
+                Connect-ExchangeOnline -UserPrincipalName chris@contoso.com
+                This example connects to Exchange Online PowerShell using modern authentication, with or without multi-factor authentication (MFA). We
+                aren't using the UseRPSSession parameter, so the connection uses REST and doesn't require Basic authentication to be enabled in WinRM
+                on the local computer.
+                -------------------------- Example 2 --------------------------
+                Connect-ExchangeOnline -UserPrincipalName chris@contoso.com -UseRPSSession
+                This example connects to Exchange Online PowerShell using modern authentication, with or without MFA. We're using the UseRPSSession
+                parameter, so the connection requires Basic authentication to be enabled in WinRM on the local computer.
+                -------------------------- Example 3 --------------------------
+                Connect-ExchangeOnline -AppId <%App_id%> -CertificateFilePath "C:\users\navin\Documents\TestCert.pfx" -Organization
+                "contoso.onmicrosoft.com"
+                This example connects to Exchange Online PowerShell in an unattended scripting scenario using the public key of a certificate.
+                -------------------------- Example 4 --------------------------
+                Connect-ExchangeOnline -AppId <%App_id%> -CertificateThumbprint <%Thumbprint string of certificate%> -Organization
+                "contoso.onmicrosoft.com"
+                This example connects to Exchange Online PowerShell in an unattended scripting scenario using a certificate thumbprint.
+                -------------------------- Example 5 --------------------------
+                Connect-ExchangeOnline -AppId <%App_id%> -Certificate <%X509Certificate2 object%> -Organization "contoso.onmicrosoft.com"
+                This example connects to Exchange Online PowerShell in an unattended scripting scenario using a certificate file. This method is best
+                suited for scenarios where the certificate is stored in remote machines and fetched at runtime. For example, the certificate is stored
+                in the Azure Key Vault.
+                -------------------------- Example 6 --------------------------
+                Connect-ExchangeOnline -Device
+                In PowerShell 7.0.3 or later using version 2.0.4 or later of the module, this example connects to Exchange Online PowerShell in
+                interactive scripting scenarios on computers that don't have web browsers.
+                The command returns a URL and unique code that's tied to the session. You need to open the URL in a browser on any computer, and then
+                enter the unique code. After you complete the login in the web browser, the session in the Powershell 7 window is authenticated via
+                the regular Azure AD authentication flow, and the Exchange Online cmdlets are imported after few seconds.
+                -------------------------- Example 7 --------------------------
+                Connect-ExchangeOnline -InlineCredential
+                In PowerShell 7.0.3 or later using version 2.0.4 or later of the module, this example connects to Exchange Online PowerShell in
+                interactive scripting scenarios by passing credentials directly in the PowerShell window.
+
                 ==1:52 PM 3/29/2022: v2.0.5 examples
                 -------------------------- Example 1 --------------------------
                 $UserCredential = Get-Credential
@@ -964,7 +1000,7 @@ Function Connect-EXO2 {
 
                 $pltCEO=[ordered]@{                    
                     erroraction = 'STOP' ;
-                    #whatif = $($whatif) ;
+                    ShowBanner = $false ; # force the fugly banner hidden
                 } ;
                 
                 # 9:43 AM 8/2/2022 add defaulted prefix spec
