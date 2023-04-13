@@ -1,4 +1,4 @@
-# invoke-XOWrapper.ps1
+# invoke-XOWrapper_func.ps1
 #*------v Function invoke-XOWrapper v------
 function invoke-XOWrapper  {
     <#
@@ -16,6 +16,8 @@ function invoke-XOWrapper  {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnlineManagement,Bug,Workaround
     REVISIONS
+    * 2:33 PM 4/13/2023 pull [E]req for verb-exo (merging)
+    * 3:19 PM 3/29/2023 REN: $tMod => $EOMModName; $MinNoWinRMVersion IS A PARAM, leaving it unrenamed (other generic code to $EOMMinNoWinRMVersion)
     * 10:16 AM 3/24/2023 ported over the xow_func.ps1 logic (lastest jb vers) into this better-named func, with xow alias.
     * 1:07 PM 12/6/2022 add test for silent support, before adding it to the splat
     * 3:54 PM 11/29/2022:  force the $MinNoWinRMVersion value to the currnet highest loaded:; 
@@ -128,7 +130,7 @@ function invoke-XOWrapper  {
     PS>  $xrcp = invoke-XOWrapper {get-xorecipient somealias } -credential $pltRXO.Credential -credentialOP $pltRX10.Credential ; 
     Demo passing in specified credentials ; 
     #>
-    #Requires -Modules ExchangeOnlineManagement, verb-EXO, AzureAD, verb-AAD
+    #Requires -Modules ExchangeOnlineManagement, AzureAD, verb-AAD
     [CmdletBinding()] 
     [Alias('xoW')]
     PARAM(
@@ -142,9 +144,9 @@ function invoke-XOWrapper  {
         [version] $MinNoWinRMVersion = '2.0.6'
     ) ; 
     write-verbose "(confirm EMO load)" ; 
-    $tMod = 'exchangeonlinemanagement' ; 
-    if(-not (get-module $tMod)){ipmo -force $tMod} ; 
-    $xMod = get-module $tMod ; 
+    $EOMModName = 'exchangeonlinemanagement' ; 
+    if(-not (get-module $EOMModName)){ipmo -force $EOMModName} ; 
+    $xMod = get-module $EOMModName ; 
     write-verbose "(check EMO version)" ; 
 
     function _Redo-Connection {
@@ -193,13 +195,13 @@ function invoke-XOWrapper  {
         } else {Connect-AAD} ;         
     } ; 
 
-    #[boolean]$UseConnEXO = [boolean]([version](get-module $tMod).version -ge $MinNoWinRMVersion) ; 
+    #[boolean]$UseConnEXO = [boolean]([version](get-module $EOMModName).version -ge $MinNoWinRMVersion) ; 
     [boolean]$UseConnEXO = [boolean]([version]$xMod.version -ge $MinNoWinRMVersion) ; 
-    if([version](get-module $tMod).version -ge $MinNoWinRMVersion){
+    if([version](get-module $EOMModName).version -ge $MinNoWinRMVersion){
         $smsg = "Found gmo EOM.version -gt `$MinNoWinRMVersion: forcing `$MinNoWinRMVersion to EOM.version" ; 
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        $MinNoWinRMVersion = (get-module $tMod).version.tostring() ; 
+        $MinNoWinRMVersion = (get-module $EOMModName).version.tostring() ; 
     }else{
         $smsg = "gmo EOM.version -eq/lt `$MinNoWinRMVersion: using existing `$MinNoWinRMVersion ($MinNoWinRMVersion)" ;  ; 
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
@@ -209,8 +211,8 @@ function invoke-XOWrapper  {
     if($UseConnEXO){
         $smsg = "$($xMod.Name) v$($xMod.Version.ToString()) is GREATER than $($MinNoWinRMVersion):this function is not needed for natively Modern Auth EXO connectivit!" ; 
         $smsg += "`n(proxying command through...)" ; 
-        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         #Levels:Error|Warn|Info|H1|H2|H3|Debug|Verbose|Prompt        
         #Break ; 
         # should just proxy thru wo testing
