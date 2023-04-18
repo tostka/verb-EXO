@@ -15,6 +15,7 @@ function test-EXOToken {
     Github      : https://github.com/tostka/verb-aad
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS
+    * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
     * 3:34 PM 3/29/2023 3:14 pm 3/29/2023: REN'D $modname => $EOMModName
     * 10:12 AM 11/28/2022 add: test of get-command -name Test-ActiveToken) before using it (only avail in EOM v205 and less)
@@ -39,7 +40,7 @@ function test-EXOToken {
     .PARAMETER Credential
     Credential to be used for connection
      .PARAMETER MinNoWinRMVersion
-    MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']
+    MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']
     Test-ActiveToken doesn't appear to normally be exposed anywhere but with explicit load of the .dll
     .OUTPUT
     System.Boolean
@@ -60,8 +61,8 @@ function test-EXOToken {
     Param(
         [Parameter(Mandatory=$True,HelpMessage="Credentials [-Credentials [credential object]]")]
         [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
-        [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']")]
-        [version] $MinNoWinRMVersion = '2.0.6'
+        [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']")]
+        [version] $MinNoWinRMVersion = '3.0.0'
     ) ;
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;

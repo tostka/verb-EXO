@@ -16,6 +16,7 @@ function invoke-XOWrapper  {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnlineManagement,Bug,Workaround
     REVISIONS
+    * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 2:33 PM 4/13/2023 pull [E]req for verb-exo (merging)
     * 3:19 PM 3/29/2023 REN: $tMod => $EOMModName; $MinNoWinRMVersion IS A PARAM, leaving it unrenamed (other generic code to $EOMMinNoWinRMVersion)
     * 10:16 AM 3/24/2023 ported over the xow_func.ps1 logic (lastest jb vers) into this better-named func, with xow alias.
@@ -52,7 +53,7 @@ function invoke-XOWrapper  {
     .PARAMETER  Credential
     Credential object
     .PARAMETER MinNoWinRMVersion
-    MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']
+    MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']
     .EXAMPLE
     PS> write-verbose ipmo the invoke-XOWrapper module file into memory ; 
     PS> ipmo -fo -verb d:\scripts\invoke-XOWrapper_func.ps1 ; 
@@ -140,8 +141,8 @@ function invoke-XOWrapper  {
         [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage = 'ExOP Credential object (for staged hybrid XOP reconnects)[-credentialOP `$credOP]')]
         [System.Management.Automation.PSCredential]$CredentialOP = $credTORSID,
-        [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']")]
-        [version] $MinNoWinRMVersion = '2.0.6'
+        [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']")]
+        [version] $MinNoWinRMVersion = '3.0.0'
     ) ; 
     write-verbose "(confirm EMO load)" ; 
     $EOMModName = 'exchangeonlinemanagement' ; 
