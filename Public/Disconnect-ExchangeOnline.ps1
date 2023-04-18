@@ -17,6 +17,7 @@ function Disconnect-ExchangeOnline{
     AddedCredit : Microsoft (edited version of published commands in the module)
     AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
     REVISIONS
+    * 11:23 AM 4/18/2023 deleting: this is PSSession/WinRM based ; EOMv3.1.0 includes: Disconnect-ExchangeOnline
     * 3:27 PM 3/28/2022 copied over latest v2.0.5 from ..\WindowsPowerShell\Modules\ExchangeOnlineManagement\2.0.5\netFramework\ExchangeOnlineManagement.psm1
     * 8:34 AM 11/9/2020 init
     .DESCRIPTION
