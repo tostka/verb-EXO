@@ -15,6 +15,7 @@ Function Disconnect-EXO2 {
     Github      : https://github.com/tostka
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not; 
     add $exov3Good and diff EMOv2 from EMOv3 sessions.
     * 3:14 pm 3/29/2023: REN'D $modname => $EOMModName
@@ -35,7 +36,7 @@ Function Disconnect-EXO2 {
     .PARAMETER MinimumVersion
     MinimumVersion required for ExchangeOnlineManagement module (defaults to '2.0.5')[-MinimumVersion '2.0.6']
     .PARAMETER MinNoWinRMVersion
-    MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']
+    MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']
     .PARAMETER silent
     Switch to suppress all non-error echos
     .INPUTS
@@ -55,8 +56,8 @@ Function Disconnect-EXO2 {
     Param(
         [Parameter(HelpMessage = "MinimumVersion required for ExchangeOnlineManagement module (defaults to '2.0.5')[-MinimumVersion '2.0.6']")]
         [version] $MinimumVersion = '2.0.5',
-        [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']")]
-        [version] $MinNoWinRMVersion = '2.0.6',
+        [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']")]
+        [version] $MinNoWinRMVersion = '3.0.0',
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
         [switch] $silent
 
