@@ -2,12 +2,28 @@
 function cxoVEN {
     <#
     .SYNOPSIS
-    cxoVEN - Connect-EXO to specified Tenant
+    cxoVEN - wrapper for Connect-EXO to connect to specified Tenant
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-07-29
+    FileName    : cxoVEN.ps1
+    License     :
+    Copyright   :
+    Github      : https://github.com/tostka/verb-exo
+    Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
+    REVISIONS   :
+    * 11:32 AM 4/18/2023 alias into cxoVEN, retiring
     .DESCRIPTION
-    Connect-EXO - Establish PSS to https://ps.outlook.com/powershell/
+    cxoVEN - wrapper for Connect-EXO to connect to specified Tenant
     .EXAMPLE
     cxoVEN
     #>
-    Connect-EXO -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
+    [CmdletBinding()]
+    [Alias('cxo2cmw' )]
+    PARAM()
+    Connect-EXO -cred $credO365VENSID -Verbose:($VerbosePreference -eq 'Continue') ; 
 }
 #*------^ cxoVEN.ps1 ^------
