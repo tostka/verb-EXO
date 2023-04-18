@@ -15,6 +15,8 @@ Function Connect-EXO2 {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 4:08 PM 4/17/2023 ported into connect-exo(), aliased cxo2,connect-exo2 in it.
+    * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 2:40 PM 4/5/2023: force the Connect-ExchangeOnline banner hidden:$pltCEO.ShowBanner = $false ;
     * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not; added support for EMOv3 get-connectioninfo() etc, and differentiate EMOv2 from EMOv3 connections
     * 3:14 pm 3/29/2023: REN'D $modname => $EOMModName
@@ -81,7 +83,7 @@ Function Connect-EXO2 {
     .PARAMETER UserPrincipalName
     User Principal Name or email address of the user
     .PARAMETER usePSSLegacy
-    Switch to force use of -UseRPSSession legacy PSSession Basic-Auth connection (new with EMO v2.0.6preview6+)[-usePSSLegacy]
+    Switch to force use of -UseRPSSession legacy PSSession Basic-Auth connection (new with EMO v2.0.6preview6+; deprecates 5/2023)[-usePSSLegacy]
     .PARAMETER ConnectionUri
     Connection Uri for the Remote PowerShell endpoint [-ConnectionUri 'https://outlook.office365.com/powershell-liveid/']
     .PARAMETER ExchangeEnvironmentName
@@ -89,7 +91,7 @@ Function Connect-EXO2 {
     .PARAMETER MinimumVersion
     MinimumVersion required for ExchangeOnlineManagement module (defaults to '2.0.5')[-MinimumVersion '2.0.6']
     .PARAMETER MinNoWinRMVersion
-    MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']
+    MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']
     .PARAMETER PSSessionOption
     PowerShell session options to be used when opening the Remote PowerShell session
     .PARAMETER BypassMailboxAnchoring
@@ -142,7 +144,7 @@ Function Connect-EXO2 {
         [Parameter(ParameterSetName = 'UPN',HelpMessage = "User Principal Name or email address of the user[-UserPrincipalName logon@domain.com]")]
         [string]$UserPrincipalName,
         # implment param for new v206p6+ -UseRPSSession
-        [Parameter(HelpMessage = "Switch to force use of -UseRPSSession legacy PSSession Basic-Auth connection (new with EMO v2.0.6preview6+)[-usePSSLegacy]")]
+        [Parameter(HelpMessage = "Switch to force use of -UseRPSSession legacy PSSession Basic-Auth connection (new with EMO v2.0.6preview6+; deprecates 5/2023)[-usePSSLegacy]")]
         [switch] $usePSSLegacy, 
         [Parameter(HelpMessage = "Connection Uri for the Remote PowerShell endpoint [-ConnectionUri 'https://outlook.office365.com/powershell-liveid/']")]
         [string] $ConnectionUri,
@@ -161,8 +163,8 @@ Function Connect-EXO2 {
         $ExchangeEnvironmentName = 'O365Default',
         [Parameter(HelpMessage = "MinimumVersion required for ExchangeOnlineManagement module (defaults to '2.0.5')[-MinimumVersion '2.0.6']")]
         [version] $MinimumVersion = '2.0.5',
-        [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '2.0.6')[-MinimumVersion '2.0.6']")]
-        [version] $MinNoWinRMVersion = '2.0.6',
+        [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']")]
+        [version] $MinNoWinRMVersion = '3.0.0',
         [Parameter(HelpMessage = "PowerShell session options to be used when opening the Remote PowerShell session [-PSSessionOption `$PsSessObj]")]
         [System.Management.Automation.Remoting.PSSessionOption]
         $PSSessionOption = $null,
@@ -187,7 +189,7 @@ Function Connect-EXO2 {
 
         #*------v PSS & GMO VARIS v------
         # move into a param
-        #$MinNoWinRMVersion = '2.0.6' ; 
+        #$MinNoWinRMVersion = '3.0.0' ; 
         # get-pssession session varis
         # select key differentiating properties:
         $pssprops = 'Id','ComputerName','ComputerType','State','ConfigurationName','Availability', 
