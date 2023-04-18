@@ -3,6 +3,8 @@ function rxo2CMW {
     <#
     .SYNOPSIS
     rxo2CMW - Reonnect-EXO2 to specified Tenant
+    REVISIONS   :
+    * 11:32 AM 4/18/2023 alias into rxomw, retiring
     .DESCRIPTION
     Reconnect-EXO2 - Re-establish PSS to EXO V2 Modern Auth
     .EXAMPLE

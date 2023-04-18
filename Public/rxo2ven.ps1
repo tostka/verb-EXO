@@ -3,6 +3,8 @@ function rxo2VEN {
     <#
     .SYNOPSIS
     rxo2VEN - Reonnect-EXO to specified Tenant
+    REVISIONS   :
+    * 11:32 AM 4/18/2023 alias into rxoVEN, retiring
     .DESCRIPTION
     Reconnect-EXO2 - Re-establish PSS to EXO V2 Modern Auth
     #>

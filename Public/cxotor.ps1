@@ -24,6 +24,6 @@ function cxoTOR {
     [CmdletBinding()]
     [Alias('cxo2cmw' )]
     PARAM()
-    Connect-EXO -cred $credO365TORSID -Verbose:($VerbosePreference -eq 'Continue') ; 
+    Connect-EXO -cred $credO365TORSID -Verbose:$($VerbosePreference -eq 'Continue') ; 
 }
 #*------^ cxoTOR.ps1 ^------

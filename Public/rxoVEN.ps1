@@ -2,12 +2,28 @@
 function rxoVEN {
     <#
     .SYNOPSIS
-    rxoVEN - Reonnect-EXO to specified Tenant
+    rxoVEN - wrapper for Connect-EXO to connect to specified Tenant
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-07-29
+    FileName    : rxoVEN.ps1
+    License     :
+    Copyright   :
+    Github      : https://github.com/tostka/verb-exo
+    Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
+    REVISIONS   :
+    * 11:32 AM 4/18/2023 alias into rxoVEN, retiring
     .DESCRIPTION
-    Reconnect-EXO - Re-establish PSS to https://ps.outlook.com/powershell/
+    rxoVEN - wrapper for Connect-EXO to connect to specified Tenant
     .EXAMPLE
     rxoVEN
     #>
-    Reconnect-EXO -cred $credO365VENCSID -Verbose:($VerbosePreference -eq 'Continue') ; 
+    [CmdletBinding()]
+    [Alias('cxo2VEN' )]
+    PARAM()
+    ReConnect-EXO -cred $credO365VENCSID -Verbose:$($VerbosePreference -eq 'Continue') ; 
 }
 #*------^ rxoVEN.ps1 ^------

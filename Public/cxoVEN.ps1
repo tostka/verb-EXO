@@ -24,6 +24,6 @@ function cxoVEN {
     [CmdletBinding()]
     [Alias('cxo2cmw' )]
     PARAM()
-    Connect-EXO -cred $credO365VENSID -Verbose:($VerbosePreference -eq 'Continue') ; 
+    Connect-EXO -cred $credO365VENSID -Verbose:$($VerbosePreference -eq 'Continue') ; 
 }
 #*------^ cxoVEN.ps1 ^------

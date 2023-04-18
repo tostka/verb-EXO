@@ -1,13 +1,29 @@
-﻿#*------v rxotol.ps1 v------
+﻿#*------v rxoTOL.ps1 v------
 function rxoTOL {
     <#
     .SYNOPSIS
-    rxoTOL - Reonnect-EXO to specified Tenant
+    rxoTOL - wrapper for Connect-EXO to connect to specified Tenant
+    .NOTES
+    Version     : 1.0.0
+    Author      : Todd Kadrie
+    Website     :	http://www.toddomation.com
+    Twitter     :	@tostka / http://twitter.com/tostka
+    CreatedDate : 2020-07-29
+    FileName    : rxoTOL.ps1
+    License     :
+    Copyright   :
+    Github      : https://github.com/tostka/verb-exo
+    Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
+    REVISIONS   :
+    * 11:32 AM 4/18/2023 alias into rxoTOL, retiring
     .DESCRIPTION
-    Reconnect-EXO - Re-establish PSS to https://ps.outlook.com/powershell/
+    rxoTOL - wrapper for Connect-EXO to connect to specified Tenant
     .EXAMPLE
     rxoTOL
     #>
-    Reconnect-EXO -cred $credO365TOLSID -Verbose:($VerbosePreference -eq 'Continue') ; 
+    [CmdletBinding()]
+    [Alias('cxo2TOL' )]
+    PARAM()
+    ReConnect-EXO -cred $credO365TOLCSID -Verbose:$($VerbosePreference -eq 'Continue') ; 
 }
-#*------^ rxotol.ps1 ^------
+#*------^ rxoTOL.ps1 ^------

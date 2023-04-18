@@ -3,6 +3,8 @@ function rxo2TOR {
     <#
     .SYNOPSIS
     rxo2TOR - Reonnect-EXO to specified Tenant
+    REVISIONS   :
+    * 11:32 AM 4/18/2023 alias into rxoTOR, retiring
     .DESCRIPTION
     Reconnect-EXO2 - Re-establish PSS to EXO V2 Modern Auth
     .EXAMPLE
