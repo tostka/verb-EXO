@@ -15,6 +15,7 @@ function test-EXOv2Connection {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell
     REVISIONS
+    * 10:28 AM 4/18/2023 #372: added -ea 0 to gv calls (not found error suppress)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 3:58 PM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not; 
     fixed flipped $IsNoWinRM ; supports EMOv2 v EMOv3 pss/no-pss connections, adds support for get-connectioninformation()
@@ -229,131 +230,6 @@ function test-EXOv2Connection {
                     $bExistingEXOGood = $isEXOValid = $false ;
                 } ; 
 
-            # v dead pss-based or msal.net-based code, that can't do prefixes properly. v
-            <#
-            # splat to run get-MSALToken
-            $pltGMT = @{
-                TenantId = $null ;
-                #ClientId = $credential.GetNetworkCredential().Password ;
-                #ClientCertificate = Get-Item "Cert:\CurrentUser\My\$($credential.UserName)" ;
-                ErrorAction = 'Stop' ;
-                Verbose = $($VerbosePreference -eq "Continue") ;
-            } ;
-
-            if($credential.username -match $rgxCertThumbprint){
-                $smsg = "(CBA cert auth creds detected)" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-
-                $pltGMT.add('ClientId',$credential.GetNetworkCredential().Password) ;
-                $pltGMT.add('ClientCertificate',(Get-Item "Cert:\CurrentUser\My\$($credential.UserName)" -ErrorAction 'STOP') ) ;
-
-            } else { 
-                $smsg = "(NON-CBA auth creds detected - trying interactive)" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                # 1:01 PM 7/8/2022 left off coding here, need interactive options for creds etc
-
-                # try EXOPS clientid
-                $pltGMT.add('ClientId','a0c73c16-a7e3-4564-9a95-2bdf47383716') ;
-                # this uses the EXOPS clientid with a UPN-based credential
-                # $authContext = New-Object "Microsoft.IdentityModel.Clients.ActiveDirectory.AuthenticationContext" -ArgumentList https://login.microsoftonline.com/tenantname.onmicrosoft.com/
-                # $client_id = "a0c73c16-a7e3-4564-9a95-2bdf47383716" # EXORemPS
-                # $Credential = Get-Credential user@tenantname.onmicrosoft.com
-                # $AADcredential = New-Object "Microsoft.IdentityModel.Clients.ActiveDirectory.UserPasswordCredential" -ArgumentList $Credential.UserName,$Credential.Password
-                # $authResult = [Microsoft.IdentityModel.Clients.ActiveDirectory.AuthenticationContextIntegratedAuthExtensions]::AcquireTokenAsync($authContext,"https://outlook.office365.com",$client_Id,$AADcredential)
-                #
-                # force interactive
-                $pltGMT.add('Interactive',$true) ; 
-
-
-            } ; 
-
-            # # leveraging the passed in $Credential (or global in sample below)
-            # $tenOrg = 'TOR' ; 
-            # ipmo msal.ps -force ; 
-            # $pltGMT = @{
-            #     TenantId = $null ;
-            #     ClientId = $credXXXCBA.GetNetworkCredential().Password ;
-            #     ClientCertificate = Get-Item "Cert:\CurrentUser\My\$($credXXXCBA.UserName)" ;
-            #     ErrorAction = 'Stop' ;
-            # } ;
-            # if($TenID= (Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantID ){
-            # 	$pltGMT.TenantId = $TenID;
-            # } else {
-            # 	$smsg = "UNABLE TO RESOLVE `$TENORG:$($TenOrg) TO FUNCTIONAL `$$($TenOrg)meta.o365_TenantID!" ;
-            # 	write-WARNING $smsg ;
-            # } ;
-            # $smsg = "Get-msaltoken w`n$(($pltGMT|out-string).trim())" ;
-            # write-host $smsg ;
-            # $msalToken = Get-msaltoken @pltGMT -ForceRefresh ; 
-            # 
-            # #-=-=-=-=-=-=-=-=
-            # $msaltoken | fl *
-            # AccessToken                  : eyJ0eXAiOi...p6Dx5z9dg
-            # IsExtendedLifeTimeToken      : False
-            # UniqueId                     :
-            # ExpiresOn                    : 7/8/2022 6:15:01 PM +00:00
-            # ExtendedExpiresOn            : 7/8/2022 6:15:01 PM +00:00
-            # TenantId                     :
-            # Account                      :
-            # IdToken                      :
-            # Scopes                       : {https://graph.microsoft.com/.default}
-            # CorrelationId                : 4dec58a7-XXXX-XXXX-b78e-907ee0bc79ee
-            # TokenType                    : Bearer
-            # ClaimsPrincipal              :
-            # AuthenticationResultMetadata : Microsoft.Identity.Client.AuthenticationResultMetadata
-            # User  
-            # #-=-=-=-=-=-=-=-=
-            #             
-            #
-
-            #if($TenID= (Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantID ){
-	        #    $pltGMT.TenantId = $TenID;
-            # use domain, better readable for echos
-            if($TenDom= (Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain ){
-                $pltGMT.TenantId = $TenDom;
-            } else {
-	            #$smsg = "UNABLE TO RESOLVE `$TENORG:$($TenOrg) TO FUNCTIONAL `$$($TenOrg)meta.o365_TenantID!" ;
-                $smsg = "UNABLE TO RESOLVE `$TENORG:$($TenOrg) TO FUNCTIONAL `$$($TenOrg)meta.o365_TenantDomain!" ;
-	            write-WARNING $smsg ;
-                throw $smsg ; 
-                Break ; 
-            } ;
-
-            $smsg = "Get-msaltoken w`n$(($pltGMT|out-string).trim())" ;
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-
-            $error.clear() ;
-            Try {
-                $MsalResponse = Get-MsalToken @pltGMT ; 
-                # 3:07 PM 7/13/2022 need to find a way to validate the token status!
-                if ($MsalResponse.AccessToken) {
-                    # ADD $isEXOValid TOO (needed to get through accdom code)
-                    $bExistingEXOGood = $isEXOValid = $true ;
-                    $IsNoWinRM = $true ;
-                } else { $bExistingEXOGood = $false ; }
-
-
-            } CATCH {
-                $ErrTrapd=$Error[0] ;
-                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                #-=-record a STATUSWARN=-=-=-=-=-=-=
-                $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
-                if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
-                if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
-                #-=-=-=-=-=-=-=-=
-                $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
-            } ; 
-
-            #> # ^ dead pss-based or msal.net-based code, that can't do prefixes properly. ^
-
             } ;
         } else { 
             $smsg = "Unable to detect EXOv2 or EXOv3 PSSession!" ; 
@@ -369,8 +245,8 @@ function test-EXOv2Connection {
             # swap in non-looping
             if( get-command Get-xoAcceptedDomain) {
                     #$TenOrg = get-TenantTag -Credential $Credential ;
-                if(-not (Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains){
-                    set-Variable  -name "$($TenOrg)Meta" -value ( (Get-Variable  -name "$($TenOrg)Meta").value += @{'o365_AcceptedDomains' = (Get-xoAcceptedDomain).domainname} )
+                if(-not (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_AcceptedDomains){
+                    set-Variable  -name "$($TenOrg)Meta" -value ( (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value += @{'o365_AcceptedDomains' = (Get-xoAcceptedDomain).domainname} )
                 } ;
             } ;
             
@@ -378,7 +254,7 @@ function test-EXOv2Connection {
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             
-            if( ($credential.username -match $rgxCertThumbprint) -AND ((Get-Variable  -name "$($TenOrg)Meta").value.o365_Prefix -eq $certTag )){
+            if( ($credential.username -match $rgxCertThumbprint) -AND ((Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_Prefix -eq $certTag )){
                 # 9:59 AM 6/24/2022 need a case for CBA cert (thumbprint username)
                 # compare cert fname suffix to $xxxMeta.o365_Prefix
                 # validate that the connected EXO is to the CBA Cert tenant
@@ -386,14 +262,14 @@ function test-EXOv2Connection {
                 if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
                 $bExistingEXOGood = $isEXOValid = $true ;
-            }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
+            }elseif((Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
                 # validate that the connected EXO is to the $Credential tenant
                 $smsg = "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring())),($($Credential.username))" ;
                 if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 $bExistingEXOGood = $isEXOValid = $true ;
             # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
-            }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
+            }elseif((Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
                 $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
