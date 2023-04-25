@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 4.1.0.0
+  Version     : 5.0.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -11236,6 +11236,7 @@ Function Reconnect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    # 3:18 PM 4/19/2023 under EOM310: replc $xmod.version refs with $EOMMv...
     * 11:20 AM 4/18/2023 step debugs ;  consolidate reconnect-exo2 into reconnect-exo (alias reconnect-exo2 & rxo2)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     # * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
@@ -11471,7 +11472,8 @@ Function Reconnect-EXO {
         };
         
         if($IsNoWinRM){
-            if($xmod | Where-Object {$_.version -like "3.*"} ) {
+            # 9:44 AM 4/20/2023 missed $EOMMv ref upgrade
+            if($EOMMv.major -ge 3) {
                 if ((Get-ConnectionInformation).tokenStatus -eq 'Active') {
                     $exov3Good = $bExistingEXOGood = $true ; 
                 } else { 
@@ -15948,7 +15950,7 @@ function test-EXOv2Connection {
 
             # 12:22 PM 8/1/2022 issue with get-msaltoken: it will auth EXO client app (by guid), but it doesn't support the key -prefix param, to make them verb-XOnoun; so you can't use it with hybrid onprem connections.
             # => looks like I'll have to either skip it, or test for cmdlets loaded, to verify. get-msaltoken actually runs an auth session, doesn't just validate one's present. 
-            <# [PowerShell Gallery | MSAL.PS.psd1 4.1.0.2 - www.powershellgallery.com/](https://www.powershellgallery.com/packages/MSAL.PS/4.1.0.2/Content/MSAL.PS.psd1)
+            <# [PowerShell Gallery | MSAL.PS.psd1 5.0.0.2 - www.powershellgallery.com/](https://www.powershellgallery.com/packages/MSAL.PS/5.0.0.2/Content/MSAL.PS.psd1)
              nope, it's referring to 'virtual network address prefix'f
             #>
             # 12:38 PM 4/4/2023 EOM v3 adds Get-ConnectionInformation, which has .tokenStatus -eq 'Active'
@@ -17544,8 +17546,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUAVqf6foK5n0e7cVD8biL2Mf2
-# mIagggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUqTjUAZMLq/dQQOZ8Donz5geO
+# y8agggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -17560,9 +17562,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQEolLZ
-# gsFlZihZhtn0U9w4fHbxPzANBgkqhkiG9w0BAQEFAASBgHzBdBRxu/b2gEswnRux
-# eX7iKaM3TC92TfthyDys+cNyxN1LhaPO6kceXV63g/DBbqRZaGEx9Pp9C6l8ZZqG
-# fMNUmPJyGWNadehc9cBpSiBuYBAuny1EEhoqDO8qXimZ2AVdcGfSfXDARPbsI2gK
-# d4x47jB2snO1WQmZtD3ITZUn
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQ3RuGC
+# tQP7/ChXjJdw61p+PuQBeTANBgkqhkiG9w0BAQEFAASBgC2uwRzM6LLvEfzqZmZf
+# PLGjGDf/PKrkdd9UlpjjnurkChG60yth1qqPuCDeiMf1ytROIrWHK+yGB0YMiIhx
+# Xv1diSg0goAzmNg+XEvwmIB7dkhJwJqODjyBz42jK4QPNbKyZX9d0g2fEupM63tr
+# +RLQF6oU8Rf1jyW5qnwxiw9A
 # SIG # End signature block
