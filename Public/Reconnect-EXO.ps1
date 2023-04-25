@@ -15,6 +15,7 @@ Function Reconnect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    # 3:18 PM 4/19/2023 under EOM310: replc $xmod.version refs with $EOMMv...
     * 11:20 AM 4/18/2023 step debugs ;  consolidate reconnect-exo2 into reconnect-exo (alias reconnect-exo2 & rxo2)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     # * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
@@ -250,7 +251,8 @@ Function Reconnect-EXO {
         };
         
         if($IsNoWinRM){
-            if($xmod | Where-Object {$_.version -like "3.*"} ) {
+            # 9:44 AM 4/20/2023 missed $EOMMv ref upgrade
+            if($EOMMv.major -ge 3) {
                 if ((Get-ConnectionInformation).tokenStatus -eq 'Active') {
                     $exov3Good = $bExistingEXOGood = $true ; 
                 } else { 
