@@ -15,6 +15,7 @@ function test-EXOv2Connection {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell
     REVISIONS
+    * 11:20 AM 4/25/2023 added -CertTag param (passed by connect-exo; used for validating credential alignment w Tenant)
     * 10:28 AM 4/18/2023 #372: added -ea 0 to gv calls (not found error suppress)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 3:58 PM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not; 
@@ -28,6 +29,8 @@ function test-EXOv2Connection {
     test-EXOv2Connection.ps1 - Validate EXO connection, and that the proper Tenant is connected (as per provided Credential)
     .PARAMETER Credential
     Credential to be used for connection
+    .PARAMETER CertTag
+    Cert FriendlyName Suffix to be used for validating credential alignment(Optional but required for CBA calls)[-CertTag `$certtag]
     .PARAMETER MinNoWinRMVersion
     MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']
     .OUTPUT
@@ -52,6 +55,8 @@ function test-EXOv2Connection {
      Param(
         [Parameter(Mandatory=$True,HelpMessage="Credentials [-Credentials [credential object]]")]
         [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage = "Cert FriendlyName Suffix to be used for validating credential alignment(Optional but required for CBA calls)[-CertTag `$certtag]")]
+        [string]$CertTag,
         [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']")]
         [version] $MinNoWinRMVersion = '3.0.0'
     )
@@ -254,6 +259,12 @@ function test-EXOv2Connection {
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             
+            if($credential.username -match $rgxCertThumbprint -AND $certTag -eq $null){
+                $smsg = "CBA Certificate Thumprint cred uname detected, but -CertTag was *not* pass thru in call!" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                break ; 
+            } 
             if( ($credential.username -match $rgxCertThumbprint) -AND ((Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_Prefix -eq $certTag )){
                 # 9:59 AM 6/24/2022 need a case for CBA cert (thumbprint username)
                 # compare cert fname suffix to $xxxMeta.o365_Prefix

@@ -15,6 +15,7 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    *3:21 PM 4/25/2023 add CBA CBH demo ; added code to pass through calc'd $CertTag as test-EXOv2Connection() -CertTag (used for validating credential alignment w Tenant)
     * 10:59 AM 4/18/2023 step debugs ; 
     * 10:16 AM 4/18/2023 rem'd out unused $ConnectionUri;$AzureADAuthorizationEndpointUri;$PSSessionOption;$BypassMailboxAnchoring;$DelegatedOrganization;
     rem'd boolean dump into pipeline in END{}
@@ -111,6 +112,9 @@ Function Connect-EXO {
     .EXAMPLE
     PS>  Connect-EXO -Prefix exolab -credential (Get-Credential -credential user@domain.com)  ;
     Connect an explicit credential, and use 'exolab' as the cmdlet prefix
+    .EXAMPLE 
+    connect-exo2 -credential $credO365xxxCBA -verbose ; 
+    Connect using a CBA credential variable (prestocked from profile automation). Script opens and recycles the cred cert specs emulating the native CBA connection below, but pulling source info from a stored dpapi-encrypted .xml credential file.
     .EXAMPLE
     PS>  $cred = get-credential -credential $o365_Torolab_SIDUpn ;
     PS>  Connect-EXO -credential $cred ;
@@ -529,7 +533,15 @@ Function Connect-EXO {
        
         # use test-EXOConnection - cxo2 *only* drives compliant eXOv2 connections, not legacy basicAuth
         #$IsNoWinRM = $false ; 
-        $oRet = test-EXOv2Connection -Credential $credential -verbose:$($verbose) ; 
+        # 11:18 AM 4/25/2023 add support for passing calc'd CertTag "Cert FriendlyName Suffix to be used for validating credential alignment(Optional but required for CBA calls)[-CertTag `$certtag]")][string]$CertTag
+        if($CertTag -ne $null){
+            $smsg = "(specifying detected `$CertTag:$($CertTag))" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            $oRet = test-EXOv2Connection -Credential $credential -CertTag $certtag -verbose:$($verbose) ; 
+        } else { 
+            $oRet = test-EXOv2Connection -Credential $credential -verbose:$($verbose) ; 
+        } ; 
         $bExistingEXOGood = $oRet.Valid ; 
         if($oRet.Valid){
             $pssEXOv2 = $oRet.PsSession ; 
@@ -1100,8 +1112,16 @@ Function Connect-EXO {
         if ($bExistingEXOGood -eq $false) {
             
             # defer into test-EXOv2Connection()
+            # 11:18 AM 4/25/2023 add support for passing calc'd CertTag "Cert FriendlyName Suffix to be used for validating credential alignment(Optional but required for CBA calls)[-CertTag `$certtag]")][string]$CertTag
+            if($CertTag -ne $null){
+                $smsg = "(specifying detected `$CertTag:$($CertTag))" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $oRet = test-EXOv2Connection -Credential $credential -CertTag $certtag -verbose:$($verbose) ; 
+            } else { 
+                $oRet = test-EXOv2Connection -Credential $credential -verbose:$($verbose) ; 
+            } ; 
 
-            $oRet = test-EXOv2Connection -Credential $credential -verbose:$($verbose) ; 
             $bExistingEXOGood = $oRet.Valid ;
             if($oRet.Valid){
 	            $pssEXOv2 = $oRet.PsSession ;

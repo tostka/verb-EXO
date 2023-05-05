@@ -12,7 +12,7 @@
 RootModule = 'verb-EXO.psm1'
 
 # Version number of this module.
-ModuleVersion = '5.0.0'
+ModuleVersion = '5.0.2'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -148,6 +148,8 @@ PrivateData = @{
 # 4cw86WGXznZVWmeM/9RusT8LpLw85rsXhFlRvJDEGTNJP8yCzW7YTSepVLp4dObJ
 # mRicoEgJZaklN4FVTj+LAGQI
 # SIG # End signature block
+
+
 
 
 
