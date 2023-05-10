@@ -15,6 +15,7 @@ Function Reconnect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    # 3:40 PM 5/10/2023 ported in block of CBA-handling code at 387
     # 1:36 PM 5/2/2023 port over cxo2 update: pltCXO2 -> $pltCXO; connect-EXO2 -> connect-EXO; Disconnect-EXO2 -> Disconnect-EXO
     # 3:18 PM 4/19/2023 under EOM310: replc $xmod.version refs with $EOMMv...
     * 11:20 AM 4/18/2023 step debugs ;  consolidate reconnect-exo2 into reconnect-exo (alias reconnect-exo2 & rxo2)
@@ -384,7 +385,16 @@ Function Reconnect-EXO {
             #>
             #if ((Get-xoAcceptedDomain).domainname.contains($Credential.username.split('@')[1].tostring())){
             #if($Meta.value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
-            if((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
+            # splice in the #305 code again here, to handle CBA post-validation
+            if( ($credential.username -match $rgxCertThumbprint) -AND ((Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_Prefix -eq $certTag )){
+                    # 9:59 AM 6/24/2022 need a case for CBA cert (thumbprint username)
+                    # compare cert fname suffix to $xxxMeta.o365_Prefix
+                    # validate that the connected EXO is to the CBA Cert tenant
+                    $smsg = "(EXO Authenticated & Functional CBA cert:$($certTag),($($certUname)))" ;
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                    $bExistingEXOGood = $isEXOValid = $true ;
+            }elseif((Get-Variable  -name "$($TenOrg)Meta").value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
                 # validate that the connected EXO is to the $Credential tenant    
                 $smsg = "(EXOv2 Authenticated & Functional:$($Credential.username.split('@')[1].tostring()))" ; 
                 if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
