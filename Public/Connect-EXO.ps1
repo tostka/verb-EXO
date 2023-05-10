@@ -137,36 +137,36 @@ Function Connect-EXO {
     PARAM(
         # try pulling all the ParameterSetName's - just need to get through it now. - no got through it with a defaultparametersetname (avoids 
         [Parameter(HelpMessage = "[verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-Prefix tag]")]
-        [string]$Prefix = 'xo',
+            [string]$Prefix = 'xo',
         [Parameter(ParameterSetName = 'Cred', HelpMessage = "Credential to use for this connection [-credential [credential obj variable]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+            [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(ParameterSetName = 'UPN',HelpMessage = "User Principal Name or email address of the user[-UserPrincipalName logon@domain.com]")]
-        [string]$UserPrincipalName,
+            [string]$UserPrincipalName,
         [Parameter(HelpMessage = "Exchange Environment name [-ExchangeEnvironmentName 'O365Default']")]
-        [Microsoft.Exchange.Management.RestApiClient.ExchangeEnvironment]
-        <# error: typedef missing, pre ipmo the mod. 
-        Unable to find type [Microsoft.Exchange.Management.RestApiClient.ExchangeEnvironment].
-        At D:\scripts\connect-exo2_func.ps1:132 char:9
-        +         [Microsoft.Exchange.Management.RestApiClient.ExchangeEnvironm ...
-        +         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-            + CategoryInfo          : InvalidOperation: (Microsoft.Excha...angeEnvironment:TypeName) [], RuntimeException
-            + FullyQualifiedErrorId : TypeNotFound
-        #>
-        $ExchangeEnvironmentName = 'O365Default',
+            [Microsoft.Exchange.Management.RestApiClient.ExchangeEnvironment]
+            <# error: typedef missing, pre ipmo the mod. 
+            Unable to find type [Microsoft.Exchange.Management.RestApiClient.ExchangeEnvironment].
+            At D:\scripts\connect-exo2_func.ps1:132 char:9
+            +         [Microsoft.Exchange.Management.RestApiClient.ExchangeEnvironm ...
+            +         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                + CategoryInfo          : InvalidOperation: (Microsoft.Excha...angeEnvironment:TypeName) [], RuntimeException
+                + FullyQualifiedErrorId : TypeNotFound
+            #>
+            $ExchangeEnvironmentName = 'O365Default',
         [Parameter(HelpMessage = "MinimumVersion required for ExchangeOnlineManagement module (defaults to '2.0.5')[-MinimumVersion '2.0.6']")]
-        [version] $MinimumVersion = '2.0.5',
+            [version] $MinimumVersion = '2.0.5',
         [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']")]
-        [version] $MinNoWinRMVersion = '3.0.0',
+            [version] $MinNoWinRMVersion = '3.0.0',
         [Parameter(HelpMessage = "Switch to enable/disable Multi-threading in the EXO cmdlets [-UseMultithreading]")]
-        [switch]$UseMultithreading=$true,
+            [switch]$UseMultithreading=$true,
         [Parameter(HelpMessage = "Switch to enable or disable showing the number of objects written (defaults `$true)[-ShowProgress]")]
-        [switch]$ShowProgress=$true,
+            [switch]$ShowProgress=$true,
         [Parameter(HelpMessage = "Pagesize Param[-PageSize 500]")]
-        [uint32]$PageSize = 1000,
+            [uint32]$PageSize = 1000,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
-        [switch] $silent,
+            [switch] $silent,
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
-        [switch] $showDebug
+            [switch] $showDebug
     ) ;
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
