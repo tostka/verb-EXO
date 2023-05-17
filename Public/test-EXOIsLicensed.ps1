@@ -17,6 +17,7 @@ function test-EXOIsLicensed {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell
     REVISIONS
+    * 3:15 PM 5/15/2023:test-EXOIsLicensed() works w latest aad/exo-eom updates
     * 1:06 PM 4/4/2022 updated CBH example to reflect $AADU obj, not UPN input
     3:08 PM 3/23/2022 init
     .DESCRIPTION
@@ -24,7 +25,9 @@ function test-EXOIsLicensed {
     Coordinates with verb-exo:get-ExoMailboxLicenses() to retrieve a static list of UserMailbox -supporting license names & sku's in our Tenant. 
 
     The get-EXOMailboxLicenses list is *not* interactive with AzureAD or EXO, 
-    and it *will* have to be tuned for local Tenants, and maintained for currency over time. 
+    -- CORRECTION: the dependant get-AADlicensePlanList() includes an AAD call to pull the sku's: Connect-AAD -Credential:$Credential -verbose:$($verbose) -silent ;
+    but that func needs working access, not the code w/in this.
+    ...and it *will* have to be tuned for local Tenants, and maintained for currency over time. 
 
     It's a simple test, but it beats..
         ...the prior get-Msoluser |?{$_.islicensed} (which indicates:*some* license is assigned - could be a worthless 'FREEFLOW'!) 
@@ -91,6 +94,7 @@ function test-EXOIsLicensed {
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
+        # this *does* require working AAD access logon. 
         $skus  = get-AADlicensePlanList @pltGLPList ;
 
         # check if using Pipeline input or explicit params:
