@@ -15,7 +15,10 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
-    *3:21 PM 4/25/2023 add CBA CBH demo ; added code to pass through calc'd $CertTag as test-EXOv2Connection() -CertTag (used for validating credential alignment w Tenant)
+    * 1:08 PM 5/23/2023 fixed typo (-eq vs =, dumping $false into pipe)     
+    * 4:15 PM 5/22/2023 cleaned cbh ; removed some rem'd 
+    * 10:06 AM 5/19/2023 add: code to run resolve-UserNameToUserRole  wi $Credential or $UserPrincipalName; sub'd out direct cert-parsing & value assignements with resolve-UserNameToUserRole outputs; 
+    * 3:21 PM 4/25/2023 add CBA CBH demo ; added code to pass through calc'd $CertTag as test-EXOv2Connection() -CertTag (used for validating credential alignment w Tenant)
     * 10:59 AM 4/18/2023 step debugs ; 
     * 10:16 AM 4/18/2023 rem'd out unused $ConnectionUri;$AzureADAuthorizationEndpointUri;$PSSessionOption;$BypassMailboxAnchoring;$DelegatedOrganization;
     rem'd boolean dump into pipeline in END{}
@@ -123,7 +126,7 @@ Function Connect-EXO {
     PS>  $pltCXOCThmb=[ordered]@{
     PS>  	CertificateThumbPrint = $credO365TORSIDCBA.UserName ;
     PS>  	AppID = $credO365TORSIDCBA.GetNetworkCredential().Password ;
-    PS>  	Organization = 'toroco.onmicrosoft.com' ;
+    PS>  	Organization = 'TENANTNAME.onmicrosoft.com' ;
     PS>  	Prefix = 'xo' ;
     PS>  	ShowBanner = $false ;
     PS>  };
@@ -192,7 +195,7 @@ Function Connect-EXO {
         $EXOv1ConfigurationName = $EXOv2ConfigurationName = $EXoPConfigurationName = "Microsoft.Exchange" ;
         if(-not (gv EXOv1ComputerName -ea 0 )){$EXOv1ComputerName = 'ps.outlook.com' };
         if(-not (gv EXOv1runspaceConnectionInfoAppName -ea 0 )){$EXOv1runspaceConnectionInfoAppName = '/PowerShell-LiveID'  };
-        if(-not (gv EXOv1runspaceConnectionInfoPort -ea 0 )){$EXOv1runspaceConnectionInfoPort -eq '443' };
+        if(-not (gv EXOv1runspaceConnectionInfoPort -ea 0 )){$EXOv1runspaceConnectionInfoPort = '443' };
 
         if(-not (gv EXOv2ComputerName -ea 0 )){$EXOv2ComputerName = 'outlook.office365.com' ;}
         if(-not (gv EXOv2Name -ea 0 )){$EXOv2Name = "ExchangeOnlineInternalSession*" ; }
@@ -242,6 +245,15 @@ Function Connect-EXO {
         }
 
         $TenOrg = get-TenantTag -Credential $Credential ;
+        if($Credential){
+            $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential
+        } elseif($UserPrincipalName){
+            $uRoleReturn = resolve-UserNameToUserRole -UserName $UserPrincipalName
+        } ; 
+        if($uRoleReturn.TenOrg){
+            $CertTag = $uRoleReturn.TenOrg
+        } ; 
+
         $sTitleBarTag = @("EXO2") ;
         $sTitleBarTag += $TenOrg ;
 
@@ -275,7 +287,9 @@ Function Connect-EXO {
                 break ; 
             }  ; 
         } ; 
-        write-verbose "(Checking for WinRM support in this EOM rev...)" 
+        $smsg = "Checking for WinRM support in this EOM rev..." 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         if([version]$EOMMv -ge [version]$MinNoWinRMVersion){
             $MinNoWinRMVersion = $EOMMv.tostring() ;
             $IsNoWinRM = $true ; 
@@ -300,9 +314,13 @@ Function Connect-EXO {
             if($IsCoreCLR){
                 $EOMgmtModulePath = resolve-path -Path $EOMgmtModulePath\netcore ;
                 $smsg = "(.netcore path in use:" ; 
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             } else { 
                 $EOMgmtModulePath = resolve-path -Path $EOMgmtModulePath\netFramework ; 
                 $smsg = "(.netnetFramework path in use:" ;                 
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             } ;         
             $RestModule = "Microsoft.Exchange.Management.RestApiClient.dll" ;
             $RestModulePath = join-path -path $EOMgmtModulePath -childpath $RestModule  ;
@@ -700,7 +718,7 @@ Function Connect-EXO {
                         # cert CBA non-basic auth
                         <# CertificateThumbPrint = $Credential.UserName ;
 	                        AppID = $Credential.GetNetworkCredential().Password ;
-	                        Organization = 'toroco.onmicrosoft.com' ; # org is on $xxxmeta.o365_TenantDomain
+	                        Organization = 'TENANTNAME.onmicrosoft.com' ; # org is on $xxxmeta.o365_TenantDomain
                         #>
                         $pltNEXOS.Add("CertificateThumbPrint", [string]$Credential.UserName);                    
                         $pltNEXOS.Add("AppID", [string]$Credential.GetNetworkCredential().Password);
@@ -714,20 +732,8 @@ Function Connect-EXO {
                             Break ; 
                         } ; 
                         # want the friendlyname to display the cred source in use #$tcert.friendlyname
-                        if($tcert = get-childitem -path "Cert:\CurrentUser\My\$($credential.username)"){
-                            $certUname = $tcert.friendlyname ; 
-                            $certTag = [regex]::match($certUname,$rgxCertFNameSuffix).captures[0].groups[1].value ; 
-                            $smsg = "(using CBA:cred:$($certTag):$([string]$tcert.friendlyname))" ; 
-                            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                        } else { 
-                            $smsg = "UNABLE TO RESOLVE `$TENORG:$($TenOrg) TO FUNCTIONAL `$$($TenOrg)meta.o365_TenantDomain!" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                            throw $smsg ; 
-                            Break ; 
-                        } ;
-                    
+                        $certUname = $uRoleReturn.FriendlyName ; 
+                        $certTag = $uRoleReturn.TenOrg
                     } else { 
                         # interactive ModernAuth -UserPrincipalName
                         #$pltCXO.Add("UserPrincipalName", [string]$Credential.username);
@@ -1004,7 +1010,7 @@ Function Connect-EXO {
                         # cert CBA non-basic auth
                         <# CertificateThumbPrint = $Credential.UserName ;
 	                        AppID = $Credential.GetNetworkCredential().Password ;
-	                        Organization = 'toroco.onmicrosoft.com' ; # org is on $xxxmeta.o365_TenantDomain
+	                        Organization = 'TENANTNAME.onmicrosoft.com' ; # org is on $xxxmeta.o365_TenantDomain
                         #>
                         $pltCEO.Add("CertificateThumbPrint", [string]$Credential.UserName);                    
                         $pltCEO.Add("AppID", [string]$Credential.GetNetworkCredential().Password);
@@ -1017,7 +1023,7 @@ Function Connect-EXO {
                             throw $smsg ; 
                             Break ; 
                         } ; 
-                        # want the friendlyname to display the cred source in use #$tcert.friendlyname
+                        <# want the friendlyname to display the cred source in use #$tcert.friendlyname
                         if($tcert = get-childitem -path "Cert:\CurrentUser\My\$($credential.username)"){
                             $certUname = $tcert.friendlyname ; 
                             $certTag = [regex]::match($certUname,$rgxCertFNameSuffix).captures[0].groups[1].value ; 
@@ -1031,7 +1037,9 @@ Function Connect-EXO {
                             throw $smsg ; 
                             Break ; 
                         } ;
-                    
+                        #>
+                        $certUname = $uRoleReturn.FriendlyName ; 
+                        $certTag = $uRoleReturn.TenOrg
                     } else { 
                         # interactive ModernAuth -UserPrincipalName
                         #$pltCXO.Add("UserPrincipalName", [string]$Credential.username);
@@ -1079,26 +1087,6 @@ Function Connect-EXO {
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
                 } ; 
-
-                <# END{} has it's own pass, defer to it, don't need it run 2x
-                # use test-EXOConnection
-                $oRet = test-EXOv2Connection -Credential $credential -verbose:$($verbose) ; 
-                $bExistingEXOGood = $oRet.Valid ; 
-                if($oRet.Valid){
-                    $pssEXOv2 = $oRet.PsSession ; 
-                    $IsNoWinRM = $oRet.IsNoWinRM ; 
-                    $smsg = "(Validated EXOv2 Connected to Tenant aligned with specified Credential)" ; 
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                } else { 
-                    $smsg = "NO VALID EXOV2 PSSESSION FOUND! (DISCONNECTING...)"
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    # capture outlier: shows a session wo the test cmdlet, force reset
-                    DisConnect-EXO ;
-                    $bExistingEXOGood = $false ;
-                } ;     
-                #>
                 # -------- $UseConnEXO 
             } ; 
         } ; #  # if-E $bExistingEXOGood
@@ -1106,7 +1094,7 @@ Function Connect-EXO {
     END {
         
         $smsg = "Existing PSSessions:`n$((get-pssession|out-string).trim())" ; 
-        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
         if ($bExistingEXOGood -eq $false) {
@@ -1115,7 +1103,7 @@ Function Connect-EXO {
             # 11:18 AM 4/25/2023 add support for passing calc'd CertTag "Cert FriendlyName Suffix to be used for validating credential alignment(Optional but required for CBA calls)[-CertTag `$certtag]")][string]$CertTag
             if($CertTag -ne $null){
                 $smsg = "(specifying detected `$CertTag:$($CertTag))" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 $oRet = test-EXOv2Connection -Credential $credential -CertTag $certtag -verbose:$($verbose) ; 
             } else { 
@@ -1127,8 +1115,8 @@ Function Connect-EXO {
 	            $pssEXOv2 = $oRet.PsSession ;
                 $IsNoWinRM = $oRet.IsNoWinRM ; 
 	            $smsg = "(Validated EXOv2 Connected to Tenant aligned with specified Credential)`n`$IsNoWinRM:$($IsNoWinRM )" ;
-	            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
-	            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+	            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             } else {
 	            $smsg = "NO VALID EXOV2 PSSESSION FOUND! (DISCONNECTING...)"
 	            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
@@ -1167,24 +1155,24 @@ Function Connect-EXO {
                         $_.Name -like $EXOv2Name) -AND ($_.ComputerName -eq $EXOv2ComputerName)} ){
                 $smsg += "`n`nEXOv2 PSSessions:`n$(($pssEXOv2 | fl $pssprops|out-string).trim())" ; 
             } ;
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             if($bPreExoPPss -AND -not $pssEXOP){
                 $smsg = "(EMO bug-workaround: reconnecting prior ExOP PssSession,"
                 $smsg += "`nreconnect-Ex2010 -Credential $($pltRX10.Credential.username) -verbose:$($VerbosePreference -eq "Continue"))" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 reconnect-Ex2010 -Credential $pltRX10.Credential -verbose:$($VerbosePreference -eq "Continue") ; 
             } else { 
                 $smsg = "(no bPreExoPPss, no Rx10 conn restore)" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             } ; 
 
             if($IsNoWinRM -AND ((get-module $EXOv2GmoNoWinRMFilter) -AND (get-module $EOMModName))){
                 $smsg = "(native non-WinRM/Non-PSSession-based EXO connection detected." ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             } ; 
         } ; 
 

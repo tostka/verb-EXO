@@ -32,8 +32,11 @@ function remove-EXOLicense {
     .PARAMETER Ticket
     Ticket Number [-Ticket '999999']
     .PARAMETER LicenseSkuKeys
-    Array, in preference order, of XXXMeta global value LicenseSkuKey names (resolves SKUId from TenOrg global Meta vari ; first working lic assignment, will be applied)[-LicenseSkuIds 'o365LicSkuExStd','o365LicSkuF1']
+    Array, in preference order, of XXXMeta global value LicenseSkuKey names (resolves SKUId from TenOrg global Meta vari ; runs full list removing all matches)[-LicenseSkuIds 'o365LicSkuExStd','o365LicSkuF1']
+    .PARAMETER LicenseSkuIds
+    Optional Array, in preference order, of LicenseSkuID (e.g. TenantName:SPE_F1) to be added, runs full list removing all matches (default process is to dynamically resolve id's from Meta LicenseSkuKeys specifications)[-LicenseSkuIds @(`$XXXMETA.o365LicSkuExStd,`$XXXMETA.o365LicSkuF1)]
     .PARAMETER Force
+    switch to override normal 'skipped' license application to existing Mailbox (needed for licensed-Shared, or upgraded existing lic).
     .PARAMETER TenOrg
     TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']
     .PARAMETER useEXOv2
@@ -112,7 +115,10 @@ function remove-EXOLicense {
         [Parameter(,HelpMessage="Array, in preference order, of XXXMeta global value LicenseSkuKey names (resolves SKUId from TenOrg global Meta vari ; first working lic assignment, will be applied)[-LicenseSkuIds 'o365LicSkuExStd','o365LicSkuF1']")]
             [ValidateNotNullOrEmpty()]
             [array]$LicenseSkuKeys=@('o365LicSkuExStd','o365LicSkuF1','o365LicSkuE3'),
-        [Parameter(HelpMessage="switch to override normal 'skipped' license application to existing Mailbox (needed for licensed-Shared, or upgraded existing lic).[-Force]")]
+         [Parameter(,HelpMessage="Optional Array, in preference order, of LicenseSkuID (e.g. TenantName:SPE_F1) to be added, runs full list removing all matches (default process is to dynamically resolve id's from Meta LicenseSkuKeys specifications)[-LicenseSkuIds @(`$XXXMETA.o365LicSkuExStd,`$XXXMETA.o365LicSkuF1)]")]
+            #[ValidateNotNullOrEmpty()]
+            [array]$LicenseSkuIds = @(), 
+        [Parameter(HelpMessage="switch to override normal 'skipped' license application to existing Mailbox.[-Force]")]
             [switch] $Force,
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
             [ValidateNotNullOrEmpty()]
@@ -155,11 +161,17 @@ function remove-EXOLicense {
         $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
 
         # recycling the inbound above into next call in the chain
+        # downstream commands
         $pltRXO = [ordered]@{
-            Credential = $Credential ; 
-            verbose = $($VerbosePreference -eq "Continue")  ; 
-            silent = $silent ; 
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
         } ;
+        if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+            $pltRxo.add('Silent',$silent) ;
+        } ;
+        # default connectivity cmds - force silent false
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
 
         $smsg = "Retrieve & build LicenseSkuIDS from global Meta vari" ;  
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
@@ -243,7 +255,7 @@ function remove-EXOLicense {
                 $Exit = 0 ;
                 Do {
                     Try {
-                        connect-aad @pltRXO ; 
+                        connect-aad @pltRXOC ; 
                         $AADUser=$null ;
                         #$TenantShortName = ((Get-AzureADTenantDetail).verifieddomains |?{$_._default}).name.split('.')[0] ;
                         $pltGAADU=[ordered]@{ 
@@ -275,7 +287,7 @@ function remove-EXOLicense {
                     TenOrg= $TenOrg;
                     verbose=$($VerbosePreference -eq "Continue") ;
                     credential= $pltRXO.credential ;
-                    silent = $silent ; 
+                    silent = $false ; 
                 } ;
                 $smsg = "$($tenorg):get-AADlicensePlanList wn$(($pltGLPList|out-string).trim())" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -315,9 +327,6 @@ function remove-EXOLicense {
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-                    
-                    # Set-AzureADUserLicense  vers
-                    #$pltALic=[ordered]@{UserPrincipalName=$AADUser.userprincipalname ;AssignedLicenses=$null ;} ;
 
                     foreach($LicenseSkuId in $LicenseSkuIds){
                         if( $LicenseSkuId.contains(':') ){
@@ -375,6 +384,63 @@ function remove-EXOLicense {
                         } ;
 
                     } ;  # loop-E $LicenseSkuIds
+
+                    connect-aad @pltRXOC ; 
+                    $AADUser=$null ;
+                    #$TenantShortName = ((Get-AzureADTenantDetail).verifieddomains |?{$_._default}).name.split('.')[0] ;
+                    $pltGAADU=[ordered]@{ 
+                        ObjectId = $tUPN ;
+                        ErrorAction = 'STOP' ;
+                        verbose = $($VerbosePreference -eq "Continue") ;
+                    } ;
+                    # refresh ADU post chgs & test xmbx lic stat
+                    $AADUser = Get-AzureADUser @pltGAADU ;
+                    if(-not $LicenseSkuIds){
+                        # running explicit LicenseSkuIds may not have removed all EXO lic's, so no point in doing a followup confirm license-free
+                        $IsExoLicensed = test-EXOIsLicensed -User $AADUser -Credential:$pltRXO.Credential -verbose:$pltRXO.verbose -silent:$pltRXO.silent ;
+                        if($IsExoLicensed){
+                            $smsg = "AADUser still coming back with mounted EXO-supporting license. `nRe-Running remove-EXOLicesnse pass..." ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                            $pltRxLic=[ordered]@{
+                                users=$AADUser.userprincipalname ;
+                                ticket=$ticket ;
+                                whatif=$($whatif) ;
+                                Verbose=$($VerbosePreference -eq "Continue")
+                                Credential = $pltRXO.Credential ;
+                                silent = $pltRXO.silent ; 
+                            } ;
+                            if($UserRole){
+                                $smsg = "(recycle `$UserRole from script)" ; 
+                                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                $pltRxLic.UserRole = $UserRole ; 
+                            } ; 
+                            #$smsg = "remove-EXOLicense w`n$(($pltRxLic|out-string).trim())" ;
+                            #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                            #else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $bRet = remove-EXOLicense @pltRxLic ;
+                            if($bRet) {$AADUser = $bRet } ; 
+                        } else { 
+                            $smsg = "Validated:$($AADUser.userprincipalname): is now EXO-unlicensed" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        } ; 
+                    } elseif($whatif){
+                        $smsg = "-whatif: skipping post-validation" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    } else { 
+                        # running explicit LicenseSkuIds may not have removed all EXO lic's, so no point in doing a followup confirm license-free
+                        $smsg = "-LicenseSkuId specified: Skipping broad test-ExoIsLicensed confirmations" ; 
+                        $smsg += "`nsolely the licenses specified would have been removed," ; 
+                        $smsg += "`nand may not be the complete EXO-license set" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    } ; 
 
                 };  # if-E $ombx
 

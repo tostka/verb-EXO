@@ -15,6 +15,9 @@ Function Reconnect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 1:08 PM 5/23/2023 fixed typo (-eq vs =, dumping $false into pipe)     
+    * 4:24 PM 5/22/2023 add missing pswlt cmd for winrm chkline
+    * 10:15 AM 5/19/2023 defer to resolve-UserNameToUserRole -Credential $Credential; assign certtag from output
     # 3:40 PM 5/10/2023 ported in block of CBA-handling code at 387
     # 1:36 PM 5/2/2023 port over cxo2 update: pltCXO2 -> $pltCXO; connect-EXO2 -> connect-EXO; Disconnect-EXO2 -> Disconnect-EXO
     # 3:18 PM 4/19/2023 under EOM310: replc $xmod.version refs with $EOMMv...
@@ -137,7 +140,7 @@ Function Reconnect-EXO {
 
         if(-not (get-variable EXOv1ComputerName -ea 0)){$EXOv1ComputerName = 'ps.outlook.com' };
         if(-not (get-variable EXOv1runspaceConnectionInfoAppName -ea 0)){$EXOv1runspaceConnectionInfoAppName = '/PowerShell-LiveID'  };
-        if(-not (get-variable EXOv1runspaceConnectionInfoPort -ea 0)){$EXOv1runspaceConnectionInfoPort -eq '443' };
+        if(-not (get-variable EXOv1runspaceConnectionInfoPort -ea 0)){$EXOv1runspaceConnectionInfoPort = '443' };
 
         if(-not (get-variable EXOv2ComputerName -ea 0)){$EXOv2ComputerName = 'outlook.office365.com' ;}
         if(-not (get-variable EXOv2Name -ea 0)){$EXOv2Name = "ExchangeOnlineInternalSession*" ; }
@@ -178,7 +181,9 @@ Function Reconnect-EXO {
                 break ; 
             }  ; 
         } ; 
-        write-verbose "(Checking for WinRM support in this EOM rev...)" 
+        $smsg = "(Checking for WinRM support in this EOM rev...)" ;
+        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
         if([version]$EOMMv -ge [version]$MinNoWinRMVersion){
             $MinNoWinRMVersion = $EOMMv.tostring() ;
             $IsNoWinRM = $true ; 
@@ -208,7 +213,8 @@ Function Reconnect-EXO {
             $pltCXO.add('Silent',$false) ;
         } ;
 
-        # need certtag further down, for credential align test
+        # defer to resolve-UserNameToUserRole -Credential $Credential
+        <# need certtag further down, for credential align test
         if($credential.username -match $rgxCertThumbprint){
             $smsg =  "(UserName:Certificate Thumbprint detected)"
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -226,7 +232,10 @@ Function Reconnect-EXO {
                 throw $smsg ; 
                 Break ; 
             } ;
-        }
+        } ; 
+        #>
+        $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ; 
+        $certTag = $uRoleReturn.TenOrg ; 
 
     } ;  # BEG-E
     PROCESS{
