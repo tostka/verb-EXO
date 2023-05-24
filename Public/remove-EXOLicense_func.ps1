@@ -1,4 +1,6 @@
-﻿#*------v remove-EXOLicense.ps1 v------
+﻿# remove-EXOLicense
+
+#*------v remove-EXOLicense.ps1 v------
 function remove-EXOLicense {
     <#
     .SYNOPSIS
@@ -395,7 +397,7 @@ function remove-EXOLicense {
                     } ;
                     # refresh ADU post chgs & test xmbx lic stat
                     $AADUser = Get-AzureADUser @pltGAADU ;
-                    if(-not $LicenseSkuIds){
+                    if(-not $whatif){
                         # running explicit LicenseSkuIds may not have removed all EXO lic's, so no point in doing a followup confirm license-free
                         $IsExoLicensed = test-EXOIsLicensed -User $AADUser -Credential:$pltRXO.Credential -verbose:$pltRXO.verbose -silent:$pltRXO.silent ;
                         if($IsExoLicensed){
@@ -427,16 +429,8 @@ function remove-EXOLicense {
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                             #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                         } ; 
-                    } elseif($whatif){
+                    } else {
                         $smsg = "-whatif: skipping post-validation" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-                    } else { 
-                        # running explicit LicenseSkuIds may not have removed all EXO lic's, so no point in doing a followup confirm license-free
-                        $smsg = "-LicenseSkuId specified: Skipping broad test-ExoIsLicensed confirmations" ; 
-                        $smsg += "`nsolely the licenses specified would have been removed," ; 
-                        $smsg += "`nand may not be the complete EXO-license set" ; 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
