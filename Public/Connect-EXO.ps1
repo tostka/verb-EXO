@@ -1,4 +1,6 @@
-﻿#*------v Connect-EXO.ps1 v------
+﻿# Connect-EXO
+
+#*------v Connect-EXO.ps1 v------
 Function Connect-EXO {
     <#
     .SYNOPSIS
