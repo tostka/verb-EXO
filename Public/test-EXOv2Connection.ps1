@@ -1,4 +1,6 @@
-﻿#*----------v Function test-EXOv2Connection() v----------
+﻿# test-EXOv2Connection.ps1
+
+#*----------v Function test-EXOv2Connection() v----------
 function test-EXOv2Connection {
     <#
     .SYNOPSIS
