@@ -20,6 +20,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 3:26 PM 5/23/2023 fixed typo -eq/=
     * 10:59 AM 4/18/2023 step debugs ; consolidating Disconnect-EXO2 into Disconnect-EXO, aliasing dxo2,Disconnect-EXO2; removing those originals
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 12:42 PM 4/17/2023 restored *dxo* 7/26/21 vers; had overwritten on 3/29/22 wiith a copy of dxo2! Needs a verb-exo rebuild to complete.
@@ -95,7 +96,7 @@ Function Disconnect-EXO {
 
     if(-not (gv EXOv1ComputerName -ea 0)){$EXOv1ComputerName = 'ps.outlook.com' };
     if(-not (gv EXOv1runspaceConnectionInfoAppName -ea 0)){$EXOv1runspaceConnectionInfoAppName = '/PowerShell-LiveID'  };
-    if(-not (gv EXOv1runspaceConnectionInfoPort -ea 0)){$EXOv1runspaceConnectionInfoPort -eq '443' };
+    if(-not (gv EXOv1runspaceConnectionInfoPort -ea 0)){$EXOv1runspaceConnectionInfoPort = '443' };
 
     if(-not (gv EXOv2ComputerName -ea 0)){$EXOv2ComputerName = 'outlook.office365.com' ;}
     if(-not (gv EXOv2Name -ea 0)){$EXOv2Name = "ExchangeOnlineInternalSession*" ; }
