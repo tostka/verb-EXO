@@ -17,6 +17,9 @@ function test-EXOIsLicensed {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell
     REVISIONS
+    * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
+    * 9:13 AM 5/22/2023 added Silent back, for broad call compatibility (pltrxo consistency); 
+    * 2:39 PM 5/17/2023 add pltrxo support
     * 3:15 PM 5/15/2023:test-EXOIsLicensed() works w latest aad/exo-eom updates
     * 1:06 PM 4/4/2022 updated CBH example to reflect $AADU obj, not UPN input
     3:08 PM 3/23/2022 init
@@ -71,25 +74,41 @@ function test-EXOIsLicensed {
     
      Param(
         [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$true,HelpMessage="Either Msoluser object or UserPrincipalName for user[-User upn@domain.com|`$msoluserobj ]")]
-        [Microsoft.Open.AzureAD.Model.User]$User,
+            [Microsoft.Open.AzureAD.Model.User]$User,
         [Parameter(Mandatory=$False,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
-        [ValidateNotNullOrEmpty()]
-        [ValidatePattern("^\w{3}$")]
-        [string]$TenOrg = $global:o365_TenOrgDefault,
+            [ValidateNotNullOrEmpty()]
+            [ValidatePattern("^\w{3}$")]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(Mandatory=$False,HelpMessage="Credentials [-Credentials [credential object]]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID
-        #[switch]$silent # removed, there's no echos enabled
+            [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent
     )
     BEGIN {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
-        #Connect-AAD -Credential:$Credential -verbose:$($verbose) ;
         
-        $ExMbxLicenses = get-ExoMailboxLicenses -verbose:$($VerbosePreference -eq "Continue") ;
+        # recycling the inbound above into next call in the chain
+        $pltRXO = [ordered]@{
+            Credential = $Credential ; 
+            verbose = $($VerbosePreference -eq "Continue")  ; 
+            silent = $silent ; 
+        } ;
+        # default connectivity cmds - force silent false
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
+
+        $ExMbxLicenses = get-ExoMailboxLicenses -verbose:$($VerbosePreference -eq "Continue")  ;
         # pull the full Tenant list, for performing sku-> name conversions
         #$lplist =  get-AADlicensePlanList -verbose -IndexOnName ;
 
-        $pltGLPList=[ordered]@{ TenOrg= $TenOrg; credential= $Credential ; IndexOnName=$false ; verbose=$($VerbosePreference -eq "Continue") ;} ; 
+        $pltGLPList=[ordered]@{ 
+            TenOrg= $TenOrg;
+            IndexOnName=$false ;
+            Credential = $pltRXO.Credential ; 
+            verbose = $pltRXO.verbose  ; 
+            silent = $false ; 
+        } ; 
         $smsg = "get-AADlicensePlanList w`n$(($pltGLPList|out-string).trim())" ; 
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
