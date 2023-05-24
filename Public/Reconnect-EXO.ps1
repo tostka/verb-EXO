@@ -1,4 +1,6 @@
-﻿#*------v Reconnect-EXO.ps1 v------
+﻿# Reconnect-EXO.ps1
+
+#*------v Reconnect-EXO.ps1 v------
 Function Reconnect-EXO {
    <#
     .SYNOPSIS
@@ -15,7 +17,7 @@ Function Reconnect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
-    * 1:08 PM 5/23/2023 fixed typo (-eq vs =, dumping $false into pipe)     
+    * 3:24 PM 5/23/2023 disabled msal.ps load ; fixed typo (-eq vs =, dumping $false into pipe)     
     * 4:24 PM 5/22/2023 add missing pswlt cmd for winrm chkline
     * 10:15 AM 5/19/2023 defer to resolve-UserNameToUserRole -Credential $Credential; assign certtag from output
     # 3:40 PM 5/10/2023 ported in block of CBA-handling code at 387
@@ -113,7 +115,7 @@ Function Reconnect-EXO {
         if(-not (get-variable rgxCertThumbprint -ea 0)){$rgxCertThumbprint = '[0-9a-fA-F]{40}' ; } ;
         if(-not (get-variable rgxCertFNameSuffix -ea 0)){$rgxCertFNameSuffix = '-([A-Z]{3})$' ; } ; 
 
-        # 4:45 PM 7/7/2022 workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
+        <# 4:45 PM 7/7/2022 workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
         # admin/SID module auto-install code (myBoxes UID split-perm CU, all else t AllUsers)
         $modname = 'MSAL.PS' ;
         $error.clear() ;
@@ -127,7 +129,7 @@ Function Reconnect-EXO {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             Import-Module @pltIMod ;
         } ; # IsImported
-
+        #>
         $EOMmodname = 'ExchangeOnlineManagement' ;
         
         #*------v PSS & GMO VARIS v------
