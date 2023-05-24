@@ -5,6 +5,7 @@ function convert-ADUserRecipientTypeRemoteSharedMailbox{
     <#
     .SYNOPSIS
     Convert the passed-in ADUser object RecipientType to RemoteSharedMailbox (sets ADUser.msExchRecipientTypeDetails:'34359738368' ADUUser.msExchRemoteRecipientType:'100').
+    1st half of RemoteUserMailbox conversion to ReomteSharedMailbox (followed by convert-exoMailboxTypeSharedMailbox to convert the EXO mailbox type).
     Traditionally this would be applied to RemoteUserMailbox, but no pre-checking is performed, the update is applied as long as the target settings aren't already in place.
     .NOTES
     Author: Todd Kadrie
@@ -18,6 +19,7 @@ function convert-ADUserRecipientTypeRemoteSharedMailbox{
     # 12:31 PM 10/23/2018 ran full pass live, no unusual errors
     .DESCRIPTION
     Convert the passed-in ADUser object RecipientType to RemoteSharedMailbox (sets ADUser.msExchRecipientTypeDetails:'34359738368' ADUUser.msExchRemoteRecipientType:'100').
+    1st half of RemoteUserMailbox conversion to ReomteSharedMailbox (followed by convert-exoMailboxTypeSharedMailbox to convert the EXO mailbox type).
     Traditionally this would be applied to RemoteUserMailbox, but no pre-checking is performed, the update is applied as long as the target settings aren't already in place.
 
     (does not require passed in Credentials, as all changes are with ActiveDirectory module, which does not support affirmative logon; logon is pickedup from the psdrive AD mapping) 
