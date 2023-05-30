@@ -17,6 +17,13 @@ Function Reconnect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 12:51 PM 5/30/2023 Updates to support either -Credential, or -UserRole + -TenOrg, to support fully portable downstream credentials: 
+        - Add -UserRole & explicit -TenOrg params
+        - Drive TenOrg defaulted $global:o365_TenOrgDefault, or on $env:userdomain
+        - use the combo thru get-TenantCredential(), then set result to $Credential
+        - if using Credential, the above are backed out via get-TenantTag() on the $credential 
+        - CBA identifiers are resolve always via $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ;
+    * 2:02 PM 5/25/2023 updated CBH example to reflect use of $pltRXOC std conn splat
     * 3:24 PM 5/23/2023 disabled msal.ps load ; fixed typo (-eq vs =, dumping $false into pipe)     
     * 4:24 PM 5/22/2023 add missing pswlt cmd for winrm chkline
     * 10:15 AM 5/19/2023 defer to resolve-UserNameToUserRole -Credential $Credential; assign certtag from output
@@ -55,16 +62,18 @@ Function Reconnect-EXO {
     * 2/10/14 posted version
     .DESCRIPTION
     Reconnect-EXO - Reestablish connection to Exchange Online (via EXO V2/V3 graph-api module)
-    .PARAMETER  Credential
-    Credential to use for this connection [-credential 'account@domain.com']
+    .PARAMETER Credential
+    Credential to use for this connection [-credential [credential obj variable]
      .PARAMETER MinimumVersion
     MinimumVersion required for ExchangeOnlineManagement module (defaults to '2.0.5')[-MinimumVersion '2.0.6']
     .PARAMETER MinNoWinRMVersion
     MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']
     .PARAMETER ProxyEnabled
     Use Proxy-Aware SessionOption settings [-ProxyEnabled]
-    .PARAMETER Credential
-    Credential to use for this connection [-credential [credential obj variable]
+    .PARAMETER UserRole
+    Credential Optional User Role spec for credential discovery (wo -Credential)(SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]
+    .PARAMETER TenOrg
+    Optional Tenant Tag (wo -Credential)[-TenOrg 'XYZ']
     .PARAMETER showDebug
     Debugging Flag [-showDebug]
     .PARAMETER silent
@@ -75,10 +84,22 @@ Function Reconnect-EXO {
     None. Returns no objects or output.
     .EXAMPLE
     PS>  Reconnect-EXO;
-    Reconnect EXO connection
+    Reconnect EXO connection self-locating creds
     .EXAMPLE
     PS>  Reconnect-EXO -credential $cred ;
     Reconnect EXO connection with explicit [pscredential] object credential specified
+    .EXAMPLE
+    reconnect-exo -UserRole SIDCBA -TenOrg ABC -verbose  ; 
+    Demo use of UserRole (specifying a CBA variant), AND TenOrg spec, to connect (autoresolves against preconfigured credentials in profile)
+    .EXAMPLE
+    PS> $pltRXOC = [ordered]@{
+    PS>     Credential = $Credential ;
+    PS>     verbose = $($VerbosePreference -eq "Continue")  ;
+    PS>     Silent = $silent ; 
+    PS> } ;
+    PS> if ($script:useEXOv2 -OR $useEXOv2) { reconnect-eXO2 @pltRXOC }
+    PS> else { reconnect-EXO @pltRXOC } ;    
+    Splatted example leveraging prefab $pltRXOC splat, derived from local variables & $VerbosePreference value.
     .EXAMPLE
     PS>  $batchsize = 10 ;
     PS>  $RecordCount=$mr.count #this is the array of whatever you are processing ;
@@ -98,16 +119,32 @@ Function Reconnect-EXO {
     [Alias('rxo','reconnect-exo2','rxo2')]
     PARAM(
         [Parameter(HelpMessage = "MinimumVersion required for ExchangeOnlineManagement module (defaults to '2.0.5')[-MinimumVersion '2.0.6']")]
-        [version] $MinimumVersion = '2.0.5',
+            [version] $MinimumVersion = '2.0.5',
         [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']")]
-        [version] $MinNoWinRMVersion = '3.0.0',
+            [version] $MinNoWinRMVersion = '3.0.0',
         [Parameter(HelpMessage="Use Proxy-Aware SessionOption settings [-ProxyEnabled]")]
-        [boolean]$ProxyEnabled = $False,
+            [boolean]$ProxyEnabled = $False,
         [Parameter(HelpMessage="Credential to use for this connection [-credential [credential obj variable]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+            [System.Management.Automation.PSCredential]$Credential,
+            # = $global:credo365TORSID, # defer to TenOrg & UserRole resolution
+        [Parameter(Mandatory = $false, HelpMessage = "Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]")]
+            # sourced from get-admincred():#182: $targetRoles = 'SID', 'CSID', 'ESVC','CSVC','UID','ESvcCBA','CSvcCBA','SIDCBA' ; 
+            #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
+            # pulling the pattern from global vari w friendly err
+            [ValidateScript({
+                if(-not $rgxPermittedUserRoles){$rgxPermittedUserRoles = '(SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)'} ;
+                if(-not ($_ -match $rgxPermittedUserRoles)){throw "'$($_)' doesn't match `$rgxPermittedUserRoles:`n$($rgxPermittedUserRoles.tostring())" ; } ; 
+                return $true ; 
+            })]
+            [string[]]$UserRole = @('SIDCBA','SID','CSVC'),
+        [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
+            [ValidateNotNullOrEmpty()]
+            #[ValidatePattern("^\w{3}$")]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
-        [switch] $showDebug,
-        [switch]$silent
+            [switch] $showDebug,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch]$silent
     ) ;
     BEGIN{
         $verbose = ($VerbosePreference -eq "Continue") ; 
@@ -202,9 +239,49 @@ Function Reconnect-EXO {
         [boolean]$UseConnEXO = [boolean]([version]$EOMMv -ge [version]$MinNoWinRMVersion) ; 
         #endregion EOMREV ; #*------^ END EOMREV Check  ^------
 
-        # test-exotoken only applies if $UseConnEXO  $false
-        $TenOrg = get-TenantTag -Credential $Credential ;
+        if(-not $Credential){
+            if($UserRole){
+                $smsg = "Using specified -UserRole:$( $UserRole -join ',' )" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } else { $UserRole = @('SID','CSVC') } ;
+            if($TenOrg){
+                $smsg = "Using explicit -TenOrg:$($TenOrg)" ; 
+            } else { 
+                switch -regex ($env:USERDOMAIN){
+                    ([regex]('(' + (( @($TORMeta.legacyDomain,$CMWMeta.legacyDomain)  |foreach-object{[regex]::escape($_)}) -join '|') + ')')).tostring() {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
+                    $TOLMeta.legacyDomain {$TenOrg = 'TOL' }
+                    default {throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; exit ; } ;
+                } ;  
+                $smsg = "Imputed `$TenOrg from logged on USERDOMAIN:$($TenOrg)" ;             
+            } ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;             
+            
+            $o365Cred = $null ;
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole= $UserRole; verbose=$($verbose)} ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            $o365Cred = get-TenantCredentials @pltGTCred ;
 
+            if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $Credential = $o365Cred.Cred ;
+            } else { 
+                $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                break ; 
+            } ; 
+            
+        } else { 
+            # test-exotoken only applies if $UseConnEXO  $false
+            $TenOrg = get-TenantTag -Credential $Credential ;
+        } ;
         # build the cred etc once, for all below:
         $pltCXO=[ordered]@{
             Credential = $Credential ;
@@ -237,7 +314,9 @@ Function Reconnect-EXO {
         } ; 
         #>
         $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ; 
-        $certTag = $uRoleReturn.TenOrg ; 
+        if($credential.username -match $rgxCertThumbprint){
+            $certTag = $uRoleReturn.TenOrg ; 
+        } ; 
 
     } ;  # BEG-E
     PROCESS{
