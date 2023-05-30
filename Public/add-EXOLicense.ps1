@@ -4,7 +4,7 @@
 function add-EXOLicense {
     <#
     .SYNOPSIS
-    add-EXOLicense.ps1 - Add a temporary o365 license to specified MsolUser account. Returns updated MSOLUser object to pipeline.
+    remove-EXOLicense.ps1 - Add a temporary o365 license from specified AADUser account. Returns updated MSOLUser object to pipeline.
     .NOTES
     Version     : 1.0.0.
     Author      : Todd Kadrie
@@ -15,11 +15,12 @@ function add-EXOLicense {
     License     : MIT License
     Copyright   : (c) 2021 Todd Kadrie
     Github      : https://github.com/tostka/verb-XXX
-    Tags        : Powershell
+    Tags        : Powershell, ExchangeOnline, AzureAD, License
     AddedCredit : REFERENCE
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:14 PM 5/30/2023 updated CBH; udpt CBH; consold 222+223 into 1 line; add pswl compliance; expanded demos ; rem'd unused
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; generic'd the meta vari name ; general cleanup rem'd; added expanded licname to echo ; 
     * 4:11 PM 5/22/2023 flipped all lic status testing to use of test-exoislicensed ; logic fixes
     * 9:49 AM 5/19/2023 trimmed rem's; ++ adv func/pipeline supp ; shifted usr reso into thge process loop ; rem'd unused $TenantShortName; wrapped plts ; 
@@ -53,7 +54,7 @@ function add-EXOLicense {
     spliced over UsageLocation test/assert code from add-o365license.
     * 1:34 PM 1/5/2022 init
     .DESCRIPTION
-    add-EXOLicense.ps1 - Add a temporary o365 license to specified MsolUser account. Returns updated MSOLUser object to pipeline.
+    remove-EXOLicense.ps1 - Add a temporary o365 license from specified AADUser account. Returns updated MSOLUser object to pipeline.
     .PARAMETER Ticket
     Ticket Number [-Ticket '999999']
     .PARAMETER TenOrg
@@ -85,27 +86,30 @@ function add-EXOLicense {
     PS> add-EXOLicense -users 'Test@domain.com','Test2@domain.com' -Ticket 999999 -Credential $pltrxo.Credential ; 
     Process an array of users, with default 'hunting' -LicenseSkuIds array.
     .EXAMPLE
-    PS>  $whatif=$true ;
-    PS>  $target = 'TICKETNUMBER,USERUPN' ;
-    PS>  if($target.contains(',')){
-    PS>      $ticket,$trcp = $target.split(',') ;
-    PS>      $updatedAadu = add-EXOLicense -users $trcp -Ticket $ticket -whatif:$($whatif) ;
-    PS>      $props1 = 'UserPrincipalName','DisplayName',@{Name='IsLicensed'; Expression={[boolean]($_.AssignedLicenses.count -gt 0) }}  ;
-    PS>      $props2 = @{Name='Licenses';Expression={($_ | Get-AzureADUserLicenseDetail).SkuPartNumber -join ','}} ;
-    PS>      $smsg = "UpdatedAadu: wn$(($updatedAadu| ft -auto $props1 |out-string).trim())" ;
-    PS>      $smsg += "n:$(($updatedAadu| fl $props2 |out-string).trim())" ;
-    PS>      write-host -foregroundcolor green $smsg ;
-    PS>      if(!$whatif){
-    PS>          write-host "dawdling until License reinflates mbx..." ;
-    PS>          $1F=$false ;
-    PS>          Do {
-    PS>              if($1F){Sleep -s 30} ;
-    PS>              write-host "." -NoNewLine ;
-    PS>              $1F=$true ;
-    PS>          } Until (get-xomailbox -id $trcp  -EA 0) ;
-    PS>          write-host "Mailbox reattached: Ready for conversion!" ;
-    PS>      } ;
-    PS>  } else { write-warning "$target does *not* contain comma delimited ticket,UPN string!"} ;
+    PS> $whatif = $false ;
+    PS> $target = '999998,TestSharedMbxConversion@toro.com' ;
+    PS> pushd;
+    PS> $prpADU1 = 'UserPrincipalName','DisplayName',@{Name='IsLicensed'; Expression={[boolean]($_.AssignedLicenses.count -gt 0) }}  ;
+    PS> $prpADU2 = @{Name='Licenses';Expression={($_ | Get-AzureADUserLicenseDetail).SkuPartNumber -join ','}} ;
+    PS> if($target.contains(',')){
+    PS>     $ticket,$trcp = $target.split(',') ;
+    PS>     $pltAxLic = [ordered]@{
+    PS>         users = $trcp ;
+    PS>         ticket = $ticket ;
+    PS>         whatif = $($whatif) ;
+    PS>         Verbose = $false ;
+    PS>         Credential  =  $credO365TORSIDCBA ;
+    PS>         silent = $false ;
+    PS>     } ;
+    PS>     $smsg = "add-EXOLicense w`n$(($pltAxLic|out-string).trim())" ;
+    PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>     $updatedAadu = add-EXOLicense @pltAxLic ;
+    PS>     write-verbose "re -refresh AADU" ;
+    PS>     $updatedAadu  = get-AzureAdUser -obj $updatedAadu.UserPrincipalName ;
+    PS>     $smsg = "UpdatedAadu: w`n$(($updatedAadu| ft -auto $prpADU1 |out-string).trim())" ;
+    PS>     $smsg += "`n:$(($updatedAadu| fl $prpADU2 |out-string).trim())" ;
+    PS>     write-host -foregroundcolor green $smsg ;
+    PS> } else { write-warning "`$target does *not* contain comma delimited ticket,UPN string!"} ;    
     Fancier variant of above, with more post-confirm reporting
     .EXAMPLE
     PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $XXXMETA.o365LicSkuExStd -ticket TICKETNUMBER;
@@ -188,8 +192,7 @@ function add-EXOLicense {
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-        $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
-        $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
+        if(-not $rgxEmailAddr){ $rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"}
 
         # recycling the inbound above into next call in the chain
         # downstream commands
@@ -217,10 +220,7 @@ function add-EXOLicense {
             $LicenseSkuKeys = $LicenseSkuIds
         } ;
 
-        #$rgxEmailAddr = '^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$ '
- 
-        $sBnr="`n#*======v $(${CmdletName}) : v======" ;
-        $smsg = $sBnr ;
+        $smsg = $sBnr="`n#*======v $(${CmdletName}) : v======" ;
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
@@ -228,10 +228,14 @@ function add-EXOLicense {
 
         # check if using Pipeline input or explicit params:
         if ($PSCmdlet.MyInvocation.ExpectingInput) {
-            write-verbose "Data received from pipeline input: '$($InputObject)'" ;
+            $smsg = "Data received from pipeline input: '$($InputObject)'" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         } else {
             # doesn't actually return an obj in the echo
-            #write-verbose "Data received from parameter input: '$($InputObject)'" ;
+            #$smsg = "Data received from parameter input: '$($InputObject)'" ;
+            #if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            #else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         } ;
 
     } ;  # BEGIN-E
@@ -300,7 +304,7 @@ function add-EXOLicense {
                         } ;
                         $AADUser = Get-AzureADUser @pltGAADU ;
                         $Exit = $Retries ;
-                    } Catch {
+                    } CATCH {
                         Start-Sleep -Seconds $RetrySleep ;
                         $Exit ++ ;
                         $smsg = "Failed to exec cmd because: $($Error[0])" ;
@@ -473,13 +477,14 @@ function add-EXOLicense {
                     } ;  # loop-E $LicenseSkuIds
 
                 };  # if-E $ombx
-
-            } CATCH {     
+            } CATCH {
                 $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
-                write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
-                Break ;
-            } ;
+                $smsg += "`n$($ErrTrapd.Exception.Message)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                BREAK ;
+            } ; 
             if(!$whatif){
                 $smsg = "dawdling until License reinflates mbx..." ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
@@ -489,7 +494,6 @@ function add-EXOLicense {
                     if($1F){Sleep -s 30} ;
                     write-host "." -NoNewLine ;
                     $1F=$true ;
-                #} Until (get-xomailbox -id $oMSUsr.userprincipalname -EA 0) ;
                 } Until ($ombx = get-xomailbox -id $AADUser.userprincipalname -EA 0) ; # capture return (prevent from dropping into pipe)
                 # get-xomailbox returns: System.Management.Automation.PSObject; not a real Mailbox object class
                 $ombx = $ombx | ?{$_ -is [System.Management.Automation.PSObject]} ; # looks like an attempt to filter just the mailbox out of the pipeline return
@@ -499,7 +503,25 @@ function add-EXOLicense {
             } ;
 
             # return $AADUser to pipeline if populated
+            $smsg = "refresh updated AADUser:" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
+            $pltGAADU.ObjectId = $AADUser.UserPrincipalName ;
+            TRY {
+                $AADUser = Get-AzureADUser @pltGAADU ;
+            } CATCH {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                $smsg += "`n$($ErrTrapd.Exception.Message)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                BREAK ;
+            } ; 
+
+            $smsg = "Return updated AADUser to pipeline" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             $AADUser | write-output ;
 
             $smsg =  $sBnr.replace('=v','=^').replace('v=','^=') ;
@@ -511,6 +533,6 @@ function add-EXOLicense {
     END{
 
     } ;
- }
+ } ; 
 
 #*------^ add-EXOLicense.ps1 ^------
