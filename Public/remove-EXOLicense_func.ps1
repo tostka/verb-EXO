@@ -4,7 +4,7 @@
 function remove-EXOLicense {
     <#
     .SYNOPSIS
-    remove-EXOLicense.ps1 - Remove a temporary o365 license from specified MsolUser account. Returns updated MSOLUser object to pipeline.
+    remove-EXOLicense.ps1 - Remove a temporary o365 license from specified AADUser account. Returns updated MSOLUser object to pipeline.
     .NOTES
     Version     : 1.0.0.
     Author      : Todd Kadrie
@@ -15,11 +15,12 @@ function remove-EXOLicense {
     License     : MIT License
     Copyright   : (c) 2021 Todd Kadrie
     Github      : https://github.com/tostka/verb-XXX
-    Tags        : Powershell
+    Tags        : Powershell, ExchangeOnline, AzureAD, License
     AddedCredit : REFERENCE
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 10:28 AM 5/26/2023 
     * 4:25 PM 5/22/2023 scrapped, rewrote adapted from functional add-exoLicense(); 
      * 3:37 PM 5/17/2023 added pltRXO support
     * 12:10 PM 6/7/2022 updated cbh params
@@ -28,7 +29,7 @@ function remove-EXOLicense {
     * 3:14 PM 1/18/2022 REM'D EXOP conn's (match add-exolic), this is pure msolu & exo. 
     * 1:02 PM 1/17/2022 port of add-EXOLicense to removal process
     .DESCRIPTION
-    remove-EXOLicense.ps1 - Remove a temporary o365 license from specified MsolUser account. Returns updated MSOLUser object to pipeline.
+    remove-EXOLicense.ps1 - Remove a temporary o365 license from specified AADUser account. Returns updated MSOLUser object to pipeline.
     .PARAMETER users
     Array of UserPrincipalNames (or MSOLUser objects) to have a temporary Exchange License applied
     .PARAMETER Ticket
@@ -192,11 +193,16 @@ function remove-EXOLicense {
 
         # check if using Pipeline input or explicit params:
         if ($PSCmdlet.MyInvocation.ExpectingInput) {
-            write-verbose "Data received from pipeline input: '$($InputObject)'" ;
+            $smsg = "Data received from pipeline input: '$($InputObject)'" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         } else {
             # doesn't actually return an obj in the echo
-            #write-verbose "Data received from parameter input: '$($InputObject)'" ;
+            #$smsg = "Data received from parameter input: '$($InputObject)'" ;
+            #if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            #else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         } ;
+
 
     } ;  # BEGIN-E
     PROCESS{
@@ -267,7 +273,7 @@ function remove-EXOLicense {
                         } ;
                         $AADUser = Get-AzureADUser @pltGAADU ;
                         $Exit = $Retries ;
-                    } Catch {
+                    } CATCH {
                         Start-Sleep -Seconds $RetrySleep ;
                         $Exit ++ ;
                         $smsg = "Failed to exec cmd because: $($Error[0])" ;
@@ -438,12 +444,14 @@ function remove-EXOLicense {
 
                 };  # if-E $ombx
 
-            } CATCH {     
+            } CATCH {
                 $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
-                write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
-                Break ;
-            } ;
+                $smsg += "`n$($ErrTrapd.Exception.Message)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                BREAK ;
+            } ; 
             if(!$whatif){
                 $smsg = "dawdling to ensure License change doesn't soft-delete mailbox..." ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
@@ -453,7 +461,6 @@ function remove-EXOLicense {
                     if($1F){Sleep -s 30} ;
                     write-host "." -NoNewLine ;
                     $1F=$true ;
-                #} Until (get-xomailbox -id $oMSUsr.userprincipalname -EA 0) ;
                 } Until ($ombx = get-xomailbox -id $AADUser.userprincipalname -EA 0) ; # capture return (prevent from dropping into pipe)
                 # get-xomailbox returns: System.Management.Automation.PSObject; not a real Mailbox object class
                 $ombx = $ombx | ?{$_ -is [System.Management.Automation.PSObject]} ; # looks like an attempt to filter just the mailbox out of the pipeline return
@@ -463,7 +470,25 @@ function remove-EXOLicense {
             } ;
 
             # return $AADUser to pipeline if populated
+            $smsg = "refresh updated AADUser:" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
+            $pltGAADU.ObjectId = $AADUser.UserPrincipalName ;
+            TRY {
+                $AADUser = Get-AzureADUser @pltGAADU ;
+            } CATCH {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                $smsg += "`n$($ErrTrapd.Exception.Message)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                BREAK ;
+            } ; 
+
+            $smsg = "Return updated AADUser to pipeline" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             $AADUser | write-output ;
 
             $smsg =  $sBnr.replace('=v','=^').replace('v=','^=') ;
