@@ -17,6 +17,13 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 1:32 PM 5/30/2023 Updates to support either -Credential, or -UserRole + -TenOrg, to support fully portable downstream credentials: 
+        - Add -UserRole & explicit -TenOrg params; working. 
+        - Drive TenOrg defaulted $global:o365_TenOrgDefault, or on $env:userdomain
+        - use the combo thru get-TenantCredential(), then set result to $Credential
+        - if using Credential, the above are backed out via get-TenantTag() on the $credential 
+        - CBA identifiers are resolve always via $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ;
+    * 2:02 PM 5/25/2023 updated CBH example to reflect use of $pltRXOC std conn splat
     * 1:08 PM 5/23/2023 fixed typo (-eq vs =, dumping $false into pipe)     
     * 4:15 PM 5/22/2023 cleaned cbh ; removed some rem'd 
     * 10:06 AM 5/19/2023 add: code to run resolve-UserNameToUserRole  wi $Credential or $UserPrincipalName; sub'd out direct cert-parsing & value assignements with resolve-UserNameToUserRole outputs; 
@@ -87,10 +94,14 @@ Function Connect-EXO {
     Connect-EXO - Establish PSS to EXO V2 Modern Auth
     .PARAMETER  Prefix
     [verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-Prefix tag]
-    .PARAMETER  Credential
-    Credential to use for this connection [-credential 'SOMEACCT@DOMAIN.COM']
+    .PARAMETER Credential
+    Credential to use for this connection [-credential [credential obj variable]
     .PARAMETER UserPrincipalName
     User Principal Name or email address of the user
+    .PARAMETER UserRole
+    Credential Optional User Role spec for credential discovery (wo -Credential)(SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]
+    .PARAMETER TenOrg
+    Optional Tenant Tag (wo -Credential)[-TenOrg 'XYZ']
     .PARAMETER ExchangeEnvironmentName
     Exchange Environment name [-ExchangeEnvironmentName 'O365Default']
     .PARAMETER MinimumVersion
@@ -121,9 +132,21 @@ Function Connect-EXO {
     connect-exo2 -credential $credO365xxxCBA -verbose ; 
     Connect using a CBA credential variable (prestocked from profile automation). Script opens and recycles the cred cert specs emulating the native CBA connection below, but pulling source info from a stored dpapi-encrypted .xml credential file.
     .EXAMPLE
+    connect-exo -UserRole SIDCBA -TenOrg ABC -verbose  ; 
+    Demo use of UserRole (specifying a CBA variant), AND TenOrg spec, to connect (autoresolves against preconfigured credentials in profile)
+    .EXAMPLE
     PS>  $cred = get-credential -credential $o365_Torolab_SIDUpn ;
     PS>  Connect-EXO -credential $cred ;
     Pass in a prefab credential object (useful for auto-shifting to MFA - the function will autoresolve MFA reqs based on the cred domain)
+    .EXAMPLE
+    PS> $pltRXOC = [ordered]@{
+    PS>     Credential = $Credential ;
+    PS>     verbose = $($VerbosePreference -eq "Continue")  ;
+    PS>     Silent = $silent ; 
+    PS> } ;
+    PS> if ($script:useEXOv2 -OR $useEXOv2) { Connect-EXO2 @pltRXOC }
+    PS> else { Connect-EXO @pltRXOC } ;    
+    Splatted example leveraging prefab $pltRXOC splat, derived from local variables & $VerbosePreference value.
     .EXAMPLE
     PS>  $pltCXOCThmb=[ordered]@{
     PS>  	CertificateThumbPrint = $credO365TORSIDCBA.UserName ;
@@ -144,9 +167,24 @@ Function Connect-EXO {
         [Parameter(HelpMessage = "[verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-Prefix tag]")]
             [string]$Prefix = 'xo',
         [Parameter(ParameterSetName = 'Cred', HelpMessage = "Credential to use for this connection [-credential [credential obj variable]")]
-            [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+            [System.Management.Automation.PSCredential]$Credential,
+            # = $global:credo365TORSID, # defer to TenOrg & UserRole resolution
         [Parameter(ParameterSetName = 'UPN',HelpMessage = "User Principal Name or email address of the user[-UserPrincipalName logon@domain.com]")]
             [string]$UserPrincipalName,
+        [Parameter(Mandatory = $false, HelpMessage = "Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]")]
+            # sourced from get-admincred():#182: $targetRoles = 'SID', 'CSID', 'ESVC','CSVC','UID','ESvcCBA','CSvcCBA','SIDCBA' ; 
+            #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
+            # pulling the pattern from global vari w friendly err
+            [ValidateScript({
+                if(-not $rgxPermittedUserRoles){$rgxPermittedUserRoles = '(SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)'} ;
+                if(-not ($_ -match $rgxPermittedUserRoles)){throw "'$($_)' doesn't match `$rgxPermittedUserRoles:`n$($rgxPermittedUserRoles.tostring())" ; } ; 
+                return $true ; 
+            })]
+            [string[]]$UserRole = @('SIDCBA','SID','CSVC'),
+        [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
+            [ValidateNotNullOrEmpty()]
+            #[ValidatePattern("^\w{3}$")]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(HelpMessage = "Exchange Environment name [-ExchangeEnvironmentName 'O365Default']")]
             [Microsoft.Exchange.Management.RestApiClient.ExchangeEnvironment]
             <# error: typedef missing, pre ipmo the mod. 
@@ -246,6 +284,7 @@ Function Connect-EXO {
             throw "Prefix 'EXO' is a reserved Prefix, please use a different prefix."
         }
 
+        <#
         $TenOrg = get-TenantTag -Credential $Credential ;
         if($Credential){
             $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential
@@ -255,6 +294,67 @@ Function Connect-EXO {
         if($uRoleReturn.TenOrg){
             $CertTag = $uRoleReturn.TenOrg
         } ; 
+        #>
+
+        # transplat fr rxo ---
+        if(-not $Credential){
+            if($UserRole){
+                $smsg = "Using specified -UserRole:$( $UserRole -join ',' )" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } else { $UserRole = @('SID','CSVC') } ;
+            if($TenOrg){
+                $smsg = "Using explicit -TenOrg:$($TenOrg)" ; 
+            } else { 
+                switch -regex ($env:USERDOMAIN){
+                    ([regex]('(' + (( @($TORMeta.legacyDomain,$CMWMeta.legacyDomain)  |foreach-object{[regex]::escape($_)}) -join '|') + ')')).tostring() {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
+                    $TOLMeta.legacyDomain {$TenOrg = 'TOL' }
+                    default {throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; exit ; } ;
+                } ;  
+                $smsg = "Imputed `$TenOrg from logged on USERDOMAIN:$($TenOrg)" ;             
+            } ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;             
+            
+            $o365Cred = $null ;
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole= $UserRole; verbose=$($verbose)} ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            $o365Cred = get-TenantCredentials @pltGTCred ;
+
+            if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $Credential = $o365Cred.Cred ;
+            } else { 
+                $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                break ; 
+            } ; 
+            
+        } else { 
+            # test-exotoken only applies if $UseConnEXO  $false
+            $TenOrg = get-TenantTag -Credential $Credential ;
+        } ;
+        # build the cred etc once, for all below:
+        $pltCXO=[ordered]@{
+            Credential = $Credential ;
+            verbose = $($verbose) ; 
+            erroraction = 'STOP' ;
+        } ;
+        if((gcm connect-EXO).Parameters.keys -contains 'silent'){
+            $pltCXO.add('Silent',$false) ;
+        } ;
+
+        $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ; 
+        if($credential.username -match $rgxCertThumbprint){
+            $certTag = $uRoleReturn.TenOrg ; 
+        } ; 
+        # ---
 
         $sTitleBarTag = @("EXO2") ;
         $sTitleBarTag += $TenOrg ;
