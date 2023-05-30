@@ -17,6 +17,7 @@ function test-EXOv2Connection {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell
     REVISIONS
+    * 3:26 PM 5/30/2023 updated CBH, demos ; # reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
     * 11:20 AM 4/25/2023 added -CertTag param (passed by connect-exo; used for validating credential alignment w Tenant)
     * 10:28 AM 4/18/2023 #372: added -ea 0 to gv calls (not found error suppress)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
@@ -46,6 +47,39 @@ function test-EXOv2Connection {
     PS>     write-warning 'NO EXO USERMAILBOX TYPE LICENSE!'
     PS> } ; 
     Evaluate EXOv2 connection status & Tenant:Credential alignment, with verbose output
+    .EXAMPLE
+    PS> $TenOrg = get-TenantTag -Credential $Credential ;
+    PS> if($Credential){
+    PS>     $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential
+    PS> } elseif($UserPrincipalName){
+    PS>     $uRoleReturn = resolve-UserNameToUserRole -UserName $UserPrincipalName
+    PS> } ; 
+    PS> if($uRoleReturn.TenOrg){
+    PS>     $CertTag = $uRoleReturn.TenOrg
+    PS> } ; 
+    PS> if($CertTag -ne $null){
+    PS>     $smsg = "(specifying detected `$CertTag:$($CertTag))" ;
+    PS>     if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+    PS>     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+    PS>     $oRet = test-EXOv2Connection -Credential $credential -CertTag $CertTag -verbose:$($verbose) ;
+    PS> } else {
+    PS>     $oRet = test-EXOv2Connection -Credential $credential -verbose:$($verbose) ;
+    PS> } ;
+    PS> if($oRet.Valid){
+    PS>     $pssEXOv2 = $oRet.PsSession ;
+    PS>     $IsNoWinRM = $oRet.IsNoWinRM ;
+    PS>     $smsg = "(Validated EXOv2 Connected to Tenant aligned with specified Credential)" ;
+    PS>     if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+    PS>     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+    PS> } else {
+    PS>     $smsg = "NO VALID EXOV2/3 PSSESSION FOUND! (DISCONNECTING...)"
+    PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
+    PS>     else{ write-host -ForegroundColor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+    PS>     # capture outlier: shows a session wo the test cmdlet, force reset
+    PS>     DisConnect-EXO ;
+    PS>     $bExistingEXOGood = $false ;
+    PS> } ;    
+    Fancier demo using a variety of verb-Auth & verb-xo cmdlets
     .LINK
     https://github.com/tostka/verb-EXO
     #>
@@ -86,7 +120,7 @@ function test-EXOv2Connection {
 
         if(-not $EXOv1ComputerName){$EXOv1ComputerName = 'ps.outlook.com' };
         if(-not $EXOv1runspaceConnectionInfoAppName){$EXOv1runspaceConnectionInfoAppName = '/PowerShell-LiveID'  };
-        if(-not $EXOv1runspaceConnectionInfoPort){$EXOv1runspaceConnectionInfoPort -eq '443' };
+        if(-not $EXOv1runspaceConnectionInfoPort){$EXOv1runspaceConnectionInfoPort = '443' };
 
         if(-not $EXOv2ComputerName){$EXOv2ComputerName = 'outlook.office365.com' ;}
         if(-not $EXOv2Name){$EXOv2Name = "ExchangeOnlineInternalSession*" ; }
@@ -103,7 +137,7 @@ function test-EXOv2Connection {
         if(-not $EXOv1GmoFilter){$EXOv1GmoFilter = 'tmp_*' } ; 
         if(-not $EXOv2GmoNoWinRMFilter){$EXOv2GmoNoWinRMFilter = 'tmpEXO_*' };
         $EOMmodname = 'ExchangeOnlineManagement' ;
-        # * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
+        # reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
         #region EOMREV ; #*------v EOMREV Check v------
         #$EOMmodname = 'ExchangeOnlineManagement' ;
         $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
@@ -159,9 +193,7 @@ function test-EXOv2Connection {
                 # verify the exov2 cmdlets actually imported as a tmp_ module w specifid prefix & 1st cmdlet
                 # below won't work with updated token support/MFA & loss of test|clear-ActiveToken from EOM (breaking change)
                 # but it's needed when using EOM205, which still falls to basicauth! (readded down below)
-                #if ( (get-module -name $EXOv1GmoFilter | ForEach-Object { Get-Command -module $_.name -name 'Add-xoAvailabilityAddressSpace' -ea 0 }) -AND (test-EXOToken) ) {
-
-                # 2:47 PM 7/13/2022 revise for exov2 -cred support (where get-msaltoken gets used)
+                # revise for exov2 -cred support (where get-msaltoken gets used)
                 # test-EXOToken & it's dependancy EOM:test-ActiveToken, *doesn't exist* after EOM v205!, if out the block
                 if(-not $IsNoWinRM){
                     # Credential
@@ -203,14 +235,14 @@ function test-EXOv2Connection {
             # verify the exov2 cmdlets actually imported as a tmp_ module w specifid prefix & 1st cmdlet
 
             # test-EXOToken() won't work with PSSession-less - it obtains the critical TokenExpireTime from the open PSSession
-            # need to recode for these using get-MsalToken:
+            # need to recode for these using get-aadtoken
 
             # 12:22 PM 8/1/2022 issue with get-msaltoken: it will auth EXO client app (by guid), but it doesn't support the key -prefix param, to make them verb-XOnoun; so you can't use it with hybrid onprem connections.
             # => looks like I'll have to either skip it, or test for cmdlets loaded, to verify. get-msaltoken actually runs an auth session, doesn't just validate one's present. 
             <# [PowerShell Gallery | MSAL.PS.psd1 4.1.0.2 - www.powershellgallery.com/](https://www.powershellgallery.com/packages/MSAL.PS/4.1.0.2/Content/MSAL.PS.psd1)
              nope, it's referring to 'virtual network address prefix'f
             #>
-            # 12:38 PM 4/4/2023 EOM v3 adds Get-ConnectionInformation, which has .tokenStatus -eq 'Active'
+            # EOM v3 adds Get-ConnectionInformation, which has .tokenStatus -eq 'Active'
 
             if($xmod | Where-Object {$_.version -like "3.*"} ){
                 $smsg = "EOM v3+ connection detected" ; 
@@ -249,7 +281,6 @@ function test-EXOv2Connection {
 
         if($bExistingEXOGood -ANd $isEXOValid){
             # implement caching of accepteddoms into the XXXMeta, in the session (cut back on queries to EXO on acceptedom)
-            # swap in non-looping
             if( get-command Get-xoAcceptedDomain) {
                     #$TenOrg = get-TenantTag -Credential $Credential ;
                 if(-not (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_AcceptedDomains){
