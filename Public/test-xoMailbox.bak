@@ -130,7 +130,7 @@ Function test-xoMailbox {
             ($rgxProdEx2010Servers) { $LocalInclDir = "c:\scripts" ; }
             ($rgxLabEx2010Servers) { $LocalInclDir = "c:\scripts" ; }
             #($rgxProdL13Servers) { $LocalInclDir = "c:\scripts" ; }
-            # ($rgxLabL13Servers) { $LocalInclDir = "c:\scripts" ; }
+            ($rgxLabL13Servers) { $LocalInclDir = "c:\scripts" ; }
             ($rgxAdminJumpBoxes) { $LocalInclDir = (split-path $profile) ; }
         } ;
 
