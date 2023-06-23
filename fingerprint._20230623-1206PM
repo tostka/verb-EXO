@@ -1160,7 +1160,6 @@ test-EXOToken:ob
 test-EXOToken:PipelineVariable
 test-EXOToken:pv
 test-EXOv2Connection:Credential
-test-EXOv2Connection:CertTag
 test-EXOv2Connection:MinNoWinRMVersion
 test-EXOv2Connection:Verbose
 test-EXOv2Connection:vb
