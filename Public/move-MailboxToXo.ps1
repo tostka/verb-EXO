@@ -9,6 +9,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    # 11:44 AM 6/23/2023 sync over again fr 👇🏼 ; completely untested, just pasted in updated params, funcs, and submain block, above trailing write-output .
     # 12:41 PM 3/14/2022 sync'd to latest mods of move-EXOmailboxNow, largely rem'ing the xo AD material, long-broken by undocumented fw chgs.
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
@@ -66,8 +67,6 @@ function move-MailboxToXo{
     } ;
     .DESCRIPTION
     move-MailboxToXo.ps1 - Non-Suspend Onprem-> EXO mailbox move
-    .PARAMETER TenOrg
-    TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']
     .PARAMETER TargetMailboxes
     Mailbox identifiers(array)[-Targetmailboxes]
     .PARAMETER BatchFile
@@ -84,10 +83,16 @@ function move-MailboxToXo{
     Role of account (SID|CSID|UID|B2BI|CSVC|ESvc|LSvc)[-UserRole SID]
     .PARAMETER useEXOv2
     Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
+    .PARAMETER silent
+    Switch to specify suppression of all but warn/error echos.(unimplemented, here for cross-compat)
     .PARAMETER ShowDebug
     Parameter to display Debugging messages [-ShowDebug switch]
     .PARAMETER whatif
     Whatif Flag (DEFAULTED TRUE!) [-whatIf]
+    .INPUTS
+    None. Does not accepted piped input.
+    .OUTPUTS
+    None. Returns no objects or output.
     .INPUTS
     None. Does not accepted piped input.
     .OUTPUTS
@@ -99,47 +104,56 @@ function move-MailboxToXo{
     move-MailboxToXo.ps1 -TargetMailboxes ACCOUNT@COMPANY.com -showDebug -notest -whatIf ;
     Perform immediate move of specified mailbox, suppress MEP tests (-NoTest), showdebug output & whatif pass
     .LINK
+    https://bitbucket.org/tostka/powershell/
     #>
-    ##Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Ex2010, verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-logging
-    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
-    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS,verb-IO, verb-logging, verb-Mods, verb-Network, verb-Text, verb-logging
     [CmdletBinding()]
-    Param(
+    PARAM(
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
-        [ValidateNotNullOrEmpty()]
-        $TenOrg = 'TOR',
+            [ValidateNotNullOrEmpty()]
+            #[ValidatePattern("^\w{3}$")]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Mailbox identifiers(array)[-Targetmailboxes]")]
-        [ValidateNotNullOrEmpty()]$TargetMailboxes,
+            [ValidateNotNullOrEmpty()]$TargetMailboxes,
         [Parameter(Mandatory=$false,HelpMessage="CSV file of mailbox descriptors, including at least PrimarySMTPAddress field [-BatchFile c:\path-to\file.csv]")]
-        [ValidateScript({Test-Path $_})][string]$BatchFile,
+            [ValidateScript({Test-Path $_})][string]$BatchFile,
         [Parameter(Position=0,HelpMessage="Hard-code MoveRequest BatchName")]
-        [string]$BatchName,
+            [string]$BatchName,
         [Parameter(HelpMessage="Suspend move on creation Flag [-Suspend]")]
-        [switch] $Suspend,
+            [switch] $Suspend,
         [Parameter(HelpMessage="NoTest Flag [-NoTEST]")]
-        [switch] $NoTEST,
-        [Parameter(HelpMessage="Credential to use for cloud actions [-credential [credential obj variable]")][System.Management.Automation.PSCredential]
-        $Credential,
+            [switch] $NoTEST,
+        [Parameter(HelpMessage="Credential to use for cloud actions [-credential [credential obj variable]")]
+            [System.Management.Automation.PSCredential]$Credential,
         # = $global:$credO365TORSID,
-        [Parameter(HelpMessage = "Role of account (SID|CSID|UID|B2BI|CSVC|ESvc|LSvc)[-UserRole SID]")]
-        [ValidateSet('SID','CSID','UID','B2BI','CSVC','ESVC','LSVC')]
-        [string]$UserRole='SID',
+        [Parameter(Mandatory = $false, HelpMessage = "Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]")]
+            # sourced from get-admincred():#182: $targetRoles = 'SID', 'CSID', 'ESVC','CSVC','UID','ESvcCBA','CSvcCBA','SIDCBA' ; 
+            #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
+            # pulling the pattern from global vari w friendly err
+            [ValidateScript({
+                if(-not $rgxPermittedUserRoles){$rgxPermittedUserRoles = '(SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)'} ;
+                if(-not ($_ -match $rgxPermittedUserRoles)){throw "'$($_)' doesn't match `$rgxPermittedUserRoles:`n$($rgxPermittedUserRoles.tostring())" ; } ; 
+                return $true ; 
+            })]
+            [string[]]$UserRole = @('SID','CSVC'),
         [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
-        [switch] $useEXOv2,
+            [switch] $useEXOv2=$true,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+                [switch] $silent,
         [Parameter(HelpMessage="Unpromtped run Flag [-showDebug]")]
-        [switch] $NoPrompt,
+            [switch] $NoPrompt,
         [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
-        [switch] $showDebug,
+            [switch] $showDebug,
         [Parameter(HelpMessage="Whatif Flag (DEFAULTED TRUE!) [-whatIf]")]
-        [switch] $whatIf=$true
+            [switch] $whatIf=$true
     ) # PARAM BLOCK END
 
     $verbose = ($VerbosePreference -eq "Continue") ;
 
+
     #region INIT; # ------
     #*======v SCRIPT/DOMAIN/MACHINE/INITIALIZATION-DECLARE-BOILERPLATE v======
     # SCRIPT-CONFIG MATERIAL TO SET THE UNDERLYING $DBGPREF:
-    if ($Whatif) { write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):`$Whatif is TRUE (`$whatif:$($whatif))" ; };
+    if ($Whatif){Write-Verbose -Verbose:$true "`$Whatif is TRUE (`$whatif:$($whatif))" ; };
     # If using WMI calls, push any cred into WMI:
     #if ($Credential -ne $Null) {$WmiParameters.Credential = $Credential }  ;
 
@@ -161,7 +175,7 @@ function move-MailboxToXo{
     $smtpSubj+= "$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"   ;
     #$smtpTo=$TORMeta['NotificationAddr1'] ;
     #$smtpTo=$TORMeta['NotificationDlUs'] ;
-    $smtpToFailThru="dG9kZC5rYWRyaWVAdG9yby5jb20="| convertFrom-Base64String ; 
+    $smtpToFailThru="todd.kadrie@toro.com"
     # one bene of looping: no module dependancy, works before modloads occur
     # pull the notifc smtpto from the xxxMeta.NotificationDlUs value
     # non-looping - $TenOrg is an input param, does't need modules to work yet
@@ -265,7 +279,6 @@ function move-MailboxToXo{
         $VerbosePreference = "SilentlyContinue" ;
         $verbose = ($VerbosePreference -eq "Continue") ;
     } ;
-    <# flip to require specs over tmod loads
     #*------v  MOD LOADS  v------
     # strings are: "[tModName];[tModFile];tModCmdlet"
     $tMods = @() ;
@@ -287,44 +300,44 @@ function move-MailboxToXo{
     #$tMods+="verb-SOL;C:\sc\verb-SOL\verb-SOL\verb-SOL.psm1;Connect-SOL" ;
     #$tMods+="verb-Azure;C:\sc\verb-Azure\verb-Azure\verb-Azure.psm1;get-AADBearToken" ;
     foreach($tMod in $tMods){
-    $tModName = $tMod.split(';')[0] ; $tModFile = $tMod.split(';')[1] ; $tModCmdlet = $tMod.split(';')[2] ;
-    $smsg = "( processing `$tModName:$($tModName)`t`$tModFile:$($tModFile)`t`$tModCmdlet:$($tModCmdlet) )" ;
-    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    if($tModName -eq 'verb-Network' -OR $tModName -eq 'verb-Azure'){
-        #write-host "GOTCHA!" ;
-    } ;
-    $lVers = get-module -name $tModName -ListAvailable -ea 0 ;
-    if($lVers){   $lVers=($lVers | sort version)[-1];   try {     import-module -name $tModName -RequiredVersion $lVers.Version.tostring() -force -DisableNameChecking -Verbose:$false  } catch {     write-warning "*BROKEN INSTALLED MODULE*:$($tModName)`nBACK-LOADING DCOPY@ $($tModDFile)" ;import-module -name $tModDFile -force -DisableNameChecking -verbose:$false  } ;
-    } elseif (test-path $tModFile) {
+      $tModName = $tMod.split(';')[0] ; $tModFile = $tMod.split(';')[1] ; $tModCmdlet = $tMod.split(';')[2] ;
+      $smsg = "( processing `$tModName:$($tModName)`t`$tModFile:$($tModFile)`t`$tModCmdlet:$($tModCmdlet) )" ;
+      if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+      else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+      if($tModName -eq 'verb-Network' -OR $tModName -eq 'verb-Azure'){
+          #write-host "GOTCHA!" ;
+      } ;
+      $lVers = get-module -name $tModName -ListAvailable -ea 0 ;
+      if($lVers){   $lVers=($lVers | sort version)[-1];   try {     import-module -name $tModName -RequiredVersion $lVers.Version.tostring() -force -DisableNameChecking -Verbose:$false  } catch {     write-warning "*BROKEN INSTALLED MODULE*:$($tModName)`nBACK-LOADING DCOPY@ $($tModDFile)" ;import-module -name $tModDFile -force -DisableNameChecking -verbose:$false  } ;
+      } elseif (test-path $tModFile) {
         write-warning "*NO* INSTALLED MODULE*:$($tModName)`nBACK-LOADING DCOPY@ $($tModDFile)" ;
         try {import-module -name $tModDFile -force -DisableNameChecking -Verbose:$false} # force non-verbose, suppress spam
         catch {   write-error "*FAILED* TO LOAD MODULE*:$($tModName) VIA $(tModFile) !" ;   $tModFile = "$($tModName).ps1" ;   $sLoad = (join-path -path $LocalInclDir -childpath $tModFile) ;   if (Test-Path $sLoad) {       Write-Verbose -verbose ((Get-Date).ToString("HH:mm:ss") + "LOADING:" + $sLoad) ;       . $sLoad ;       if ($showdebug) { Write-Verbose -verbose "Post $sLoad" };   } else {       $sLoad = (join-path -path $backInclDir -childpath $tModFile) ;       if (Test-Path $sLoad) {           Write-Verbose -verbose ((Get-Date).ToString("HH:mm:ss") + "LOADING:" + $sLoad) ;           . $sLoad ;           if ($showdebug) { Write-Verbose -verbose "Post $sLoad" };       } else {           Write-Warning ((Get-Date).ToString("HH:mm:ss") + ":MISSING:" + $sLoad + " EXITING...") ;           exit;       } ;   } ; } ;
-    } ;
-    if(!(test-path function:$tModCmdlet)){
-        write-warning -verbose:$true  "UNABLE TO VALIDATE PRESENCE OF $tModCmdlet`nfailing through to `$backInclDir .ps1 version" ;
-        $sLoad = (join-path -path $backInclDir -childpath "$($tModName).ps1") ;
-        if (Test-Path $sLoad) {     Write-Verbose -verbose:$true ((Get-Date).ToString("HH:mm:ss") + "LOADING:" + $sLoad) ;     . $sLoad ;     if ($showdebug) { Write-Verbose -verbose "Post $sLoad" };     if(!(test-path function:$tModCmdlet)){         write-warning "$((get-date).ToString('HH:mm:ss')):FAILED TO CONFIRM `$tModCmdlet:$($tModCmdlet) FOR $($tModName)" ;     } else {          write-verbose -verbose:$true  "(confirmed $tModName loaded: $tModCmdlet present)"     }
-        } else {     Write-Warning ((Get-Date).ToString("HH:mm:ss") + ":MISSING:" + $sLoad + " EXITING...") ;     exit; } ;
-    } else {     write-verbose -verbose:$true  "(confirmed $tModName loaded: $tModCmdlet present)" } ;
-    if($tModName -eq 'verb-logging'){
+      } ;
+      if(!(test-path function:$tModCmdlet)){
+          write-warning -verbose:$true  "UNABLE TO VALIDATE PRESENCE OF $tModCmdlet`nfailing through to `$backInclDir .ps1 version" ;
+          $sLoad = (join-path -path $backInclDir -childpath "$($tModName).ps1") ;
+          if (Test-Path $sLoad) {     Write-Verbose -verbose:$true ((Get-Date).ToString("HH:mm:ss") + "LOADING:" + $sLoad) ;     . $sLoad ;     if ($showdebug) { Write-Verbose -verbose "Post $sLoad" };     if(!(test-path function:$tModCmdlet)){         write-warning "$((get-date).ToString('HH:mm:ss')):FAILED TO CONFIRM `$tModCmdlet:$($tModCmdlet) FOR $($tModName)" ;     } else {          write-verbose -verbose:$true  "(confirmed $tModName loaded: $tModCmdlet present)"     }
+          } else {     Write-Warning ((Get-Date).ToString("HH:mm:ss") + ":MISSING:" + $sLoad + " EXITING...") ;     exit; } ;
+      } else {     write-verbose -verbose:$true  "(confirmed $tModName loaded: $tModCmdlet present)" } ;
+      if($tModName -eq 'verb-logging'){
 
-            # if($PSCommandPath){   $logspec = start-Log -Path $PSCommandPath -NoTimeStamp -Tag LASTPASS -showdebug:$($showdebug) -whatif:$($whatif) ;
-#             } else {    $logspec = start-Log -Path ($MyInvocation.MyCommand.Definition) -showdebug:$($showdebug) -whatif:$($whatif) ; } ;
-#             if($logspec){
-#                 $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
-#                 $logging=$logspec.logging ;
-#                 $logfile=$logspec.logfile ;
-#                 $transcript=$logspec.transcript ;
-#                 #Configure default logging from parent script name
-#                 #start-transcript -Path $transcript ;
-#             } else {throw "Unable to configure logging!" } ;
+            <#
+            if($PSCommandPath){   $logspec = start-Log -Path $PSCommandPath -NoTimeStamp -Tag LASTPASS -showdebug:$($showdebug) -whatif:$($whatif) ;
+            } else {    $logspec = start-Log -Path ($MyInvocation.MyCommand.Definition) -showdebug:$($showdebug) -whatif:$($whatif) ; } ;
+            if($logspec){
+                $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+                $logging=$logspec.logging ;
+                $logfile=$logspec.logfile ;
+                $transcript=$logspec.transcript ;
+                #Configure default logging from parent script name
+                #start-transcript -Path $transcript ;
+            } else {throw "Unable to configure logging!" } ;
+            #>
 
-
-    } ;
+      } ;
     } ;  # loop-E
     #*------^ END MOD LOADS ^------
-    #>
     #-=-=-=-=RE-ENABLE PRIOR VERBOSE-=-=-=-=
     # reenable VerbosePreference:Continue, if set, during mod loads
     if($VerbosePrefPrior -eq "Continue"){
@@ -360,38 +373,82 @@ function move-MailboxToXo{
     $reqMods+="Load-EMSSnap" ;
     # remove dupes
     $reqMods=$reqMods| select -Unique ;
-
+    <#
+    $dPref = 'd','c' ; foreach($budrv in $dpref){ if(test-path -path "$($budrv):\scripts" -ea 0 ){ break ;  } ;  } ;
+    [regex]$rgxScriptsAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\Scripts" ;
+    if($PSCommandPath){
+        if($PSCommandPath -match $rgxScriptsAllUsersScope){
+            # AllUsers installed script, divert into [$budrv]:\scripts (don't write logs into allusers context folder)
+            $logspec = start-Log -Path (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
+        }else {
+            $logspec = start-Log -Path $PSCommandPath -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
+        } ;
+    } else {
+        if($MyInvocation.MyCommand.Definition -match $rgxScriptsAllUsersScope){
+            $logspec = start-Log -Path (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
+        } else {
+            $logspec = start-Log -Path $MyInvocation.MyCommand.Definition -NoTimeStamp -Tag "($TenOrg)-LASTPASS" -showdebug:$($showdebug) -whatif:$($whatif) ;
+        } ;
+    } ;
+    #>
+    # 10:29 AM 5/19/2021 splice in curr start-log bloc
     # detect profile installs (installed mod or script), and redir to stock location
-            $dPref = 'd','c' ; foreach($budrv in $dpref){ if(test-path -path "$($budrv):\scripts" -ea 0 ){ break ;  } ;  } ;
-            [regex]$rgxScriptsModsAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)" ;
-            [regex]$rgxScriptsModsCurrUserScope="^$([regex]::escape([environment]::getfolderpath('Mydocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)" ;
-            # -Tag "($TenOrg)-LASTPASS" 
-            # Tag=$lTag 
-            $pltSLog = [ordered]@{ NoTimeStamp=$false ;  showdebug=$($showdebug) ;whatif=$($whatif) ;} ;
-            if($PSCommandPath){
-                if(($PSCommandPath -match $rgxScriptsModsAllUsersScope) -OR ($PSCommandPath -match $rgxScriptsModsCurrUserScope) ){
-                    # AllUsers or CU installed script, divert into [$budrv]:\scripts (don't write logs into allusers context folder)
-                    if($PSCommandPath -match '\.ps(d|m)1$'){
-                        # module function: use the ${CmdletName} for childpath
-                        $pltSLog.Path= (join-path -Path "$($budrv):\scripts" -ChildPath "$(${CmdletName}).ps1" )  ;
-                    } else { 
-                        $pltSLog.Path=(join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) ;
-                    } ; 
-                }else {
-                    $pltSLog.Path=$PSCommandPath ;
-                } ;
-            } else {
-                if( ($MyInvocation.MyCommand.Definition -match $rgxScriptsModsAllUsersScope) -OR ($MyInvocation.MyCommand.Definition -match $rgxScriptsModsCurrUserScope) ){
-                    $pltSLog.Path=(join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) ;
-                } else {
-                    $pltSLog.Path=$MyInvocation.MyCommand.Definition ;
-                } ;
-            } ;
-            $smsg = "start-Log w`n$(($pltSLog|out-string).trim())" ;
-            if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            $logspec = start-Log @pltSLog 
+    $dPref = 'd','c' ; foreach($budrv in $dpref){ if(test-path -path "$($budrv):\scripts" -ea 0 ){ break ;  } ;  } ;
+    [regex]$rgxScriptsModsAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)" ;
+    [regex]$rgxScriptsModsCurrUserScope="^$([regex]::escape([environment]::getfolderpath('Mydocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)" ;
+    # -Tag "($TenOrg)-LASTPASS" 
+    $lTag = @($TargetMailboxes)[0].tostring().substring(0,[System.Math]::Min(12,@($TargetMailboxes)[0].length))
+    $pltSLog = [ordered]@{ NoTimeStamp=$false ; Tag=$lTag  ; showdebug=$($showdebug) ;whatif=$($whatif) ;} ;
+    if($PSCommandPath){
+        if(($PSCommandPath -match $rgxScriptsModsAllUsersScope) -OR ($PSCommandPath -match $rgxScriptsModsCurrUserScope) ){
+            # AllUsers or CU installed script, divert into [$budrv]:\scripts (don't write logs into allusers context folder)
+            if($PSCommandPath -match '\.ps(d|m)1$'){
+                # module function: use the ${CmdletName} for childpath
+                $pltSLog.Path= (join-path -Path "$($budrv):\scripts" -ChildPath "$(${CmdletName}).ps1" )  ;
+            } else { 
+                $pltSLog.Path=(join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) ;
+            } ; 
+        }else {
+            $pltSLog.Path=$PSCommandPath ;
+        } ;
+    } else {
+        if( ($MyInvocation.MyCommand.Definition -match $rgxScriptsModsAllUsersScope) -OR ($MyInvocation.MyCommand.Definition -match $rgxScriptsModsCurrUserScope) ){
+            $pltSLog.Path=(join-path -Path "$($budrv):\scripts" -ChildPath (split-path $PSCommandPath -leaf)) ;
+        } else {
+            $pltSLog.Path=$MyInvocation.MyCommand.Definition ;
+        } ;
+    } ;
+    $smsg = "start-Log w`n$(($pltSLog|out-string).trim())" ;
+    if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+    $logspec = start-Log @pltSLog ;
+    <#
+    if($logspec){
+        $logging=$logspec.logging ;
+        $logfile=$logspec.logfile ;
+        $transcript=$logspec.transcript ;
 
+        if($whatif){
+            $logfile=$logfile.replace("-BATCH","-BATCH-WHATIF") ;
+            $transcript=$transcript.replace("-BATCH","-BATCH-WHATIF") ;
+        } else {
+            $logfile=$logfile.replace("-BATCH","-BATCH-EXEC") ;
+            $transcript=$transcript.replace("-BATCH","-BATCH-EXEC") ;
+        } ;
+        if($Ticket){
+            $logfile=$logfile.replace("-BATCH","-$($Ticket)") ;
+            $transcript=$transcript.replace("-BATCH","-$($Ticket)") ;
+        } else {
+            $logfile=$logfile.replace("-BATCH","-nnnnnn") ;
+            $transcript=$transcript.replace("-BATCH","-nnnnnn") ;
+        } ;
+
+        if(Test-TranscriptionSupported){
+            $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+            start-transcript -Path $transcript ;
+        } ;
+    } else {throw "Unable to configure logging!" } ;
+    #>
     # reloc batch calc, to include the substring in the log/transcript
     if(!$BatchName){
         $BatchName = "ExoMoves-$($env:USERNAME)" ;
@@ -415,8 +472,8 @@ function move-MailboxToXo{
         $logfile=$logspec.logfile ;
         $transcript=$logspec.transcript ;
         #Configure default logging from parent script name
-        # logfile                        C:\usr\work\o365\scripts\logs\move-MailboxToXo-(TOR)-LASTPASS-LOG-BATCH-WHATIF-log.txt
-        # transcript                     C:\usr\work\o365\scripts\logs\move-MailboxToXo-(TOR)-LASTPASS-Transcript-BATCH-WHATIF-trans-log.txt
+        # logfile                        C:\usr\work\o365\scripts\logs\move-EXOmailboxNow-(TOR)-LASTPASS-LOG-BATCH-WHATIF-log.txt
+        # transcript                     C:\usr\work\o365\scripts\logs\move-EXOmailboxNow-(TOR)-LASTPASS-Transcript-BATCH-WHATIF-trans-log.txt
         if($Ticket){
             $logfile=$logfile.replace("-BATCH","-$($Ticket)-BATCH") ;
             $transcript=$transcript.replace("-BATCH","-$($Ticket)-BATCH") ;
@@ -433,7 +490,7 @@ function move-MailboxToXo{
     $smsg= "#*======v START PASS:$($ScriptBaseName) v======" ;
     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-    
+
     <# disable cross-org handling, post tenant migr, no need
     # seeing Curly & Cheech turn up in EX10 queries, pre-purge *any* AD psdrive
     if($existingADPSDrives = get-psdrive -PSProvider ActiveDirectory -ea 0){
@@ -452,6 +509,7 @@ function move-MailboxToXo{
         } ;
 
     } ;
+
     # also purge the $global:ADPsDriveNames or $script:ADPsDriveNames
     if(gv -name ADPsDriveNames -scope global -ea 0){
         $error.clear() ;
@@ -511,9 +569,19 @@ function move-MailboxToXo{
         Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
         ###>
         $o365Cred=$null ;
-        if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','SID' -verbose:$($verbose))){
+        <# $TenOrg is a mandetory param in this script, skip dyn resolution
+        switch -regex ($env:USERDOMAIN){
+            "(TORO|CMW)" {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
+            "TORO-LAB" {$TenOrg = 'TOL' }
+            default {
+                throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ;
+                exit ;
+            } ;
+        } ;
+        #>
+        if($o365Cred=(get-TenantCredentials -TenOrg $TenOrg -UserRole 'CSVC','ESVC','SID' -verbose:$($verbose))){
             # make it script scope, so we don't have to predetect & purge before using new-variable - except now it does [headcratch]
-            $tvari = "cred$($tenorg)" ; if(get-Variable -Name $tvari -scope Script){Remove-Variable -Name $tvari -scope Script}
+            $tvari = "cred$($tenorg)" ; if(get-Variable -Name $tvari -scope Script -ea 0){Remove-Variable -Name $tvari -scope Script}
             New-Variable -Name cred$($tenorg) -scope Script -Value $o365Cred.cred ;
             $smsg = "Resolved $($Tenorg) `$o365cred:$($o365Cred.cred.username) (assigned to `$cred$($tenorg))" ;
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
@@ -540,9 +608,17 @@ function move-MailboxToXo{
         Connect-AAD @pltRXO ;
         ###>
         # configure splat for connections: (see above useage)
-        $pltRXO = @{
-            Credential = (Get-Variable -name cred$($tenorg) ).value ;
-            verbose = $($verbose) ; } ;
+        # downstream commands
+        $pltRXO = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+            $pltRxo.add('Silent',$silent) ;
+        } ;
+        # default connectivity cmds - force silent false
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
         #*------^ END GENERIC EXO CREDS & SVC CONN BP ^------
     } # if-E $useEXO
 
@@ -554,7 +630,7 @@ function move-MailboxToXo{
         $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC','SID'; verbose=$($verbose)} ;
         if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
             # make it script scope, so we don't have to predetect & purge before using new-variable
-            $tvari = "cred$($tenorg)OP" ; if(get-Variable -Name $tvari -scope Script){Remove-Variable -Name $tvari -scope Script} ;
+            $tvari = "cred$($tenorg)OP" ; if(get-Variable -Name $tvari -scope Script -ea 0){Remove-Variable -Name $tvari -scope Script} ; 
             New-Variable -Name "cred$($tenorg)OP" -scope Script -Value $OPCred ;
             $smsg = "Resolved $($Tenorg) `$OPCred:$($OPCred.username) (assigned to `$cred$($tenorg)OP)" ;
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
@@ -563,7 +639,7 @@ function move-MailboxToXo{
             $statusdelta = ";ERROR";
             $script:PassStatus += $statusdelta ;
             set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
-            $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
+            $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole $($userrole -join '|') value!"
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             throw "Unable to resolve $($tenorg) `$OPCred value!`nEXIT!"
@@ -603,6 +679,7 @@ function move-MailboxToXo{
     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
+    <# 4:42 PM 6/21/2022 with exo2 hybrid bug, have to move rx10 AFTER rxo
     if($VerbosePreference = "Continue"){
         $VerbosePrefPrior = $VerbosePreference ;
         $VerbosePreference = "SilentlyContinue" ;
@@ -614,6 +691,8 @@ function move-MailboxToXo{
         $VerbosePreference = $VerbosePrefPrior ;
         $verbose = ($VerbosePreference -eq "Continue") ;
     } ;
+    # which also includes loadadms (old ad/ex bug), must be done after rx10
+
 
     # load ADMS
     $reqMods+="load-ADMS".split(";") ;
@@ -625,9 +704,9 @@ function move-MailboxToXo{
     load-ADMS ;
 
     # multi-org AD
-    <#still needs ADMS mount-ADForestDrives() and set-location code @ 395 (had to recode mount-admforestdrives and debug cred production code & infra-string inputs before it would work; will need to dupe to suspend variant on final completion
-    #>
-    <# 12:25 PM 3/14/2022 disable no x-org
+    #still needs ADMS mount-ADForestDrives() and set-location code @ 395 (had to recode mount-admforestdrives and debug cred production code & infra-string inputs before it would work; will need to dupe to suspend variant on final completion
+    #
+
     if(!$global:ADPsDriveNames){
         $smsg = "(connecting X-Org AD PSDrives)" ;
         if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
@@ -644,8 +723,45 @@ function move-MailboxToXo{
     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
     #reconnect-exo -credential $pltRXO.Credential ;
-    if ($script:useEXOv2) { reconnect-eXO2 @pltRXO }
-    else { reconnect-EXO @pltRXO } ;
+    if ($script:useEXOv2) { reconnect-eXO2 @pltRXOC }
+    else { reconnect-EXO @pltRXOC } ;
+
+
+    # 4:45 PM 6/21/2022 exov2 hybrid bug, move rx10/adms below rxo
+    if($VerbosePreference = "Continue"){
+        $VerbosePrefPrior = $VerbosePreference ;
+        $VerbosePreference = "SilentlyContinue" ;
+        $verbose = ($VerbosePreference -eq "Continue") ;
+    } ;
+    if($pltRX10){ReConnect-Ex2010 @pltRX10 }
+    else { Reconnect-Ex2010 ; } ;
+    if($VerbosePrefPrior -eq "Continue"){
+        $VerbosePreference = $VerbosePrefPrior ;
+        $verbose = ($VerbosePreference -eq "Continue") ;
+    } ;
+    # which also includes loadadms (old ad/ex bug), must be done after rx10
+
+
+    # load ADMS
+    $reqMods+="load-ADMS".split(";") ;
+    if( !(check-ReqMods $reqMods) ) {write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; exit ;}  ;
+    $smsg = "(loading ADMS...)" ;
+    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+    load-ADMS ;
+
+    # multi-org AD
+    #still needs ADMS mount-ADForestDrives() and set-location code @ 395 (had to recode mount-admforestdrives and debug cred production code & infra-string inputs before it would work; will need to dupe to suspend variant on final completion
+    #
+
+    <#if(!$global:ADPsDriveNames){
+        $smsg = "(connecting X-Org AD PSDrives)" ;
+        if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+        $global:ADPsDriveNames = mount-ADForestDrives -verbose:$($verbose) ;
+    } ;
+    #>
 
 
     <# RLMS connection
@@ -659,6 +775,7 @@ function move-MailboxToXo{
     #$script:forestdom=((get-adforest | select -expand upnsuffixes) |?{$_ -eq (Get-Variable  -name "$($TenOrg)Meta").value.o365_OPDomain}) ;
     #-=-get-gcfastXO use to pull a root domain (or enable-exforestview for OPEX)=-=-=-=-=-
     if($UseOP){
+        <# 4:46 PM 6/21/2022 wo functional crossorg, this is all wasted code
         # suppress VerbosePreference:Continue, if set, during mod loads (VERY NOISEY)
         if($VerbosePreference -eq "Continue"){
             $VerbosePrefPrior = $VerbosePreference ;
@@ -682,6 +799,10 @@ function move-MailboxToXo{
         } ;
         # pre-clear dc, before querying
         $domaincontroller = $null ;
+        # 3:24 PM 3/ 9/2022 post tenant migr, we aren't doing local anymore, use get-gcfast instead
+        #$domaincontroller = get-gcfastxo -TenOrg $TenOrg -Subdomain $subdom -verbose:$($verbose) |?{$_.length};
+        $domaincontroller = get-gcfast -verbose:$($verbose) |?{$_.length};
+        #>
         <#
         # we don't know which subdoms may be in play
         pushd ; # cache pwd
@@ -730,7 +851,9 @@ function move-MailboxToXo{
         } ;
         popd ; # cd to prior dir
         #>
-        
+        # 4:47 PM 6/21/2022 still uses a dc in the getb-mailboxe low
+        $domaincontroller = get-gcfast -verbose:$($verbose) |?{$_.length};
+
     } ; # $useOP
     #-=-=-=-=-=-=-
 
@@ -761,11 +884,11 @@ function move-MailboxToXo{
         $bRet=Read-Host "Enter YYY to continue. Anything else will exit"
     } ;
     if ($bRet.ToUpper() -eq "YYY") {
-        Write-host "Moving on"
+         Write-host "Moving on"
     } else {
-        Write-Host "Invalid response. Exiting"
-        # exit <asserted exit error #>
-        exit 1
+         Write-Host "Invalid response. Exiting"
+         # exit <asserted exit error #>
+         exit 1
     } # if-block end
 
     <# timezone standards:
@@ -781,10 +904,11 @@ function move-MailboxToXo{
     if($global:credTORSID){$pltRX10.Credential = $global:credTORSID}
     else {$pltRX10.Credential = Get-Credential -credential $OPMoveID} ;
     #>
+    <# rem it, don't want to trigger the exov2 bug, assume it's always functional, post above connect
     if($pltRX10){
         ReConnect-Ex2010 @pltRX10 ;
     } else { Reconnect-Ex2010 ; } ;
-
+    #>
 
     if($BatchFile){
         $smsg= "Using -BatchName:$($BatchName)" ;
@@ -797,7 +921,7 @@ function move-MailboxToXo{
         $smsg= "MISSING `$BATCHFILE, ABORTING!" ;
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        _cleanup
+        Cleanup
     } ;  ;
 
     # moved batchname calc up to logging area (to include in log)
@@ -815,8 +939,8 @@ function move-MailboxToXo{
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-        if ($script:useEXOv2) { reconnect-eXO2 @pltRXO }
-        else { reconnect-EXO @pltRXO } ;
+        if ($script:useEXOv2) { reconnect-eXO2 @pltRXOC }
+        else { reconnect-EXO @pltRXOC } ;
 
         # use new get-GCFastXO cross-org dc finder
         #$domaincontroller = get-GCFastXO -TenOrg $TenOrg -ADObject $tMbxId -verbose:$($verbose) ;
@@ -829,7 +953,7 @@ function move-MailboxToXo{
         } else {throw "unpopulated `$TargetMailboxes parameter, unable to resolve a matching OR OP_ExADRoot property" ; } ;
         #-=-=-=-=-=-=-=-=
         #>
-        
+
         # issue is that 2 objects are coming back: first is null, 2nd is the dc spec
         $Exit = 0 ;
         Do {
@@ -1056,8 +1180,8 @@ function move-MailboxToXo{
                             $smsg= "Testing OnPrem Admin account $($pltRX10.Credential.username) against $($_)" ;
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                            if ($script:useEXOv2) { reconnect-eXO2 @pltRXO }
-                            else { reconnect-EXO @pltRXO } ;
+                            if ($script:useEXOv2) { reconnect-eXO2 @pltRXOC }
+                            else { reconnect-EXO @pltRXOC } ;
                             $oTest= ps1TestXMigrSrvrAvail -ExchangeRemoteMove -RemoteServer $_ -Credentials $pltRX10.Credential ;
                         } CATCH {
                             $smsg= "Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
@@ -1082,7 +1206,7 @@ function move-MailboxToXo{
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } ; #Error|Warn
                         $MvSplat.SuspendWhenReadyToComplete=$true ;
                     }
-                    "^move-MailboxToXo\.ps1$" {
+                    "^move-EXOmailboxNow\.ps1$" {
                         $smsg= "Configuring:SuspendWhenReadyToComplete=`$FALSE" ;
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } ; #Error|Warn
                         $MvSplatSuspendWhenReadyToComplete=$false ;
@@ -1144,8 +1268,8 @@ function move-MailboxToXo{
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                             Start-Sleep -Seconds $RetrySleep ;
-                            if ($script:useEXOv2) { reconnect-eXO2 @pltRXO }
-                            else { reconnect-EXO @pltRXO } ;
+                            if ($script:useEXOv2) { reconnect-eXO2 @pltRXOC }
+                            else { reconnect-EXO @pltRXOC } ;
                             $Exit ++ ;
                             $smsg = "Try #: $Exit" ;
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
@@ -1155,7 +1279,7 @@ function move-MailboxToXo{
                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                             } ;
-                    }  ;
+                      }  ;
 
                     } Until ($Exit -eq $Retries) ;
 
@@ -1171,28 +1295,15 @@ function move-MailboxToXo{
                 $Exit = 0 ;
                 Do {
                     Try {
-                        $mvResult = ps1NewXMovReq @MvSplat;
-                        <# if you don't cap output, it drops into the pipeline:
-                        DisplayName           StatusDetail        TotalMailboxSize TotalArchiveSize PercentComplete
-                        -----------           ------------        ---------------- ---------------- ---------------
-                        Stg-Consumer Warranty WaitingForJobPickup 0 B (0 bytes)                     0
-                        Stg-Dlradmin          WaitingForJobPickup 0 B (0 bytes)                     0
-                        #>
-                        $statusdelta = ";CHANGE";
-                        $script:PassStatus += $statusdelta ;
-                        set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
-                        $smsg = "Move initiated:$($MvSplat.identity):`n$(($mvResult | ft -auto DisplayName,StatusDetail,TotalMailboxSize,TotalArchiveSize,PercentComplete|out-string).trim())" ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
+                        ps1NewXMovReq @MvSplat;
                         $Exit = $Retries ;
                     } Catch {
                         $smsg = "Failed to exec cmd because: $($Error[0])" ;
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         Start-Sleep -Seconds $RetrySleep ;
-                        if ($script:useEXOv2) { reconnect-eXO2 @pltRXO }
-                        else { reconnect-EXO @pltRXO } ;
+                        if ($script:useEXOv2) { reconnect-eXO2 @pltRXOC }
+                        else { reconnect-EXO @pltRXOC } ;
                         $Exit ++ ;
                         $smsg = "Try #: $Exit" ;
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
@@ -1222,7 +1333,7 @@ function move-MailboxToXo{
 
         # add an EXO delay to avoid issues
         Start-Sleep -Milliseconds $ThrottleMs ;
-    } ;  # loop-E Mailboxes
+    } ;  # loop-E
 
     if(!$whatif){
         $smsg= "CLOUD MIGRATION STATUS:`n$((ps1GetXMovReq -BatchName $BatchName | ps1GetXMovReqStats | FL DisplayName,status,percentcomplete,itemstransferred,BadItemsEncountered|out-string).trim())`n" ;
@@ -1232,6 +1343,8 @@ function move-MailboxToXo{
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
     } ;
+
+    if((get-AdServerSettings).ViewEntireForest){ disable-ForestView } ;
     
 
     # return the passstatus to the pipeline
