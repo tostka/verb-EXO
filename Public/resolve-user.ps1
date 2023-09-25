@@ -18,6 +18,10 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:59 PM 9/25/2023 working, ready to drop back into vxo finished in-port of get-xoMailboxQuotaStatus support, now functional, also expanded the mbxstat filter to cover room|shared|Equip recipienttypedetails variants; 
+        appears I spliced over $getQuotaUsage support from get-xoMailboxQuotaStatus, looks like it needs to be debugged.
+    * 12:43 PM 9/18/2023 re-removed the obsolete xow support: EOM31+ doesn't need it.
+    * 3:47 PM 12/14/2022 spliced in xow support. Works on initial pass.
     # 3:57 PM 6/29/2022 fundemental retool for exov2 requirements; pulled all 
         aliasing (wasn't functional for exov2, didn't want to rewrite, and with hard 
         mfa req, exov2 is only way forward, there'll never be verb-EXOnoun use again, 
@@ -61,8 +65,12 @@ function resolve-user {
     .DESCRIPTION
     .PARAMETER  users
     Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)
+    .PARAMETER Ticket
+    Ticket number[-ticket 123456]
     .PARAMETER getMobile
     switch to return mobiledevice info for target XO Mailbox (not supported for onprem mailboxes)[-getMobile]
+    .PARAMETER getQuotaUsage
+    switch to return Quota & MailboxFolderStatistics analysis (XO-only)[-getQuotaUsage]
     .PARAMETER useEXOv2
     Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
     .PARAMETER outObject
@@ -117,13 +125,16 @@ function resolve-user {
     .EXAMPLE
     PS> resolve-user -users 'John Public' -getmobile
     Example that includes the -getMobile parameter, to return details on xo MobileDevices in use with the EXO mailbox
+    .EXAMPLE
+    PS> resolve-user -users 'John Public' -getQuotaUsage
+    Example that includes the -getQuotaUsage parameter, to return details on xo MailboxFolderStatistics and effective Quota
     .LINK
     https://github.com/tostka/verb-exo
     #>
     ###Requires -Version 5
     ##Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
     # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
-    #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS
+    #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging
     #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.DOMAIN\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
@@ -133,18 +144,48 @@ function resolve-user {
         #[Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)")]
         # failing to map pipeline to $users, reduce to Value from Pipeline
         [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)")]
-        #[ValidateNotNullOrEmpty()]
-        #[Alias('ALIAS1', 'ALIAS2')]
-        [array]$users,
+            #[ValidateNotNullOrEmpty()]
+            #[Alias('ALIAS1', 'ALIAS2')]
+            [array]$users,
+        [Parameter(Mandatory=$False,HelpMessage="Ticket Number [-Ticket '999999']")]
+            [string]$Ticket,
         [Parameter(HelpMessage="switch to return mobiledevice info for target user[-getMobile]")]
-        [switch] $getMobile,
+            [switch] $getMobile,
+        [Parameter(HelpMessage="switch to return Quota & MailboxFolderStatistics analysis (XO-only)[-getQuotaUsage]")]
+            [switch]$getQuotaUsage,
+        [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
+        [ValidateNotNullOrEmpty()]
+            #[ValidatePattern("^\w{3}$")]
+            [string]$TenOrg = $global:o365_TenOrgDefault,
+        [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
+            [System.Management.Automation.PSCredential]$Credential,
+        [Parameter(Mandatory = $false, HelpMessage = "Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]")]
+            # sourced from get-admincred():#182: $targetRoles = 'SID', 'CSID', 'ESVC','CSVC','UID','ESvcCBA','CSvcCBA','SIDCBA' ;
+            #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
+            # pulling the pattern from global vari w friendly err
+            [ValidateScript({
+                if(-not $rgxPermittedUserRoles){$rgxPermittedUserRoles = '(SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)'} ;
+                if(-not ($_ -match $rgxPermittedUserRoles)){throw "'$($_)' doesn't match `$rgxPermittedUserRoles:`n$($rgxPermittedUserRoles.tostring())" ; } ;
+                return $true ;
+            })]
+            [string[]]$UserRole = @('SID','CSVC'),
+            # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
         [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
-        [switch] $useEXOv2=$true,
+            [switch] $useEXOv2=$true,
+        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
+            [switch] $silent,
         [Parameter(HelpMessage="switch to return a system.object summary to the pipeline[-outObject]")]
-        [switch] $outObject
+            [switch] $outObject
     ) ;
     BEGIN{
-        $Verbose = ($VerbosePreference -eq 'Continue') ;
+        # for scripts wo support, can use regions to fake BEGIN;PROCESS;END:
+        # ps1 faked:#region BEGIN ; #*------v BEGIN v------
+        #region CONSTANTS-AND-ENVIRO #*======v CONSTANTS-AND-ENVIRO v======
+        # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
+        ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+        $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+        write-verbose "`$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
+        $Verbose = ($VerbosePreference -eq 'Continue') ; 
         $rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ;
         # added support for . fname lname delimiter (supports pasted in dirname of email addresses, as user)
         $rgxDName = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
@@ -179,6 +220,7 @@ function resolve-user {
         $propsAADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName',
             'StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone','Enabled','DistinguishedName' ;
         #'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime','AccountEnabled' ;
+
         $propsAADUfed = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
         $propsRcpTbl = 'Alias','PrimarySmtpAddress','RecipientType','RecipientTypeDetails' ;
         # line1-X AADU outputs
@@ -247,6 +289,26 @@ function resolve-user {
                 @{Name='LastSuccSync';Expression={(get-date $_.LastSuccessSync -format 'M/d/yy H:mmtt') }},
                 @{Name='#Folders';Expression={$_.NumberOfFoldersSynced }} ; 
         } ; 
+        if($getQuotaUsage){
+
+            # 12:54 PM 9/18/2023 adds for MbxFolderStats, Quota & LegalHold eval:
+            $prpStat = 'DisplayName',@{n="DBIssueWarningQuotaMB";e={[math]::round($_.DatabaseIssueWarningQuota.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}},
+                @{n="DBProhibitSendQuotaMB";e={[math]::round($_.DatabaseProhibitSendQuota.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}},
+                @{n="DBProhibitSendReceiveQuotaMB";e={[math]::round($_.DatabaseProhibitSendReceiveQuota.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}},
+                @{n="TotalMailboxSizeMB";e={[math]::round($_.TotalItemSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}},
+                'LastLogonTime' ,'LastLogoffTime' ;
+
+            $prpFldr = @{Name='Folder'; Expression={$_.Identity.tostring()}},@{Name="Items"; Expression={$_.ItemsInFolder}}, 
+                @{n="SizeMB"; e={[math]::round($_.FolderSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}}, 
+                @{Name="OldestItem"; Expression={get-date $_.OldestItemReceivedDate -f "yyyyMMdd"}}, 
+                @{Name="NewestItem"; Expression={$_.NewestItemReceivedDate -f "yyyyMMdd"}},"FolderType" ;
+
+            $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.InPlaceHolds | select -expand InPlaceHolds) -join ', '}},
+                'ComplianceTagHoldApplied','DelayHoldApplied','DelayReleaseHoldApplied' ; 
+
+            $rgxHiddn = '.*\\(Versions|SubstrateHolds|DiscoveryHolds|Yammer.*|Social\sActivity\sNotifications|Suggested\sContacts|Recipient\sCache|PersonMetadata|Audits|Calendar\sLogging|Purges)$' ; 
+
+        } ; 
         $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
 
@@ -263,86 +325,601 @@ function resolve-user {
             write-verbose "($(($users|measure).count)) user(s) specified:`n'$($users -join "','")'" ;
         } ;
         #>
+
+        # pre psv2, no $PSBoundParameters autovari to check, so back them out:
+        write-verbose 'Collect all non-default Params (works back to psv2 w CmdletBinding)'
+        $ParamsNonDefault = (Get-Command $PSCmdlet.MyInvocation.InvocationName).parameters | Select-Object -expand keys | Where-Object{$_ -notmatch '(Verbose|Debug|ErrorAction|WarningAction|ErrorVariable|WarningVariable|OutVariable|OutBuffer)'} ;
+
+        #if ($PSScriptRoot -eq "") {
+        if( -not (get-variable -name PSScriptRoot -ea 0) -OR ($PSScriptRoot -eq '')){
+            if ($psISE) { $ScriptName = $psISE.CurrentFile.FullPath } 
+            elseif($psEditor){
+                if ($context = $psEditor.GetEditorContext()) {$ScriptName = $context.CurrentFile.Path } 
+            } elseif ($host.version.major -lt 3) {
+                $ScriptName = $MyInvocation.MyCommand.Path ;
+                $PSScriptRoot = Split-Path $ScriptName -Parent ;
+                $PSCommandPath = $ScriptName ;
+            } else {
+                if ($MyInvocation.MyCommand.Path) {
+                    $ScriptName = $MyInvocation.MyCommand.Path ;
+                    $PSScriptRoot = Split-Path $MyInvocation.MyCommand.Path -Parent ;
+                } else {throw "UNABLE TO POPULATE SCRIPT PATH, EVEN `$MyInvocation IS BLANK!" } ;
+            };
+            if($ScriptName){
+                $ScriptDir = Split-Path -Parent $ScriptName ;
+                $ScriptBaseName = split-path -leaf $ScriptName ;
+                $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($ScriptName) ;
+            } ; 
+        } else {
+            if($PSScriptRoot){$ScriptDir = $PSScriptRoot ;}
+            else{
+                write-warning "Unpopulated `$PSScriptRoot!" ; 
+                $ScriptDir=(Split-Path -parent $MyInvocation.MyCommand.Definition) + "\" ;
+            }
+            if ($PSCommandPath) {$ScriptName = $PSCommandPath } 
+            else {
+                $ScriptName = $myInvocation.ScriptName
+                $PSCommandPath = $ScriptName ;
+            } ;
+            $ScriptBaseName = (Split-Path -Leaf ((& { $myInvocation }).ScriptName))  ;
+            $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName) ;
+        } ;
+        if(-not $ScriptDir){
+            write-host "Failed `$ScriptDir resolution on PSv$($host.version.major): Falling back to $MyInvocation parsing..." ; 
+            $ScriptDir=(Split-Path -parent $MyInvocation.MyCommand.Definition) + "\" ;
+            $ScriptBaseName = (Split-Path -Leaf ((&{$myInvocation}).ScriptName))  ; 
+            $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($MyInvocation.InvocationName) ;     
+        } else {
+            if(-not $PSCommandPath ){
+                $PSCommandPath  = $ScriptName ; 
+                if($PSCommandPath){ write-host "(Derived missing `$PSCommandPath from `$ScriptName)" ; } ;
+            } ; 
+            if(-not $PSScriptRoot  ){
+                $PSScriptRoot   = $ScriptDir ; 
+                if($PSScriptRoot){ write-host "(Derived missing `$PSScriptRoot from `$ScriptDir)" ; } ;
+            } ; 
+        } ; 
+        if(-not ($ScriptDir -AND $ScriptBaseName -AND $ScriptNameNoExt)){ 
+            throw "Invalid Invocation. Blank `$ScriptDir/`$ScriptBaseName/`ScriptNameNoExt" ; 
+            BREAK ; 
+        } ; 
+
+        $smsg = "`$ScriptDir:$($ScriptDir)" ;
+        $smsg += "`n`$ScriptBaseName:$($ScriptBaseName)" ;
+        $smsg += "`n`$ScriptNameNoExt:$($ScriptNameNoExt)" ;
+        $smsg += "`n`$PSScriptRoot:$($PSScriptRoot)" ;
+        $smsg += "`n`$PSCommandPath:$($PSCommandPath)" ;  ;
+        write-verbose $smsg ; 
+
+        if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
+        if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
+        if(-not $RetrySleep){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
+        if(-not $DirSyncInterval){$DirSyncInterval = 30 } ; # AADConnect dirsync interval
+        if(-not $ThrottleMs){$ThrottleMs = 50 ;}
+        if(-not $rgxDriveBanChars){$rgxDriveBanChars = '[;~/\\\.:]' ; } ; # ;~/\.:,
+        if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' } ; # if it's a 40char hex string -> cert thumbprint  
+        if(-not $rgxSmtpAddr){$rgxSmtpAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ; } ; # email addr/UPN
+        if(-not $rgxDomainLogon){$rgxDomainLogon = '^[a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]+$' } ; # DOMAIN\samaccountname 
+        if(-not $exoMbxGraceDays){$exoMbxGraceDays = 30} ; 
+
+
         # 3:19 PM 6/23/2022: for exo2, this is going to have to be rearranged, if not shifted into smarter cxo2.
         <#rx10 -Verbose:$false ;
         rxo  -Verbose:$false ;
         cmsol  -Verbose:$false ;
         #>
-        dx10 ; 
+        <#dx10 ; 
         rxo2 ; 
         rx10 ; 
         caad ;
+        #>
+
+        # 1:00 PM 9/18/2023 splice in modern svcconns
+        #region SERVICE_CONNECTIONS #*======v SERVICE_CONNECTIONS v======
+        # PRETUNE STEERING separately *before* pasting in balance of region
+        #*------v STEERING VARIS v------
+        $useO365 = $true ;
+        $useEXO = $true ; 
+        $UseOP=$true  ; 
+        $UseExOP=$true ;
+        $useForestWide = $true ; # flag to trigger cross-domain/forest-wide code in AD & EXoP
+        $UseOPAD = $true ; 
+        $UseMSOL = $false ; # should be hard disabled now in o365
+        $UseAAD = $true  ; 
+        $useO365 = [boolean]($useO365 -OR $useEXO -OR $UseMSOL -OR $UseAAD)
+        $UseOP = [boolean]($UseOP -OR $UseExOP -OR $UseOPAD) ;
+        #*------^ END STEERING VARIS ^------
+        #*------v EXO V2/3 steering constants v------
+        $EOMModName =  'ExchangeOnlineManagement' ;
+        $EOMMinNoWinRMVersion = $MinNoWinRMVersion = '3.0.0' ; # support both names
+        #*------^ END EXO V2/3 steering constants ^------
+        # assert Org from Credential specs (if not param'd)
+        # 1:36 PM 7/7/2023 and revised again -  revised the -AND, for both, logic wasn't working
+        if($TenOrg){    
+            $smsg = "Confirmed populated `$TenOrg" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } elseif(-not($tenOrg) -and $Credential){
+            $smsg = "(unconfigured `$TenOrg: asserting from credential)" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            $TenOrg = get-TenantTag -Credential $Credential ;
+        } else { 
+            # if not using Credentials or a TargetTenants/TenOrg loop, default the $TenOrg on the $env:USERDOMAIN
+            $smsg = "(unconfigured `$TenOrg & *NO* `$Credential: fallback asserting from `$env:USERDOMAIN)" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            switch -regex ($env:USERDOMAIN){
+                ([regex]('(' + (( @($TORMeta.legacyDomain,$CMWMeta.legacyDomain)  |foreach-object{[regex]::escape($_)}) -join '|') + ')')).tostring() {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
+                $TOLMeta.legacyDomain {$TenOrg = 'TOL' }
+                default {throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; exit ; } ;
+            } ; 
+        } ; 
+        #region useO365 ; #*------v useO365 v------
+        #$useO365 = $false ; # non-dyn setting, drives variant EXO reconnect & query code
+        #if($CloudFirst){ $useO365 = $true } ; # expl: steering on a parameter
+        if($useO365){
+            #region GENERIC_EXO_CREDS_&_SVC_CONN #*------v GENERIC EXO CREDS & SVC CONN BP v------
+            # o365/EXO creds
+            <### Usage: Type defaults to SID, if not spec'd - Note: there must be a *logged in & configured *profile*
+            $o365Cred = get-TenantCredentials -TenOrg $TenOrg -verbose -userrole SID ;
+            Returns a credential set for the $TenOrg Hybrid OnPrem Exchange Org
+            .EXAMPLE
+            $o365Cred = get-TenantCredentials -TenOrg $TenOrg -verbose -userrole CSVC ;
+            Returns the CSVC Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
+            .EXAMPLE
+            $o365Cred = get-TenantCredentials -TenOrg $TenOrg -verbose -userrole B2BI ;
+            Returns the B2BI Userrole credential for the $TenOrg Hybrid OnPrem Exchange Org
+            ###>
+            $o365Cred = $null ;
+            if($Credential){
+                $smsg = "`Credential:Explicit credentials specified, deferring to use..." ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                 # get-TenantCredentials() return format: (emulating)
+                 $o365Cred = [ordered]@{
+                    Cred=$Credential ; 
+                    credType=$null ; 
+                } ; 
+                $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; # Username
+                #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;   # full Credential support
+                if($uRoleReturn.UserRole){
+                    $o365Cred.credType = $uRoleReturn.UserRole ; 
+                } else { 
+                    $smsg = "Unable to resolve `$credential.username ($($credential.username))"
+                    $smsg += "`nto a usable 'UserRole' spec!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    throw $smsg ;
+                    Break ;
+                } ; 
+            } else { 
+                $pltGTCred=@{TenOrg=$TenOrg ; UserRole=$null; verbose=$($verbose)} ;
+                if($UserRole){
+                    $smsg = "(`$UserRole specified:$($UserRole -join ','))" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $pltGTCred.UserRole = $UserRole; 
+                } else { 
+                    $smsg = "(No `$UserRole found, defaulting to:'CSVC','SID' " ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    $pltGTCred.UserRole = 'CSVC','SID' ; 
+                } ; 
+                $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $o365Cred = get-TenantCredentials @pltGTCred
+            } ; 
+            if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                #$smsg = "(Resolved credentials CredType/UserRole as: $($o365Cred.credType)" ; 
+                $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } else { 
+                $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                break ; 
+            } ; 
+            if($o365Cred){
+                # make it script scope, so we don't have to predetect & purge before using new-variable
+                if(get-Variable -Name cred$($tenorg) -scope Script -ea 0 ){ remove-Variable -Name cred$($tenorg) -scope Script } ;
+                New-Variable -Name cred$($tenorg) -scope Script -Value $o365Cred.cred ;
+                $smsg = "Resolved $($Tenorg) `$o365cred:$($o365Cred.cred.username) (assigned to `$cred$($tenorg))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } else {
+                $statusdelta = ";ERROR";
+                $script:PassStatus += $statusdelta ;
+                set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatettus_$($tenorg)).value + $statusdelta) ;
+                $smsg = "Unable to resolve $($tenorg) `$o365Cred value!"
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw "Unable to resolve $($tenorg) `$o365Cred value!`nEXIT!"
+                Break ;
+            } ;
+            # configure splat for connections: (see above useage)
+            # downstream commands
+            $pltRXO = [ordered]@{
+                Credential = $Credential ;
+                verbose = $($VerbosePreference -eq "Continue")  ;
+            } ;
+            if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+                $pltRxo.add('Silent',$silent) ;
+            } ;
+            # default connectivity cmds - force silent false
+            $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ; 
+            if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){
+                $pltRxo.remove('Silent') ;
+            } ; 
+            #region EOMREV ; #*------v EOMREV Check v------
+            #$EOMmodname = 'ExchangeOnlineManagement' ;
+            $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
+            # do a gmo first, faster than gmo -list
+            if([version]$EOMMv = (Get-Module @pltIMod).version){}
+            elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod).version){}
+            else {
+                $smsg = "$($EOMmodname) PowerShell v$($MinNoWinRMVersion) module is required, do you want to install it?" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                else{ write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $bRet = Read-Host "Enter YYY to continue. Anything else will exit"  ;
+                if ($bRet.ToUpper() -eq "YYY") {
+                    $smsg = "Installing $($EOMmodname) module..." ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    Install-Module $EOMmodname -Repository PSGallery -AllowClobber -Force ;
+                } else {
+                    $smsg = "Please install $($EOMmodname) PowerShell v$($MinNoWinRMVersion)  module." ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #exit 1
+                    break ;
+                }  ;
+            } ;
+            $smsg = "(Checking for WinRM support in this EOM rev...)" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            if([version]$EOMMv -ge [version]$MinNoWinRMVersion){
+                $MinNoWinRMVersion = $EOMMv.tostring() ;
+                $IsNoWinRM = $true ;
+            }elseif([version]$EOMMv -lt [version]$MinimumVersion){
+                $smsg = "Installed $($EOMmodname) is v$($MinNoWinRMVersion): This module is obsolete!" ;
+                $smsg += "`nAnd unsupported by this function!" ;
+                $smsg += "`nPlease install $($EOMmodname) PowerShell v$($MinNoWinRMVersion)  module!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Break ;
+            } else {
+                $IsNoWinRM = $false ;
+            } ;
+            [boolean]$UseConnEXO = [boolean]([version]$EOMMv -ge [version]$MinNoWinRMVersion) ;
+            #endregion EOMREV ; #*------^ END EOMREV Check  ^------
+            #-=-=-=-=-=-=-=-=
+            <### CALLS ARE IN FORM: (cred$($tenorg))
+            # downstream commands
+            $pltRXO = @{
+                Credential = (Get-Variable -name cred$($tenorg) ).value ;
+                #verbose = $($verbose) ;
+                Verbose = $FALSE ; 
+            } ;
+            if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+                $pltRxo.add('Silent',$false) ;
+            } ; 
+            # default connectivity cmds - force silent false
+            $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
+            if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){
+                $pltRxo.remove('Silent') ;
+            } ; 
+            #$pltRXO creds & .username can also be used for AzureAD connections:
+            #Connect-AAD @pltRXOC ;
+            ###>
+            #endregion GENERIC_EXO_CREDS_&_SVC_CONN #*------^ END GENERIC EXO CREDS & SVC CONN BP ^------
+
+        } else {
+            $smsg = "(`$useO365:$($useO365))" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } ; # if-E if($useO365 ){
+        #endregion useO365 ; #*------^ END useO365 ^------
+
+        #region useEXO ; #*------v useEXO v------
+        # 1:29 PM 9/15/2022 as of MFA & v205, have to load EXO *before* any EXOP, or gen get-steppablepipeline suffix conflict error
+        if($useEXO){
+            if ($script:useEXOv2 -OR $useEXOv2) { reconnect-eXO2 @pltRXOC }
+            else { reconnect-EXO @pltRXOC } ;
+        } else {
+            $smsg = "(`$useEXO:$($useEXO))" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } ; # if-E 
+        #endregion  ; #*------^ END useEXO ^------
+        
+        #region GENERIC_EXOP_CREDS_&_SRVR_CONN #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
+        # steer all onprem code on $XXXMeta.ExOPAccessFromToro & Ex10Server values
+        #$UseOP=$true ; 
+        #$UseExOP=$true ;
+        #$useForestWide = $true ; # flag to trigger cross-domain/forest-wide code in AD & EXoP
+        <# no onprem dep
+        if((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro -AND (Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server){
+            $UseOP = $UseExOP = $true ;
+            $smsg = "$($TenOrg):Meta.ExOPAccessFromToro($((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro)) -AND/OR Meta.Ex10Server($((Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server)),`ENABLING use of OnPrem Ex system this pass." ;
+            if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+        } else {
+            $UseOP = $UseExOP = $false ;
+            $smsg = "$($TenOrg):Meta.ExOPAccessFromToro($((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro)) -AND/OR Meta.Ex10Server($((Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server)),`nDISABLING use of OnPrem Ex system this pass." ;
+            if($verbose){ if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+        } ;
+        #>
+        if($UseOP){
+            #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
+            # do the OP creds too
+            $OPCred=$null ;
+            # default to the onprem svc acct
+            # userrole='ESVC','SID'
+            #$pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC','SID'; verbose=$($verbose)} ;
+            # userrole='SID','ESVC'
+            $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='SID','ESVC'; verbose=$($verbose)} ;
+            $smsg = "get-HybridOPCredentials w`n$(($pltGHOpCred|out-string).trim())" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
+                # make it script scope, so we don't have to predetect & purge before using new-variable
+                if(get-Variable -Name "cred$($tenorg)OP" -scope Script -ea 0 ){ remove-Variable -Name "cred$($tenorg)OP" -scope Script } ;
+                New-Variable -Name "cred$($tenorg)OP" -scope Script -Value $OPCred ;
+                $smsg = "Resolved $($Tenorg) `$OPCred:$($OPCred.username) (assigned to `$cred$($tenorg)OP)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } else {
+                $statusdelta = ";ERROR";
+                $script:PassStatus += $statusdelta ;
+                set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
+                $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw "Unable to resolve $($tenorg) `$OPCred value!`nEXIT!"
+                Break ;
+            } ;
+            $smsg= "Using OnPrem/EXOP cred:`$cred$($tenorg)OP:$((Get-Variable -name "cred$($tenorg)OP" ).value.username)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            <### CALLS ARE IN FORM: (cred$($tenorg))
+            $pltRX10 = @{
+                Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
+                #verbose = $($verbose) ;
+                Verbose = $FALSE ; 
+            } ;
+            $1stConn = $false ; # below uses silent suppr for both x10 & xo!
+            if($1stConn){
+                $pltRX10.silent = $pltRXO.silent = $false ;
+            } else {
+                $pltRX10.silent = $pltRXO.silent =$true ;
+            } ;
+            if($pltRX10){ReConnect-Ex2010 @pltRX10 }
+            else {ReConnect-Ex2010 }
+            #$pltRx10 creds & .username can also be used for local ADMS connections
+            ###>
+            $pltRX10 = @{
+                Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
+                #verbose = $($verbose) ;
+                Verbose = $FALSE ; 
+            } ;
+            if((gcm Reconnect-Ex2010).Parameters.keys -contains 'silent'){
+                $pltRX10.add('Silent',$false) ;
+            } ;
+
+            # defer cx10/rx10, until just before get-recipients qry
+            #endregion GENERIC_EXOP_CREDS_&_SRVR_CONN #*------^ END GENERIC EXOP CREDS & SRVR CONN BP ^------
+            # connect to ExOP X10
+            if($useEXOP){
+                if($pltRX10){
+                    #ReConnect-Ex2010XO @pltRX10 ;
+                    ReConnect-Ex2010 @pltRX10 ;
+                } else { Reconnect-Ex2010 ; } ;
+                #Add-PSSnapin -Name 'Microsoft.Exchange.Management.PowerShell.SnapIn'
+                #TK: add: test Exch & AD functional connections
+                TRY{
+                    if(get-command -module (get-module |?{$_.name -like 'tmp_*'}).name -name 'get-OrganizationConfig'){} else {
+                        $smsg = "(mangled Ex10 conn: dx10,rx10...)" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        disconnect-ex2010 ; reconnect-ex2010 ; 
+                    } ; 
+                    if(-not ($OrgName = ((get-OrganizationConfig).DistinguishedName.split(',') |?{$_ -like 'DC=*'}) -join '.' -replace 'DC=','')){
+                        $smsg = "Missing Exchange Connection! (no (Get-OrganizationConfig).name returned)" ; 
+                        throw $smsg ; 
+                        $smsg | write-warning  ; 
+                    } ; 
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = $ErrTrapd ;
+                    $smsg += "`n";
+                    $smsg += $ErrTrapd.Exception.Message ;
+                    if ($logging) { _write-log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    CONTINUE ;
+                } ;
+            } else { 
+            
+            } ; 
+            if($useForestWide){
+                #region  ; #*------v OPTIONAL CODE TO ENABLE FOREST-WIDE NATIVE EXCHANGE SUPPORT v------
+                $smsg = "(`$useForestWide:$($useForestWide)):Enabling EXoP Forestwide)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $smsg = 'Set-AdServerSettings -ViewEntireForest `$True' ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Set-AdServerSettings -ViewEntireForest $True ;
+                #endregion  ; #*------^ END OPTIONAL CODE TO ENABLE FOREST-WIDE NATIVE EXCHANGE SUPPORT ^------
+            } ;
+        } else {
+            $smsg = "(`$useOP:$($UseOP))" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        }  ;  # if-E $UseOP
+
+        #region UseOPAD #*------v UseOPAD v------
+        if($UseOP -OR $UseOPAD){
+            #region GENERIC_ADMS_CONN_&_XO #*------v GENERIC ADMS CONN & XO  v------
+            $smsg = "(loading ADMS...)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            # always capture load-adms return, it outputs a $true to pipeline on success
+            $ADMTLoaded = load-ADMS -Verbose:$FALSE ;
+            # 9:32 AM 4/20/2023 trimmed disabled/fw-borked cross-org code
+            TRY {
+                if(-not(Get-ADDomain  -ea STOP).DNSRoot){
+                    $smsg = "Missing AD Connection! (no (Get-ADDomain).DNSRoot returned)" ; 
+                    throw $smsg ; 
+                    $smsg | write-warning  ; 
+                } ; 
+                $objforest = get-adforest -ea STOP ; 
+                # Default new UPNSuffix to the UPNSuffix that matches last 2 elements of the forestname.
+                $forestdom = $UPNSuffixDefault = $objforest.UPNSuffixes | ?{$_ -eq (($objforest.name.split('.'))[-2..-1] -join '.')} ; 
+                if($useForestWide){
+                    #region  ; #*------v OPTIONAL CODE TO ENABLE FOREST-WIDE AD GC QRY SUPPORT v------
+                    $smsg = "(`$useForestWide:$($useForestWide)):Enabling AD Forestwide)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $smsg = 'Set-AdServerSettings -ViewEntireForest `$True' ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #TK 9:44 AM 10/6/2022 need org wide for rolegrps in parent dom (only for onprem RBAC, not EXO)
+                    $GcFwide = "$((Get-ADDomainController -Discover -Service GlobalCatalog).hostname):3268" ;        
+                    #endregion  ; #*------^ END  OPTIONAL CODE TO ENABLE FOREST-WIDE AD GC QRY SUPPORT  ^------
+                } ;    
+            } CATCH {
+                $ErrTrapd=$Error[0] ;
+                $smsg = $ErrTrapd ;
+                $smsg += "`n";
+                $smsg += $ErrTrapd.Exception.Message ;
+                if ($logging) { _write-log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                CONTINUE ;
+            } ;        
+            #endregion GENERIC_ADMS_CONN_&_XO #*------^ END GENERIC ADMS CONN & XO ^------
+        } else {
+            $smsg = "(`$UseOP:$($UseOP))" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        }  ;
+        #if (!$domaincontroller) { $domaincontroller = get-gcfast } ;
+        #if(!$domaincontroller){ if(test-path function:get-gcfast){$domaincontroller = get-gcfast} else { throw "no get-gcfast()!" } ;} else {"(existing `$domaincontroller:$($domaincontroller))"} ;
+        # use new get-GCFastXO cross-org dc finde
+        # default to Op_ExADRoot forest from $TenOrg Meta
+        #if($UseOP -AND -not $domaincontroller){
+        if($UseOP -AND -not (get-variable domaincontroller -ea 0)){
+            #$domaincontroller = get-GCFastXO -TenOrg $TenOrg -subdomain ((gv -name "$($TenOrg)Meta").value['OP_ExADRoot']) -verbose:$($verbose) |?{$_.length};
+            # need to debug the above, credential issue?
+            # just get it done
+            $domaincontroller = get-GCFast
+        }  else { 
+            # have to defer to get-azuread, or use EXO's native cmds to poll grp members
+            # TODO 1/15/2021
+            $useEXOforGroups = $true ; 
+            $smsg = "$($TenOrg):HAS NO ON-PREM ACTIVEDIRECTORY, DEFERRING ALL GROUP ACCESS & MGMT TO NATIVE EXO CMDS!" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        } ; 
+        if($useForestWide -AND -not $GcFwide){
+            #region  ; #*------v OPTIONAL CODE TO ENABLE FOREST-WIDE ACTIVEDIRECTORY SUPPORT: v------
+            $smsg = "`$GcFwide = Get-ADDomainController -Discover -Service GlobalCatalog" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            $GcFwide = "$((Get-ADDomainController -Discover -Service GlobalCatalog).hostname):3268" ;
+            $smsg = "Discovered `$GcFwide:$($GcFwide)" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #endregion  ; #*------^ END OPTIONAL CODE TO ENABLE FOREST-WIDE ACTIVEDIRECTORY SUPPORT ^------
+        } ;
+        #endregion UseOPAD #*------^ END UseOPAD ^------
+
+        #region MSOL_CONNECTION ; #*------v  MSOL CONNECTION v------
+        #$UseMSOL = $false 
+        if($UseMSOL){
+            #$reqMods += "connect-msol".split(";") ;
+            #if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
+            $smsg = "(loading MSOL...)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } Error|Warn|Debug
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #connect-msol ;
+            connect-msol @pltRXOC ;
+        } else {
+            $smsg = "(`$UseMSOL:$($UseMSOL))" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } ;
+        #endregion MSOL_CONNECTION ; #*------^  MSOL CONNECTION ^------
+
+        #region AZUREAD_CONNECTION ; #*------v AZUREAD CONNECTION v------
+        #$UseAAD = $false 
+        if($UseAAD){
+            #$reqMods += "Connect-AAD".split(";") ;
+            #if ( !(check-ReqMods $reqMods) ) { write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; Break ; }  ;
+            $smsg = "(loading AAD...)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            Connect-AAD @pltRXOC ;
+        } else {
+            $smsg = "(`$UseAAD:$($UseAAD))" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } ;
+        #endregion AZUREAD_CONNECTION ; #*------^ AZUREAD CONNECTION ^------
+        
+        <# defined above
+        # EXO connection
+        $pltRXO = @{
+            Credential = (Get-Variable -name cred$($tenorg) ).value ;
+            verbose = $($verbose) ; } ;
+        #>
+        <#
+        if($VerbosePreference = "Continue"){
+            $VerbosePrefPrior = $VerbosePreference ;
+            $VerbosePreference = "SilentlyContinue" ;
+            $verbose = ($VerbosePreference -eq "Continue") ;
+        } ;
+        disconnect-exo ;
+        if ($script:useEXOv2) { reconnect-eXO2 @pltRXOC }
+        else { reconnect-EXO @pltRXOC } ;
+        # reenable VerbosePreference:Continue, if set, during mod loads
+        if($VerbosePrefPrior -eq "Continue"){
+            $VerbosePreference = $VerbosePrefPrior ;
+            $verbose = ($VerbosePreference -eq "Continue") ;
+        } ;
+        #>
+        #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+        #endregion SERVICE_CONNECTIONS #*======^ END SERVICE_CONNECTIONS ^======
+    
 
         # finally if we're using pipeline, and aggregating, we need to aggreg outside of the process{} block
         if($PSCmdlet.MyInvocation.ExpectingInput){
             # pipeline instantiate an aggregator here
         } ;
 
-        #*------V ALIAS XO CMDLETS FOR EXOV2 V------
-        # simple loop to stock the set, no set->get conversion, roughed in $Exov2 exo->xo replace. Do specs in exo, and flip to suit under $exov2
-        #configure EXO EMS aliases to cover useEXOv2 requirements
-        # have to preconnect, as it gcm's the targets
-        #if ($script:useEXOv2) { reconnect-eXO2 }
-        <# disable entire aliasing, xo2 is only way forward
-        # pull scope
-        if ($useEXOv2) { reconnect-eXO2 }
-        else { reconnect-EXO } ;
-        # aliased ExOP|EXO|EXOv2 cmdlets (permits simpler single code block for any of the three variants of targets & syntaxes)
-        # each is '[aliasname];[exOcmd] (xOv2cmd & exop are converted from [exocmd])
-        [array]$cmdletMaps = '', '', '', 
-            '', '', '' ;
-        [array]$XoOnlyMaps = 'ps1GetxMsgTrcDtl','ps1TestxOAuthConn' ; # cmdlet alias names from above that are skipped for aliasing in EXOP
-        # cmdlets from above that have diff names EXO v EXoP: these each have  schema: [alias];[xoCmdlet];[opCmdlet]; op Aliases use the opCmdlet as target
-        [array]$XoRenameMaps = '','',
-                '' ;
-        [array]$Xo2VariantMaps =   '', '',
-            '', '' ;
-        # cmdlets above have XO2 enhanced variant-named versions to target (they never are prefixed verb-xo[noun], always/only verb-exo[noun])
-        # code to summarize & indexed-hash the renamed cmdlets for variant processing
-        $XoRenameMapNames = @() ;
-        $oxoRenameMaps = @{} ;
-        $XoRenameMaps | foreach {     $XoRenameMapNames += $_.split(';')[0] ;     $name = $_.split(';')[0] ;     $oxoRenameMaps[$name] = $_.split(';')  ;  } ;
-        $Xo2VariantMapNames = @() ;
-        $oXo2VariantMaps = @{} ;
-        $Xo2VariantMaps | foreach {  $Xo2VariantMapNames += $_.split(';')[0] ;  $name = $_.split(';')[0] ;  $oXo2VariantMaps[$name] = $_.split(';') ; } ;
-        #$cmdletMapsFltrd = $cmdletmaps|?{$_.split(';')[1] -like '*DistributionGroup*'} ;  # filtering subset
-        #$cmdletMapsFltrd += $cmdletmaps|?{$_.split(';')[1] -like '*recipient'}
-        $cmdletMapsFltrd = $cmdletmaps ; # or use full set
-        foreach($cmdletMap in $cmdletMapsFltrd){
-            if($useEXOv2){
-                if($Xo2VariantMapNames -contains $cmdletMap.split(';')[0]){
-                    write-verbose "$($cmdletMap.split(';')[1]) has an XO2-VARIANT cmdlet, renaming for XOV2 enhanced variant" ;
-                    # sub -exoNOUN -> -NOUN using ExOP variant cmdlet
-                    #if(!($cmdlet= Get-Command $oXo2VariantMaps[($cmdletMap.split(';')[0])][2] )){ throw "unable to gcm Alias definition!:$($oxoRenameMaps[($cmdletMap.split(';')[0])][2])" ; break }
-                    # .replace('-exo','-xo')
-                    if(!($cmdlet= Get-Command $oXo2VariantMaps[$cmdletMap.split(';')[1].replace('-exo','-xo')][2] )){ throw "unable to gcm Alias definition!:$($oxoRenameMaps[($cmdletMap.split(';')[0])][2])" ; break }
-                    $nAName = ($cmdletMap.split(';')[0]);
-                    if(-not(get-alias -name $naname -ea 0 |?{$_.Definition -eq $cmdlet.name})){
-                        $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
-                        write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
-                    } ;
-                } else {
-                    # common cmdlets between all 3 systems
-                    if(!($cmdlet= Get-Command $cmdletMap.split(';')[1].replace('-exo','-xo') )){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
-                    $nAName = ($cmdletMap.split(';')[0]) ;
-                    if(-not(get-alias -name $naname -ea 0 |?{$_.Definition -eq $cmdlet.name})){
-                        $nalias = set-alias -name $nAName -value ($cmdlet.name) -passthru ;
-                        write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
-                    } ;
-                } ;
-            } else {
-                if(!($cmdlet= Get-Command $cmdletMap.split(';')[1])){ throw "unable to gcm Alias definition!:$($cmdletMap.split(';')[1])" ; break }
-                $nAName = ($cmdletMap.split(';')[0]);
-                if(-not(get-alias -name $naname -ea 0 |?{$_.Definition -eq $cmdlet.name})){
-                    $nalias = set-alias -name ($cmdletMap.split(';')[0]) -value ($cmdlet.name) -passthru ;
-                    write-verbose "$($nalias.Name) -> $($nalias.ResolvedCommandName)" ;
-                } ;
-            } ;
-        } ;# ...
-        #*------^ END ALIAS XO CMDLETS FOR EXOV2 ^------
-        #>
+        # check if using Pipeline input or explicit params:
+        if ($PSCmdlet.MyInvocation.ExpectingInput) {
+            $smsg = "Data received from pipeline input: '$($InputObject)'" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } else {
+            # doesn't actually return an obj in the echo
+            #$smsg = "Data received from parameter input: '$($InputObject)'" ;
+            #if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            #else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } ;
+
+
     }
     PROCESS{
+        # ps1 faked: #region PROCESS ; #*------v PROCESS:$($identity -join ',') v------
+
         #$dname= 'Todd Kadrie' ;
         #$dname = 'Stacy Sotelo'
 
@@ -366,6 +943,36 @@ function resolve-user {
         # you need both a bound $users at the top - to handle explicit assigns resolve-user -users $variable.
         # with a process {} block to handle any pipeline passed input. The pipeline still maps to the bound param: $users, but the e3ntire process{} is run per element, rather than iteratign the internal $users foreach.
         foreach ($usr in $users){
+
+            #region TRANSCRIPTNAME ; #*------v TRANSCRIPT FROM SCRIPT/MODULENAME v------
+            # ISSUES with use of start-log(), even local, deps on Remove-StringDiacritic() etc, that are in dep modules, so alt: (see 7psOFile for other alts)
+            $transcript = "$($ScriptDir)\logs" ; if(!(test-path -path $transcript)){ mkdir $transcript -verbose:$true ; } ;
+            # - FOR FUNCTIONS, build from ${CmdletName}
+            #$transcript +=  "\$($CmdletName)" ;
+            # - OR FOR SCRIPTS, use $ScriptBaseName/$ScriptNameNoExt (which reflect name of hosting .psm1/.ps1 a function was loaded from)
+            $transcript +=  "\$($ScriptNameNoExt)" ;
+            $logfile = $transcript.replace('-trans','-log') ; $logging = $true ; 
+            #endregion TRANSCRIPTNAME ; #*------^ END TRANSCRIPT FROM SCRIPT/MODULENAME ^------
+            #region LOGBUILD ; #*------v LOGBUILD v------
+            # building an outputfile name dynamically using paremeters
+            #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+            # start by rebuilding from base of start-log(): $logfile: 'D:\scripts\logs\get-ExOPSmtpReceiveTLSReport-SERVER50'
+            # *first* reset $ofile; it's picking the filename up from the OS
+            $ofile = $null;
+            [array]$ofile = $ofile ;
+            #$ofile += ("$($_.Name)-$($_.value)" -join ',' );
+            #$ofile=".\$($ticket)-$($usr)-folder-sizes-NONHIDDEN-NONZERO-$(get-date -format 'yyyyMMdd-HHmmtt').csv" ;
+            $ofile += @("$($ticket)-$($usr)") ; 
+            $ofile += "REPORT" ; 
+            $ofile += "run$(get-date -format 'yyyyMMdd-HHmmtt')" ; 
+            [string]$ofile = $ofile -join '-' ; 
+            [string]$ofile += ".xml" ; 
+            # split existing logfile path out: e.g. D:\scripts\logs\update-xoRetiringConfRmWindows-(TOR)-LASTPASS
+            #[string]$ofile = join-path -path ($logfile -split '-LOG-BATCH-')[0]  -childpath $ofile ; 
+            # raw path, no cmdletname prefix
+            [string]$ofile = join-path -path (split-path $logfile) -childpath $ofile ; 
+
+            
             #$fname = $lname = $dname = $OPRcp = $OPMailbox = $OPRemoteMailbox = $ADUser = $xoRcp = $xoMailbox = $xoUser = $xoMemberOf = $MsolUser = $LicenseGroup = $null ;
             $isEml=$isDname=$isSamAcct=$isXORcpMulti  = $false ;
 
@@ -411,6 +1018,20 @@ function resolve-user {
                 } ; 
                 $hsum.add('xoMobileDeviceStats',$null) ; 
             } ; 
+            if($getQuotaUsage){
+                $smsg = "(-getQuotaUsage:retrieving user xo Mailbox*Statistics & Effective Quotas)" ; 
+                if($verbose){
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-verbose $smsg } ; 
+                } ; 
+                $hsum.add('xoMailboxStats',$null) ; 
+                $hsum.add('xoMailboxFolderStats',$null) ; 
+                $hsum.add('xoEffectiveQuotas',$null) ; 
+                $hsum.add('xoNetOfSendReceiveQuotaMB',$null) ; 
+                [string]$ofMbxFolderStats = $ofile.replace('REPORT',"folder-sizes-NONHIDDEN-NONZERO") ; 
+
+            } ; 
+
             switch -regex ($usr){
                 $rgxEmailAddr {
                     $hSum.fname,$hSum.lname = $usr.split('@')[0].split('.') ;
@@ -771,6 +1392,54 @@ function resolve-user {
                                             $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMapiTest|measure).count)" ;
                                             write-host -foregroundcolor green $smsg ;
                                         } ; 
+                                        if($getQuotaUsage){
+                                            $pltGMbxStatX=[ordered]@{
+                                                identity = $hSum.xoMailbox.exchangeguid ;
+                                                ErrorAction = 'STOP' ; 
+                                            } ;
+                                            $smsg = "Get-xoMailboxStatistics  w`n$(($pltGMbxStatX|out-string).trim())"
+                                            if($verbose){
+                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                                else{ write-verbose $smsg } ; 
+                                            } ; 
+                                            $hSum.xoMailboxStats = Get-xoMailboxStatistics @pltGMbxStatX | select $prpStat;
+                                            $smsg = "xoMailboxStats Count:$(($hsum.xoMapiTest|measure).count)" ;
+                                            write-host -foregroundcolor green $smsg ;
+
+                                            If($hSum.xoMailbox.UseDatabaseQuotaDefaults){
+                                                $hSum.xoEffectiveQuotas = $hSum.xoMailboxStats | select @{N ='IssueWarningQuotaMB'; e={$_.DBIssueWarningQuotaMB}},
+                                                @{n='ProhibitSendQuotaMB'; e={$_.DBProhibitSendQuotaMB}},
+                                                @{n='ProhibitSendReceiveQuotaMB';e={$_.DBProhibitSendReceiveQuotaMB}}; 
+                                            } else {
+                                                $hSum.xoEffectiveQuotas = $hSum.xoMailbox | select @{n="IssueWarningQuotaMB";e={[math]::round($_.IssueWarningQuota.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}},
+                                                @{n="ProhibitSendQuotaMB";e={[math]::round($_.ProhibitSendQuota.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}},
+                                                @{n="ProhibitSendReceiveQuotaMB";e={[math]::round($_.ProhibitSendReceiveQuota.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}} ;
+                                            } ;  
+                                            $hSum.xoNetOfSendReceiveQuotaMB = $hSum.xoEffectiveQuotas.ProhibitSendQuotaMB - $hSum.xoMailboxStats.TotalMailboxSizeMB ; 
+
+                                            $pltGMbxStatX.add('IncludeOldestAndNewestItems',$true) ; 
+                                            $smsg = "Get-xoMailboxFolderStatistics  w`n$(($pltGMbxStatX|out-string).trim())" ;
+                                            if($verbose){
+                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                                else{ write-verbose $smsg } ; 
+                                            } ; 
+                                            TRY{
+                                                $hsum.xoMailboxFolderStats = Get-xoMailboxFolderStatistics @pltGMbxStatX  ;
+
+                                                $smsg = "Export FolderStats to`n$(($ofMbxFolderStats|out-string).trim())" ;
+                                                if($verbose){
+                                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                                                    else{ write-verbose $smsg } ; 
+                                                } ; 
+                                                $hsum.xoMailboxFolderStats | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } | 
+                                                    select $prpFldr | sort SizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+
+                                            } CATCH {
+                                                $ErrTrapd=$Error[0] ;
+                                                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                                                write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                                            } ; 
+                                        } ; 
                                     } ;
                                     break ;
                                 } ;
@@ -1075,47 +1744,83 @@ function resolve-user {
                     $hSum.xoMapiTest = $mapiResults ;
                 } ;
             } ;
+            # 3:42 PM 9/25/2023 bring in new quota support as well - it's not populated in the oprcp first test
+            if($getQuotaUsage){
+                if(($hSum.xoRcp|?{$_.recipienttypedetails -match 'UserMailbox|SharedMailbox|RoomMailbox|EquipmentMailbox'}) -AND -not($hSum.xoMailboxStats)){
+                    $pltGMbxStatX=[ordered]@{
+                        identity = $hSum.xoMailbox.exchangeguid ;
+                        ErrorAction = 'STOP' ; 
+                    } ;
+                    $smsg = "Get-xoMailboxStatistics  w`n$(($pltGMbxStatX|out-string).trim())"
+                    if($verbose){
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-verbose $smsg } ; 
+                    } ; 
+                    $hSum.xoMailboxStats = Get-xoMailboxStatistics @pltGMbxStatX | select $prpStat;
+                    $smsg = "xoMailboxStats Count:$(($hsum.xoMapiTest|measure).count)" ;
+                    write-host -foregroundcolor green $smsg ;
+
+                    If($hSum.xoMailbox.UseDatabaseQuotaDefaults){
+                        $hSum.xoEffectiveQuotas = $hSum.xoMailboxStats | select @{N ='IssueWarningQuotaMB'; e={$_.DBIssueWarningQuotaMB}},
+                        @{n='ProhibitSendQuotaMB'; e={$_.DBProhibitSendQuotaMB}},
+                        @{n='ProhibitSendReceiveQuotaMB';e={$_.DBProhibitSendReceiveQuotaMB}}; 
+                    } else {
+                        $hSum.xoEffectiveQuotas = $hSum.xoMailbox | select @{n="IssueWarningQuotaMB";e={[math]::round($_.IssueWarningQuota.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}},
+                        @{n="ProhibitSendQuotaMB";e={[math]::round($_.ProhibitSendQuota.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}},
+                        @{n="ProhibitSendReceiveQuotaMB";e={[math]::round($_.ProhibitSendReceiveQuota.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}} ;
+                    } ;  
+                    $hSum.xoNetOfSendReceiveQuotaMB = $hSum.xoEffectiveQuotas.ProhibitSendQuotaMB - $hSum.xoMailboxStats.TotalMailboxSizeMB ; 
+
+                    $pltGMbxStatX.add('IncludeOldestAndNewestItems',$true) ; 
+                    $smsg = "Get-xoMailboxFolderStatistics  w`n$(($pltGMbxStatX|out-string).trim())" ;
+                    if($verbose){
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-verbose $smsg } ; 
+                    } ; 
+                    $smsg = "(-getQuotaUsage:running lengthy Get-xoMailboxFolderStatistics...)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor gray "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    TRY{
+                        $hsum.xoMailboxFolderStats = Get-xoMailboxFolderStatistics @pltGMbxStatX  ;
+
+                        $smsg = "Export FolderStats to`n$(($ofMbxFolderStats|out-string).trim())" ;
+                        if($verbose){
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                            else{ write-verbose $smsg } ; 
+                        } ; 
+                        $hsum.xoMailboxFolderStats | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } | 
+                            select $prpFldr | sort SizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                        write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                    } ; 
+                    
+                }
+            } ; 
 
             #$pltgMsoUsr=@{UserPrincipalName=$null ; MaxResults= $MaxRecips; ErrorAction= 'STOP' } ;
             # maxresults is documented:
             # but causes a fault with no $error[0], doesn't seem to be functional param, post-filter
-            $pltgMsoUsr=@{UserPrincipalName=$null ; ErrorAction= 'STOP' } ;
-            if($hSum.ADUser){$pltgMsoUsr.UserPrincipalName = $hSum.ADUser.UserPrincipalName }
-            elseif($hSum.xoMailbox){$pltgMsoUsr.UserPrincipalName += $hsum.xoMailbox.UserPrincipalName }
-            elseif($hSum.xoMUser){$pltgMsoUsr.UserPrincipalName = $hSum.xoMUser.UserPrincipalName }
-            elseif($hSum.txGuest){$pltgMsoUsr.UserPrincipalName = $hSum.txGuest.userprincipalname }
+            # ren refs of $pltgMsoUsr -> $pltgAADUsr
+            $pltgAADUsr=@{UserPrincipalName=$null ; ErrorAction= 'STOP' } ;
+            if($hSum.ADUser){$pltgAADUsr.UserPrincipalName = $hSum.ADUser.UserPrincipalName }
+            elseif($hSum.xoMailbox){$pltgAADUsr.UserPrincipalName += $hsum.xoMailbox.UserPrincipalName }
+            elseif($hSum.xoMUser){$pltgAADUsr.UserPrincipalName = $hSum.xoMUser.UserPrincipalName }
+            elseif($hSum.txGuest){$pltgAADUsr.UserPrincipalName = $hSum.txGuest.userprincipalname }
             else{} ;
 
-            if($pltgMsoUsr.UserPrincipalName){
-                <# msonline mod is deprecated, drop the MsolUser pull
-                write-host -foregroundcolor yellow "=get-msoluser $($pltgMsoUsr.UserPrincipalName):(licences)>:" ;
-                TRY{
-                    #cmsol  -Verbose:$false -silent ;
-                    caad -Verbose:$false -silent ;
-                    write-verbose "get-msoluser w`n$(($pltgMsoUsr|out-string).trim())" ;
-                    # have to postfilter, if want specific count -maxresults catch's with no $error[0]
-                    $hSum.MsolUser=get-msoluser @pltgMsoUsr | select -first $MaxRecips;  ;
-                    write-verbose "`$hSum.MsolUser:`n$(($hSum.MsolUser|out-string).trim())" ;
-                    if($hSum.MsolUser.IsLicensed){$hsum.IsLicensed = $true ;  }
-                    else {$hsum.IsLicensed = $false } ;
-                } CATCH {
-                    $ErrTrapd=$Error[0] ;
-                    $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    Continue ;
-                } ;
-                #>
+            if($pltgAADUsr.UserPrincipalName){
 
                 if(-not($hSum.AADUser)){
-                    #write-verbose "get-AzureAdUser  -objectid $($hSum.xoUser.userPrincipalName)" ;
-                    #$hSum.AADUser  = get-AzureAdUser  -objectid $hSum.xoMUser.userPrincipalName -Top $MaxRecips ;
-                    write-host -foregroundcolor yellow "=get-AADuser $($pltgMsoUsr.UserPrincipalName)>:" ;
+                    write-host -foregroundcolor yellow "=get-AADuser $($pltgAADUsr.UserPrincipalName)>:" ;
                     TRY{
                         caad  -Verbose:$false -silent ;
-                        write-verbose "get-AzureAdUser  -objectid $($pltgMsoUsr.UserPrincipalName)" ;
+                        write-verbose "get-AzureAdUser  -objectid $($pltgAADUsr.UserPrincipalName)" ;
                         # have to postfilter, if want specific count -maxresults catch's with no $error[0]
-                        $hSum.AADUser  = get-AzureAdUser  -objectid $pltgMsoUsr.UserPrincipalName  | select -first $MaxRecips;  ;
+                        $hSum.AADUser  = get-AzureAdUser  -objectid $pltgAADUsr.UserPrincipalName  | select -first $MaxRecips;  ;
                         <# for remote federated, AADU brings in summary of remote ADUser:
                             $hsum.aaduser.ExtensionProperty
                             Key                                                       Value
@@ -1170,6 +1875,7 @@ function resolve-user {
                     } ;
 
                 } ;
+
                 # display user info:
                 if(-not($hSum.ADUser)){
                     # remote fed, use AADU to proxy remote AD hybrid info:
@@ -1240,15 +1946,6 @@ function resolve-user {
                 } ;
                 if($hSum.ADUser){$hSum.LicenseGroup = $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
 
-                <# msonline mod is deprecated, drop the MsolUser pull
-                $smsg = "$(($hSum.MsolUser|Format-List $propsLic|out-string).trim())`n" ;
-                $smsg += "Licenses Assigned:$(($hSum.MsolUser.licenses.AccountSkuId -join '; '|out-string).trim())" ;
-                if($hSum.MsolUser.LicenseReconciliationNeeded){
-                    write-WARNING $smsg ;
-                } else {
-                    write-host $smsg ;
-                } ;
-                #>
                 if($hSum.ADUser){$hSum.LicenseGroup = $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
                 elseif($hSum.xoMemberOf){$hSum.LicenseGroup = $hSum.xoMemberOf.Name |?{$_ -match $rgxXLic}}
                 #if(!($hSum.LicenseGroup) -AND ($hSum.MsolUser.licenses.AccountSkuId -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup = '(direct-assigned E3)'} ;
@@ -1274,6 +1971,82 @@ function resolve-user {
                 } ;
                 write-host $smsg ;
 
+                if($getQuotaUsage -AND $hSum.xoMailbox){
+
+                    $smsg += "`n`nLicenses::`n$(($hsum.AADUserLics -join ', ' |out-string).trim())`n`n" ; 
+                    $smsg += "`nwhich specify the following size limits:`n$(($hSum.xoEffectiveQuotas| fl |out-string).trim())`n(UseDatabaseQuotaDefaults:$($hSum.xoMailbox.UseDatabaseQuotaDefaults))" ; 
+                    $smsg += "`n`nCurrent TotalMailboxSizeMB: $($hSum.xoMailboxStats.TotalMailboxSizeMB)`n`n" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
+                    if($hSum.xoNetOfSendReceiveQuotaMB -lt 0){
+                        $smsg = "`n`n*** QuotaStatus: Mailbox is *OVER* mandated SendReceiveQuotaMB by $(($hSum.xoNetOfSendReceiveQuotaMB * -1).tostring("N")) megabytes ***`n`n" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
+                    } else { 
+                        $smsg = "QuotaStatus: Mailbox is below mandated SendReceiveQuotaMB by $(($hSum.xoNetOfSendReceiveQuotaMB).tostring("N")) megabytes" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    } ;
+
+                    $smsg = "`nWith the following non-zero folder metrics`n`n$((import-csv $ofMbxFolderStats | ft -auto |out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
+                    $smsg = "`n===`output to::`n$($ofMbxFolderStats)`n" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                    if($hSum.xoMailbox.LitigationHoldEnabled -OR $hSum.xoMailbox.InPlaceHolds -OR $hSum.xoMailbox.ComplianceTagHoldApplied -OR $hSum.xoMailbox.DelayHoldApplied -OR $hSum.xoMailbox.DelayReleaseHoldApplied){
+                        $smsg = "`n`nEVIDENCE OF LEGAL HOLD DETECTED!:`n$(($hSum.xoMailbox | fl $prpMbxHold|out-string).trim())`n`n" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
+                    } else {
+                        $smsg = "`n`n*No* evidence Of Legal Hold detected:`n$(($hSum.xoMailbox | fl $prpMbxHold|out-string).trim())`n`n" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
+                    } ;  
+
+                    $hsInfo = @"
+
+## System Folder Types and purposes:
+
+- Recoverable Items: Items in the Recoverable Items folder aren't calculated toward the user's mailbox quota. In Exchange Online, the Recoverable Items folder has its own quota. In Exchange Online, the quota for the Recoverable Items folder (in the user's primary mailbox) is automatically increased to 100 GB when a mailbox is placed on Litigation Hold or In-Place Hold. 
+
+    ### Subfolders of Recoverable Items:
+    
+    *  Deletions: This subfolder contains all items deleted from the Deleted Items folder. (In Outlook, a user can soft delete an item by pressing Shift+Delete.) This subfolder is available to users through the Recover Deleted Items feature in Outlook and Outlook on the web.
+    
+    *  Versions: If In-Place Hold, Litigation Hold, or a Microsoft 365 or Office 365 retention policy is enabled, this subfolder contains the original copy of the item and also if the item is modified multiple times, a copy of the item before modification is saved.
+    
+    *  Purges: If either Litigation Hold or single item recovery is enabled, this subfolder contains all items that are hard deleted. 
+    
+    *  Audits: If mailbox audit logging is enabled for a mailbox, this subfolder contains the audit log entries. 
+    
+    *  DiscoveryHolds: If In-Place Hold is enabled or if a Microsoft 365 or Office 365 retention policy is assigned to the mailbox, this subfolder contains all items that meet the hold query parameters and are hard deleted.
+
+## Deleted item retention
+  An item is considered to be soft deleted in the following cases:
+    • A user deletes an item or empties all items from the Deleted Items folder.
+    • A user presses Shift+Delete to delete an item from any other mailbox folder.
+    
+  Soft-deleted items are moved to the Deletions subfolder of the Recoverable Items folder. This provides an additional layer of protection so users can recover deleted items without requiring Help desk intervention. Users can use the Recover Deleted Items feature in Outlook or Outlook on the web to recover a deleted item. Users can also use this feature to permanently delete an item. 
+  
+  Items remain in the Deletions subfolder until the deleted item retention period is reached. The deleted item retention period for Exchange Online is 30 days (Toroco). In addition to a deleted item retention period, the Recoverable Items folder is also subject to quotas. 
+  
+  When the deleted item retention period expires, the item is completely removed from Exchange Online.
+
+"@ ; 
+                    write-host $hsInfo ;   
+
+                } ; 
             } ;
 
             # do a split-brain/nobrain check
@@ -1318,13 +2091,6 @@ function resolve-user {
             } else {
                 write-verbose "(no AADUser found)" ;
             } ;
-            <# msonline mod is deprecated, drop the MsolUser pull
-            if($hSum.MsolUser){
-                $hsum.IsLicensed = [boolean]($hSum.MsolUser.IsLicensed -eq $true)
-            } else {
-                write-verbose "(no MsolUser found)" ;
-            } ;
-            #>
             # shift test to aadu
             if($hSum.AADUser){
                 $hsum.IsLicensed = [boolean]($hSum.AADUser.assignedlicenses.count -gt 0)
@@ -1336,25 +2102,31 @@ function resolve-user {
             if(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hsum.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
                 <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
                 $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!" ;
-                #write-warning $smsg ;
                 $hsum.IsSplitBrain = $true ;
             }elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hsum.IsLicensed) -AND $hSum.xomailbox -AND $hSum.OPMailbox){
                 <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
                 $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!`nAND is *UNLICENSED!*" ;
-                #write-warning $smsg ;
                 $hsum.IsSplitBrain = $true ;
             } elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hsum.IsLicensed -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
                 $smsg += "NOBRAIN! W LICENSE!:$($hSum.ADUser.userprincipalname).IsLic'd &  has *NEITHER* xoMbx OR opMbx!" ;
-                #write-warning $smsg ;
                 $hsum.IsNoBrain = $true ;
             } elseif (($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hsum.IsLicensed) -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
                 $smsg += "NOBRAIN! *WO* LICENSE! (TERM?):$($hSum.ADUser.userprincipalname) NOT licensed'd &  has *NEITHER* xoMbx OR opMbx!" ;
                 $hsum.IsNoBrain = $true ;
             } elseif($hsum.IsLicensed -eq $false){
                 $smsg += "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
-                write-warning $smsg ;
+                
                 $hsum.IsLicensed = $false ;
             } ELSE { } ;
+
+            if($hsum.IsSplitBrain -OR $hsum.IsNoBrain -OR -not $hsum.IsLicensed){
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+            } else { 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            } ; 
 
             if($hsum.IsNoBrain){
                 switch ($hSum.Federator) {
@@ -1407,14 +2179,19 @@ function resolve-user {
                 } else {
                     $Rpt += New-Object PSObject -Property $hSum ;
                 } ;
+            } ELSE {
+                # 3:59 PM 9/18/2023 else export to report file 
+                $Rpt += New-Object PSObject -Property $hSum ;
+                $Rpt | export-clixml -Path $ofile -Depth 100 ;
             } ;
             write-host -foregroundcolor green $sBnr.replace('=v','=^').replace('v=','^=') ;
         } ;
 
     } # PROC-E
     END{
-        # cleanup XO aliases
+        <## cleanup XO aliases
         get-alias -scope Script |?{$_.name -match '^ps1.*'} | %{Remove-Alias -alias $_.name} ; 
+        #>
 
         if($outObject -AND -not ($PSCmdlet.MyInvocation.ExpectingInput)){
             $Rpt | write-output ;
