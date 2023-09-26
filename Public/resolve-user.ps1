@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:22 PM 9/26/2023 nesting limit loop, pulled vxo & vx2010  reqs
     * 3:59 PM 9/25/2023 working, ready to drop back into vxo finished in-port of get-xoMailboxQuotaStatus support, now functional, also expanded the mbxstat filter to cover room|shared|Equip recipienttypedetails variants; 
         appears I spliced over $getQuotaUsage support from get-xoMailboxQuotaStatus, looks like it needs to be debugged.
     * 12:43 PM 9/18/2023 re-removed the obsolete xow support: EOM31+ doesn't need it.
@@ -134,7 +135,8 @@ function resolve-user {
     ###Requires -Version 5
     ##Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
     # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
-    #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging
+    # 12:19 PM 9/26/2023 pull verb-exo ref "
+    #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-IO, verb-logging
     #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.DOMAIN\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
