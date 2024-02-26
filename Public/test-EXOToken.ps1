@@ -15,6 +15,7 @@ function test-EXOToken {
     Github      : https://github.com/tostka/verb-aad
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
     * 3:34 PM 3/29/2023 3:14 pm 3/29/2023: REN'D $modname => $EOMModName
@@ -79,13 +80,13 @@ function test-EXOToken {
         #region EOMREV ; #*------v EOMREV Check v------
         $EOMmodname = 'ExchangeOnlineManagement' ;
         $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
-        if($xmod = Get-Module $EOMmodname -ErrorAction Stop){ } else {
+        if($xmod = Get-Module $EOMmodname -ErrorAction Stop| sort version | select -last 1 ){ } else {
             $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
             Try {
                 Import-Module @pltIMod | out-null ;
-                $xmod = Get-Module $EOMmodname -ErrorAction Stop ;
+                $xmod = Get-Module $EOMmodname -ErrorAction Stop | sort version | select -last 1 ;
             } Catch {
                 $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
@@ -112,7 +113,7 @@ function test-EXOToken {
             TRY {
                 #=load function module (subcomponent of dep module, pathed from same dir)
                 #$tmodpath = join-path -path (split-path (get-module $EOMmodname -list).path) -ChildPath 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll' ;
-                $EOMgmtModulePath = split-path (get-module $EOMmodname -list).Path ; 
+                $EOMgmtModulePath = split-path (get-module $EOMmodname -list| sort version | select -last 1 ).Path ; 
                 if($IsCoreCLR){
 	                $EOMgmtModulePath = resolve-path -Path $EOMgmtModulePath\netcore ;
 	                $smsg = "(.netcore path in use:" ; 

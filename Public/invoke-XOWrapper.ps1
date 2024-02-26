@@ -16,6 +16,7 @@ function invoke-XOWrapper  {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnlineManagement,Bug,Workaround
     REVISIONS
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 2:33 PM 4/13/2023 pull [E]req for verb-exo (merging)
     * 3:19 PM 3/29/2023 REN: $tMod => $EOMModName; $MinNoWinRMVersion IS A PARAM, leaving it unrenamed (other generic code to $EOMMinNoWinRMVersion)
@@ -146,8 +147,8 @@ function invoke-XOWrapper  {
     ) ; 
     write-verbose "(confirm EMO load)" ; 
     $EOMModName = 'exchangeonlinemanagement' ; 
-    if(-not (get-module $EOMModName)){ipmo -force $EOMModName} ; 
-    $xMod = get-module $EOMModName ; 
+    if(-not (get-module $EOMModName| sort version | select -last 1 )){ipmo -force $EOMModName} ; 
+    $xMod = get-module $EOMModName | sort version | select -last 1 ; 
     write-verbose "(check EMO version)" ; 
 
     function _Redo-Connection {
@@ -198,11 +199,11 @@ function invoke-XOWrapper  {
 
     #[boolean]$UseConnEXO = [boolean]([version](get-module $EOMModName).version -ge $MinNoWinRMVersion) ; 
     [boolean]$UseConnEXO = [boolean]([version]$xMod.version -ge $MinNoWinRMVersion) ; 
-    if([version](get-module $EOMModName).version -ge $MinNoWinRMVersion){
+    if([version](get-module $EOMModName| sort version | select -last 1 ).version -ge $MinNoWinRMVersion){
         $smsg = "Found gmo EOM.version -gt `$MinNoWinRMVersion: forcing `$MinNoWinRMVersion to EOM.version" ; 
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        $MinNoWinRMVersion = (get-module $EOMModName).version.tostring() ; 
+        $MinNoWinRMVersion = (get-module $EOMModName| sort version | select -last 1 ).version.tostring() ; 
     }else{
         $smsg = "gmo EOM.version -eq/lt `$MinNoWinRMVersion: using existing `$MinNoWinRMVersion ($MinNoWinRMVersion)" ;  ; 
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 

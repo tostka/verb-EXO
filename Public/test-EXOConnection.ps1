@@ -17,6 +17,7 @@ function test-EXOv2Connection {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell
     REVISIONS
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 11:20 AM 4/25/2023 added -CertTag param (passed by connect-exo; used for validating credential alignment w Tenant)
     * 10:28 AM 4/18/2023 #372: added -ea 0 to gv calls (not found error suppress)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
@@ -140,13 +141,13 @@ function test-EXOv2Connection {
         #region EOMREV ; #*------v EOMREV Check v------
         #$EOMmodname = 'ExchangeOnlineManagement' ;
         $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
-        if($xmod = Get-Module $EOMmodname -ErrorAction Stop){ } else {
+        if($xmod = Get-Module $EOMmodname -ErrorAction Stop| sort version | select -last 1 ){ } else {
             $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
             Try {
                 Import-Module @pltIMod | out-null ;
-                $xmod = Get-Module $EOMmodname -ErrorAction Stop ;
+                $xmod = Get-Module $EOMmodname -ErrorAction Stop | sort version | select -last 1 ;
             } Catch {
                 $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;

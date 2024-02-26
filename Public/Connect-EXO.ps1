@@ -17,6 +17,7 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 1:32 PM 5/30/2023 Updates to support either -Credential, or -UserRole + -TenOrg, to support fully portable downstream credentials: 
         - Add -UserRole & explicit -TenOrg params; working. 
         - Drive TenOrg defaulted $global:o365_TenOrgDefault, or on $env:userdomain
@@ -369,8 +370,8 @@ Function Connect-EXO {
         #$EOMmodname = 'ExchangeOnlineManagement' ;
         $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
         # do a gmo first, faster than gmo -list
-        if([version]$EOMMv = (Get-Module @pltIMod).version){}
-        elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod).version){} 
+        if([version]$EOMMv = (Get-Module @pltIMod | sort version | select -last 1 ).version){}
+        elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod | sort version | select -last 1 ).version){} 
         else { 
             $smsg = "$($EOMmodname) PowerShell v$($MinNoWinRMVersion) module is required, do you want to install it?" ; 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 

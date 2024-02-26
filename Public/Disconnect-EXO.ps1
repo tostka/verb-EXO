@@ -20,6 +20,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 3:26 PM 5/23/2023 fixed typo -eq/=
     * 10:59 AM 4/18/2023 step debugs ; consolidating Disconnect-EXO2 into Disconnect-EXO, aliasing dxo2,Disconnect-EXO2; removing those originals
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
@@ -122,8 +123,8 @@ Function Disconnect-EXO {
     $EOMmodname = 'ExchangeOnlineManagement' ;
     $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
     # do a gmo first, faster than gmo -list
-    if([version]$EOMMv = (Get-Module @pltIMod).version){}
-    elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod).version){} 
+    if([version]$EOMMv = (Get-Module @pltIMod| sort version | select -last 1 ).version){}
+    elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod| sort version | select -last 1 ).version){} 
     else { 
         $smsg = "$($EOMmodname) PowerShell v$($MinNoWinRMVersion) module is required, do you want to install it?" ; 
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 

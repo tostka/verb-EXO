@@ -9,6 +9,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     # 11:44 AM 6/23/2023 sync over again fr 👇🏼 ; completely untested, just pasted in updated params, funcs, and submain block, above trailing write-output .
     # 12:41 PM 3/14/2022 sync'd to latest mods of move-EXOmailboxNow, largely rem'ing the xo AD material, long-broken by undocumented fw chgs.
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
@@ -307,7 +308,7 @@ function move-MailboxToXo{
       if($tModName -eq 'verb-Network' -OR $tModName -eq 'verb-Azure'){
           #write-host "GOTCHA!" ;
       } ;
-      $lVers = get-module -name $tModName -ListAvailable -ea 0 ;
+      $lVers = get-module -name $tModName -ListAvailable -ea 0 | sort version | select -last 1 ;
       if($lVers){   $lVers=($lVers | sort version)[-1];   try {     import-module -name $tModName -RequiredVersion $lVers.Version.tostring() -force -DisableNameChecking -Verbose:$false  } catch {     write-warning "*BROKEN INSTALLED MODULE*:$($tModName)`nBACK-LOADING DCOPY@ $($tModDFile)" ;import-module -name $tModDFile -force -DisableNameChecking -verbose:$false  } ;
       } elseif (test-path $tModFile) {
         write-warning "*NO* INSTALLED MODULE*:$($tModName)`nBACK-LOADING DCOPY@ $($tModDFile)" ;

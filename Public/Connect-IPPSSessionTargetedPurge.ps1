@@ -17,6 +17,7 @@ function Connect-IPPSSessionTargetedPurge{
     AddedCredit : Microsoft (edited version of published commands in the module)
     AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
     REVISIONS
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 11:38 AM 9/16/2021 string
     * 8:34 AM 11/9/2020 init
     .DESCRIPTION
@@ -105,7 +106,7 @@ function Connect-IPPSSessionTargetedPurge{
         # Import the REST module so that the EXO* cmdlets are present before Connect-ExchangeOnline in the powershell instance.
         
         if(-not($ExchangeOnlineMgmtPath)){
-            $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list).Path ; 
+            $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list| sort version | select -last 1 ).Path ; 
         } ; 
         if(!$RestModule){$RestModule = "Microsoft.Exchange.Management.RestApiClient.dll"} ;
         # $PSScriptRoot will be the verb-EXO path, not the EXOMgmt module have to dyn locate it

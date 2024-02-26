@@ -1,11 +1,11 @@
-﻿# verb-EXO.psm1
+﻿# verb-exo.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 6.1.0.0
+  Version     : 6.1.1.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -817,6 +817,7 @@ Tags        : Powershell
 AddedCredit : Microsoft (edited version of published commands in the module)
 AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
 REVISIONS
+* 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
 # 8:34 AM 3/31/2021 added verbose suppress to all import-mods
 * 8:34 AM 11/9/2020 init
 .DESCRIPTION
@@ -984,7 +985,7 @@ https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-
         
         
         if(-not($ExchangeOnlineMgmtPath)){
-            $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list).Path ; 
+            $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list | sort version | select -last 1 ).Path ; 
         } ; 
         if(!$RestModule){$RestModule = "Microsoft.Exchange.Management.RestApiClient.dll"} ;
         # $PSScriptRoot will be the verb-EXO path, not the EXOMgmt module have to dyn locate it
@@ -1171,6 +1172,7 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 1:32 PM 5/30/2023 Updates to support either -Credential, or -UserRole + -TenOrg, to support fully portable downstream credentials: 
         - Add -UserRole & explicit -TenOrg params; working. 
         - Drive TenOrg defaulted $global:o365_TenOrgDefault, or on $env:userdomain
@@ -1523,8 +1525,8 @@ Function Connect-EXO {
         #$EOMmodname = 'ExchangeOnlineManagement' ;
         $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
         # do a gmo first, faster than gmo -list
-        if([version]$EOMMv = (Get-Module @pltIMod).version){}
-        elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod).version){} 
+        if([version]$EOMMv = (Get-Module @pltIMod | sort version | select -last 1 ).version){}
+        elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod | sort version | select -last 1 ).version){} 
         else { 
             $smsg = "$($EOMmodname) PowerShell v$($MinNoWinRMVersion) module is required, do you want to install it?" ; 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
@@ -2576,6 +2578,7 @@ function connect-EXOv2RAW {
     AddedCredit : Microsoft (edited version of published commands in the module)
     AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
     REVISIONS
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     # 8:34 AM 3/31/2021 added verbose suppress to all import-mods
     * 3:36 PM 11/9/2020 init debugged to basic function
     .DESCRIPTION
@@ -2672,7 +2675,7 @@ function connect-EXOv2RAW {
         # Import the REST module so that the EXO* cmdlets are present before Connect-ExchangeOnline in the powershell instance.
 
         if (-not($ExchangeOnlineMgmtPath)) {
-            $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list).Path ;
+            $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list | sort version | select -last 1 ).Path ;
         } ;
         if (!$RestModule) { $RestModule = "Microsoft.Exchange.Management.RestApiClient.dll" } ;
         # stock uses $PSScriptRoot, which will be the verb-EXO path, not the EXOMgmt module have to dyn locate it
@@ -2806,6 +2809,7 @@ function Connect-IPPSSessionTargetedPurge{
     AddedCredit : Microsoft (edited version of published commands in the module)
     AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
     REVISIONS
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 11:38 AM 9/16/2021 string
     * 8:34 AM 11/9/2020 init
     .DESCRIPTION
@@ -2894,7 +2898,7 @@ function Connect-IPPSSessionTargetedPurge{
         # Import the REST module so that the EXO* cmdlets are present before Connect-ExchangeOnline in the powershell instance.
         
         if(-not($ExchangeOnlineMgmtPath)){
-            $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list).Path ; 
+            $EOMgmtModulePath = split-path (get-module ExchangeOnlineManagement -list| sort version | select -last 1 ).Path ; 
         } ; 
         if(!$RestModule){$RestModule = "Microsoft.Exchange.Management.RestApiClient.dll"} ;
         # $PSScriptRoot will be the verb-EXO path, not the EXOMgmt module have to dyn locate it
@@ -4606,6 +4610,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 3:26 PM 5/23/2023 fixed typo -eq/=
     * 10:59 AM 4/18/2023 step debugs ; consolidating Disconnect-EXO2 into Disconnect-EXO, aliasing dxo2,Disconnect-EXO2; removing those originals
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
@@ -4708,8 +4713,8 @@ Function Disconnect-EXO {
     $EOMmodname = 'ExchangeOnlineManagement' ;
     $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
     # do a gmo first, faster than gmo -list
-    if([version]$EOMMv = (Get-Module @pltIMod).version){}
-    elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod).version){} 
+    if([version]$EOMMv = (Get-Module @pltIMod| sort version | select -last 1 ).version){}
+    elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod| sort version | select -last 1 ).version){} 
     else { 
         $smsg = "$($EOMmodname) PowerShell v$($MinNoWinRMVersion) module is required, do you want to install it?" ; 
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
@@ -8715,7 +8720,7 @@ function Invoke-ExoOnlineConnection{
     ## Create an Timer instance to trackand recheck status
     $timer = New-Object Timers.Timer
     ## Now setup the Timer instance to fire events
-    $timer.Interval = 6.1.00
+    $timer.Interval = 600000
     $timer.AutoReset = $true  # enable the event again after its been fired
     $timer.Enabled = $true
     ## register your event
@@ -8832,6 +8837,7 @@ function invoke-XOWrapper  {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnlineManagement,Bug,Workaround
     REVISIONS
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 2:33 PM 4/13/2023 pull [E]req for verb-exo (merging)
     * 3:19 PM 3/29/2023 REN: $tMod => $EOMModName; $MinNoWinRMVersion IS A PARAM, leaving it unrenamed (other generic code to $EOMMinNoWinRMVersion)
@@ -8962,8 +8968,8 @@ function invoke-XOWrapper  {
     ) ; 
     write-verbose "(confirm EMO load)" ; 
     $EOMModName = 'exchangeonlinemanagement' ; 
-    if(-not (get-module $EOMModName)){ipmo -force $EOMModName} ; 
-    $xMod = get-module $EOMModName ; 
+    if(-not (get-module $EOMModName| sort version | select -last 1 )){ipmo -force $EOMModName} ; 
+    $xMod = get-module $EOMModName | sort version | select -last 1 ; 
     write-verbose "(check EMO version)" ; 
 
     function _Redo-Connection {
@@ -9014,11 +9020,11 @@ function invoke-XOWrapper  {
 
     #[boolean]$UseConnEXO = [boolean]([version](get-module $EOMModName).version -ge $MinNoWinRMVersion) ; 
     [boolean]$UseConnEXO = [boolean]([version]$xMod.version -ge $MinNoWinRMVersion) ; 
-    if([version](get-module $EOMModName).version -ge $MinNoWinRMVersion){
+    if([version](get-module $EOMModName| sort version | select -last 1 ).version -ge $MinNoWinRMVersion){
         $smsg = "Found gmo EOM.version -gt `$MinNoWinRMVersion: forcing `$MinNoWinRMVersion to EOM.version" ; 
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        $MinNoWinRMVersion = (get-module $EOMModName).version.tostring() ; 
+        $MinNoWinRMVersion = (get-module $EOMModName| sort version | select -last 1 ).version.tostring() ; 
     }else{
         $smsg = "gmo EOM.version -eq/lt `$MinNoWinRMVersion: using existing `$MinNoWinRMVersion ($MinNoWinRMVersion)" ;  ; 
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
@@ -9148,6 +9154,7 @@ function move-MailboxToXo{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     # 11:44 AM 6/23/2023 sync over again fr 👇🏼 ; completely untested, just pasted in updated params, funcs, and submain block, above trailing write-output .
     # 12:41 PM 3/14/2022 sync'd to latest mods of move-EXOmailboxNow, largely rem'ing the xo AD material, long-broken by undocumented fw chgs.
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
@@ -9446,7 +9453,7 @@ function move-MailboxToXo{
       if($tModName -eq 'verb-Network' -OR $tModName -eq 'verb-Azure'){
           #write-host "GOTCHA!" ;
       } ;
-      $lVers = get-module -name $tModName -ListAvailable -ea 0 ;
+      $lVers = get-module -name $tModName -ListAvailable -ea 0 | sort version | select -last 1 ;
       if($lVers){   $lVers=($lVers | sort version)[-1];   try {     import-module -name $tModName -RequiredVersion $lVers.Version.tostring() -force -DisableNameChecking -Verbose:$false  } catch {     write-warning "*BROKEN INSTALLED MODULE*:$($tModName)`nBACK-LOADING DCOPY@ $($tModDFile)" ;import-module -name $tModDFile -force -DisableNameChecking -verbose:$false  } ;
       } elseif (test-path $tModFile) {
         write-warning "*NO* INSTALLED MODULE*:$($tModName)`nBACK-LOADING DCOPY@ $($tModDFile)" ;
@@ -12264,6 +12271,7 @@ Function Reconnect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 12:51 PM 5/30/2023 Updates to support either -Credential, or -UserRole + -TenOrg, to support fully portable downstream credentials: 
         - Add -UserRole & explicit -TenOrg params
         - Drive TenOrg defaulted $global:o365_TenOrgDefault, or on $env:userdomain
@@ -12447,8 +12455,8 @@ Function Reconnect-EXO {
         #$EOMmodname = 'ExchangeOnlineManagement' ;
         $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
         # do a gmo first, faster than gmo -list
-        if([version]$EOMMv = (Get-Module @pltIMod).version){}
-        elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod).version){} 
+        if([version]$EOMMv = (Get-Module @pltIMod| sort version | select -last 1 ).version){}
+        elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod| sort version | select -last 1 ).version){} 
         else { 
             $smsg = "$($EOMmodname) PowerShell v$($MinNoWinRMVersion) module is required, do you want to install it?" ; 
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
@@ -15159,6 +15167,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 12:22 PM 9/26/2023 nesting limit loop, pulled vxo & vx2010  reqs
     * 3:59 PM 9/25/2023 working, ready to drop back into vxo finished in-port of get-xoMailboxQuotaStatus support, now functional, also expanded the mbxstat filter to cover room|shared|Equip recipienttypedetails variants; 
         appears I spliced over $getQuotaUsage support from get-xoMailboxQuotaStatus, looks like it needs to be debugged.
@@ -15703,8 +15712,8 @@ function resolve-user {
             #$EOMmodname = 'ExchangeOnlineManagement' ;
             $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
             # do a gmo first, faster than gmo -list
-            if([version]$EOMMv = (Get-Module @pltIMod).version){}
-            elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod).version){}
+            if([version]$EOMMv = (Get-Module @pltIMod| sort version | select -last 1).version){}
+            elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod| sort version | select -last 1).version){}
             else {
                 $smsg = "$($EOMmodname) PowerShell v$($MinNoWinRMVersion) module is required, do you want to install it?" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
@@ -17800,6 +17809,7 @@ function test-EXOv2Connection {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell
     REVISIONS
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 11:20 AM 4/25/2023 added -CertTag param (passed by connect-exo; used for validating credential alignment w Tenant)
     * 10:28 AM 4/18/2023 #372: added -ea 0 to gv calls (not found error suppress)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
@@ -17923,13 +17933,13 @@ function test-EXOv2Connection {
         #region EOMREV ; #*------v EOMREV Check v------
         #$EOMmodname = 'ExchangeOnlineManagement' ;
         $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
-        if($xmod = Get-Module $EOMmodname -ErrorAction Stop){ } else {
+        if($xmod = Get-Module $EOMmodname -ErrorAction Stop| sort version | select -last 1 ){ } else {
             $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
             Try {
                 Import-Module @pltIMod | out-null ;
-                $xmod = Get-Module $EOMmodname -ErrorAction Stop ;
+                $xmod = Get-Module $EOMmodname -ErrorAction Stop | sort version | select -last 1 ;
             } Catch {
                 $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
@@ -18405,6 +18415,7 @@ function test-EXOToken {
     Github      : https://github.com/tostka/verb-aad
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
     * 3:34 PM 3/29/2023 3:14 pm 3/29/2023: REN'D $modname => $EOMModName
@@ -18469,13 +18480,13 @@ function test-EXOToken {
         #region EOMREV ; #*------v EOMREV Check v------
         $EOMmodname = 'ExchangeOnlineManagement' ;
         $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
-        if($xmod = Get-Module $EOMmodname -ErrorAction Stop){ } else {
+        if($xmod = Get-Module $EOMmodname -ErrorAction Stop| sort version | select -last 1 ){ } else {
             $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
             Try {
                 Import-Module @pltIMod | out-null ;
-                $xmod = Get-Module $EOMmodname -ErrorAction Stop ;
+                $xmod = Get-Module $EOMmodname -ErrorAction Stop | sort version | select -last 1 ;
             } Catch {
                 $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
@@ -18502,7 +18513,7 @@ function test-EXOToken {
             TRY {
                 #=load function module (subcomponent of dep module, pathed from same dir)
                 #$tmodpath = join-path -path (split-path (get-module $EOMmodname -list).path) -ChildPath 'Microsoft.Exchange.Management.ExoPowershellGalleryModule.dll' ;
-                $EOMgmtModulePath = split-path (get-module $EOMmodname -list).Path ; 
+                $EOMgmtModulePath = split-path (get-module $EOMmodname -list| sort version | select -last 1 ).Path ; 
                 if($IsCoreCLR){
 	                $EOMgmtModulePath = resolve-path -Path $EOMgmtModulePath\netcore ;
 	                $smsg = "(.netcore path in use:" ; 
@@ -18601,6 +18612,7 @@ function test-EXOv2Connection {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell
     REVISIONS
+    * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 3:26 PM 5/30/2023 updated CBH, demos ; # reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
     * 11:20 AM 4/25/2023 added -CertTag param (passed by connect-exo; used for validating credential alignment w Tenant)
     * 10:28 AM 4/18/2023 #372: added -ea 0 to gv calls (not found error suppress)
@@ -18725,13 +18737,13 @@ function test-EXOv2Connection {
         #region EOMREV ; #*------v EOMREV Check v------
         #$EOMmodname = 'ExchangeOnlineManagement' ;
         $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
-        if($xmod = Get-Module $EOMmodname -ErrorAction Stop){ } else {
+        if($xmod = Get-Module $EOMmodname -ErrorAction Stop| sort version | select -last 1 ){ } else {
             $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
             Try {
                 Import-Module @pltIMod | out-null ;
-                $xmod = Get-Module $EOMmodname -ErrorAction Stop ;
+                $xmod = Get-Module $EOMmodname -ErrorAction Stop | sort version | select -last 1 ;
             } Catch {
                 $ErrTrapd=$Error[0] ;
                 $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
@@ -18985,7 +18997,7 @@ Function test-xoMailbox {
     None. Does not accepted piped input.
     .OUTPUTS
     .EXAMPLE
-    test-xoMailbox.ps1 -TenOrg TOR -Mailboxes 'Fname.LName@domain.com','FName2.Lname2@domain.com' -Ticket 6.1.06 -verbose ;
+    test-xoMailbox.ps1 -TenOrg TOR -Mailboxes 'Fname.LName@domain.com','FName2.Lname2@domain.com' -Ticket 610706 -verbose ;
     .EXAMPLE
     .\test-xoMailbox.ps1
     .LINK
@@ -20424,8 +20436,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUXCe6Dty7TRkdupmAcfi9ggTw
-# DRygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUrwkekLZHT4LHHI6QS6+Ng7X4
+# +eOgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -20440,9 +20452,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRB9v+V
-# z7CVmgNNwS7Y7G7Sf7vk6TANBgkqhkiG9w0BAQEFAASBgFnGIHLXnqCtXNjrFTFj
-# YVTU8fh0Aid1sLXApw02ienCnH16UGzqfmBdyW2NClk1hHP7FHXsiHBC9iH+/Q5z
-# msA46QBfuD3/DN5NK5lhV9ydkFZurMtBpO1l1r0rHj/zz6F8r8BxWECsx3063QZ4
-# d3TsmKO2ZdyqybwmUQACYB0/
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSewYJK
+# AnuE5itA35SuLc1pxv1wDDANBgkqhkiG9w0BAQEFAASBgF8BwVtNdKT6yCro1SjM
+# dFQpyL/htxRevCw4qsC5XDdk/1AE7wCoLCKvLGuauhcSxhr29zG9olgdv09JcGW/
+# j0f9Uho9cXK/J/o52E0e0OhctLApOk3DT7BBDJ6cqJDZC0/L20aaHhE3dMSktTab
+# etT74TvRvzYXnHxM5lsPAfs8
 # SIG # End signature block
