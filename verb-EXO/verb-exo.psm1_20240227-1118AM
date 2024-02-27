@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 6.1.3.0
+  Version     : 6.1.1.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -15167,7 +15167,6 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 4:28 PM 2/27/2024 updated path-detect code (was discovering into the Mods dir);  updated CBH, quota mbx size, LegalHold example; add additional reporting/detecting to LegalHold status; fixed borked/non-dumping $prpMbxHold = ...@{n="InPlaceHolds";e={ ($_.inplaceholds (*KEY* indicator of a hold in place); updated prompts to echo DiscoveryHolds folder & it's newestItem (both indicate LHs, and if not curr, when it was disabled)
     * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 12:22 PM 9/26/2023 nesting limit loop, pulled vxo & vx2010  reqs
     * 3:59 PM 9/25/2023 working, ready to drop back into vxo finished in-port of get-xoMailboxQuotaStatus support, now functional, also expanded the mbxstat filter to cover room|shared|Equip recipienttypedetails variants; 
@@ -15215,24 +15214,6 @@ function resolve-user {
     * 12:55 PM 7/19/2021 added guest & exo-mailcontact support (resolving missing ext-federated addresses), retolled logic down to grcp & gxrcp to drive balance of tests.
     * 12:05 PM 7/14/2021 rem'd requires: verb-exo  rem'd requires version 5 (gen'ing 'version' is specified more than once.); rem'd the $rgxSamAcctName, gen's parsing errors compiling into mod ;  added alias 'ulu'; added mailcontact excl on init grcp, to force those to exombx qry ; init vers
     .DESCRIPTION
-    resolve-user.ps1 - Resolve specified array of -users (displayname, emailaddress, samaccountname) to mail asset, lic & ticket descriptors
-
-    Key parameter options: 
-
-    -getMobile parameter, to return details on xo MobileDevices in use with the EXO mailbox
-
-    -getQuotaUsage parameter, returns details on xo MailboxFolderStatistics and effective Quota, 
-        used with users with mailbox size issues (and/or LegalHold symptoms)
-
-        Note: use of -getQuotaUsage also does an extensive check for LegalHold signs in the mailbox. including reporting on:
-            - xoMailbox.LitigationHoldEnabled
-            - xoMailbox.InPlaceHolds, 
-            - xoMailbox.ComplianceTagHoldApplied
-            - xoMailbox.DelayHoldApplied 
-            - xoMailbox.DelayReleaseHoldApplied 
-            - checks if xoMailboxFolderStats 'DiscoveryHolds' folder has ItemsInFolder -gt 0
-
-
     .PARAMETER  users
     Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)
     .PARAMETER Ticket
@@ -15240,7 +15221,7 @@ function resolve-user {
     .PARAMETER getMobile
     switch to return mobiledevice info for target XO Mailbox (not supported for onprem mailboxes)[-getMobile]
     .PARAMETER getQuotaUsage
-    switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]
+    switch to return Quota & MailboxFolderStatistics analysis (XO-only)[-getQuotaUsage]
     .PARAMETER useEXOv2
     Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
     .PARAMETER outObject
@@ -15250,8 +15231,8 @@ function resolve-user {
     .OUTPUTS
     System.Object - returns summary report to pipeline
     .EXAMPLE
-    PS> resolve-user 
-    Default, no user identifier specified: attempts to parse a user descriptor from clipboard contents
+    PS> resolve-user
+    Default, attempts to parse a user descriptor from clipboard
     .EXAMPLE
     PS> resolve-user -users 'John Public'
     Process user displayname
@@ -15260,142 +15241,49 @@ function resolve-user {
     Process an array of descriptors
     .EXAMPLE
     PS> $results = resolve-user -outobject -users 'Test@domain.com','John Public','Alias','ExternalContact@emaildomain.com','confroom@tenant.onmicrosoft.com''  ;
-    PS> $feds = $results| group federator | select -expand name ;
-    PS> write-verbose "echo filtered subsets" ;
-    PS> ($results| ?{$_.federator -eq $feds[1] }).xomailbox
-    PS> ($results| ?{$_.federator -eq $feds[1] }).xomailbox.primarysmtpaddress
-    PS> write-verbose "profile results:" ; 
-    PS> $analysis = foreach ($data in $resolved_objects){
-    PS>     $Rpt = [ordered]@{
-    PS>         PrimarySmtpAddress = $data.xorcp.primarysmtpaddress ; 
-    PS>         ADUser_UPN = $data.aduser.userprincipalname ; 
-    PS>         AADUser_UPN = $data.aaduser.UserPrincipalName ; 
-    PS>         isDirSynced = $data.isDirSynced ; 
-    PS>         IsNoBrain = $data.IsNoBrain ; 
-    PS>         isSplitBrain = $data.isSplitBrain;
-    PS>         IsLicensed = $data.IsLicensed;
-    PS>         IsDisabledOU = $data.IsDisabledOU;
-    PS>         IsADDisabled = $data.IsADDisabled; 
-    PS>         IsAADDisabled = $data.IsAADDisabled;
-    PS>     } ; 
-    PS>     [pscustomobject]$Rpt ; 
-    PS> } ; 
-    PS> write-verbose "output tabular results" ; 
-    PS> $analysis | ft -auto ;
-    
-    Demo does the following: 
-        - Process array of users, specify return detailed object (-outobject), for post-processing & filtering,
-        - Group results on federation sources,
-        - Output summary of EXO mailboxes for the second federator
-        - Then output the primary smtpaddress for all EXO mailboxes resolved to that federator
-        - Then create a summary object of the is* properties and UPN, primarySmtpAddress, 
-        - Finally display the summary as a console table
+    $feds = $results| group federator | select -expand name ;
+    # echo filtered subsets
+    ($results| ?{$_.federator -eq $feds[1] }).xomailbox
+    ($results| ?{$_.federator -eq $feds[1] }).xomailbox.primarysmtpaddress
+    # profile results
+    $analysis = foreach ($data in $resolved_objects){
+        $Rpt = [ordered]@{
+            PrimarySmtpAddress = $data.xorcp.primarysmtpaddress ; 
+            ADUser_UPN = $data.aduser.userprincipalname ; 
+            AADUser_UPN = $data.aaduser.UserPrincipalName ; 
+            isDirSynced = $data.isDirSynced ; 
+            IsNoBrain = $data.IsNoBrain ; 
+            isSplitBrain = $data.isSplitBrain;
+            IsLicensed = $data.IsLicensed;
+            IsDisabledOU = $data.IsDisabledOU;
+            IsADDisabled = $data.IsADDisabled; 
+            IsAADDisabled = $data.IsAADDisabled;
+        } ; 
+        [pscustomobject]$Rpt ; 
+    } ; 
+    # output tabular results
+    $analysis | ft -auto ; 
+    - Process array of users, specify return detailed object (-outobject), for post-processing & filtering,
+    - Group results on federation sources,
+    - Output summary of EXO mailboxes for the second federator
+    - Then output the primary smtpaddress for all EXO mailboxes resolved to that federator
+    - Then create a summary object of the is* properties and UPN, primarySmtpAddress, 
+    - Finally display the summary as a console table
     .EXAMPLE
-    PS> $rptNNNNNN_FName_LName_Domain_com = ulu -o -users 'FName.LName@Domain.com' ;  $rpt655692_FName_LName_Domain_com | xxml .\logs\rpt655692_FName_LName_Domain_com.xml
+    $rptNNNNNN_FName_LName_Domain_com = ulu -o -users 'FName.LName@Domain.com' ;  $rpt655692_FName_LName_Domain_com | xxml .\logs\rpt655692_FName_LName_Domain_com.xml
     Example (from ahk 7uluo! macro parser output) that creates a variable based on ticketnumber & email address (with underscores for alphanums), from the output, and then exports the variable content to xml. 
-    Assigns to an immediately parsable inmem variable, along with the canned .xml that can be reloaded in future, or attached to a ticket.
+    ves an immediately parsable inmem variable, along with the canned .xml that can be reloaded in future, or attached to a ticket.
     .EXAMPLE
     PS> resolve-user -users 'John Public' -getmobile
     Example that includes the -getMobile parameter, to return details on xo MobileDevices in use with the EXO mailbox
     .EXAMPLE
-    PS> $999999Rpt = resolve-user fname.lname@toro.com -Ticket 99999 -getQuotaUsage -outObject ; 
-
-        10:39:53:===v (1/1):Input: 'FNAME.LNAME@toro.com' | 'FNAME' | 'LNAME' v===(EML)
-        get-Rmbx/xMbx: (Rmbx)(TOR USER, fed:ad.toro.com)
-        SamAccountName | WindowsEmailAddress
-        LNAMEFI         | FNAME.LNAME@toro.com
-        Office | RecipientTypeDetails | RemoteRecipientType | IsDirSynced
-                | RemoteUserMailbox    | Migrated            |
-        ExternalDirectoryObjectId | CustomAttribute5 | EmailAddressPolicyEnabled
-                                    |                  | True
-        Outlook (xoMAPI) Access Test Result:Success
-        xoMailboxStats Count:1
-        10:39:56: INFO:  (-getQuotaUsage:running lengthy Get-xoMailboxFolderStatistics...)
-        =get-AADuser FNAME.LNAME@toro.com>:
-        =get-AADuserManager FNAME.LNAME@toro.com>:
-        ===$hSum.ADUser: 
-        UPN                 | DName      | FName | LName | Title                             
-        FNAME.LNAME@toro.com | FNAME LNAME | FNAME | LNAME  | Supervisor II, Distribution Center
-        Company | Dept                            | Ofc          
-                | Operations Distribution El Paso | El Paso-D, TX
-        Street | City | State | Zip | Phone           | Mobile
-                |      |       |     | +1 915 231 7404 |
-        Enabled | DN                                                          
-        True    | CN=FNAME LNAME,OU=Users,OU=ELP,DC=global,DC=ad,DC=toro,DC=com
-        whenCreated          | whenChanged         
-        8/18/2017 4:13:54 PM | 2/23/2024 8:23:33 AM
-        Desc : 8/21/17 FT for FNAME LNAME 146294 -bk
-        LicenseGroup:(direct-assigned E3)
-        ===$hSum.AADUserMgr: 
-        UserPrincipalName       | Mail                   
-        FNAME.LNAME@toro.com | FNAME.LNAME@toro.com
-        OpOU : OU=Users,OU=ELP,DC=global,DC=ad,DC=toro,DC=com
-        10:40:06: PROMPT:  UserPrincipalName       | Mail                   
-        FNAME.LNAME@toro.com | FNAME.LNAME@toro.com
-        OpOU : OU=Users,OU=ELP,DC=global,DC=ad,DC=toro,DC=com
-
-        Licenses::
-        MCOEV, FLOW_FREE, MCOPSTNC, ENTERPRISEPACK, POWER_BI_STANDARD, EMS, Microsoft_Teams_Audio_Conferencing_select_dial_out
-
-        which specify the following size limits:
-        IssueWarningQuotaMB        : 14336
-        ProhibitSendQuotaMB        : 15360
-        ProhibitSendReceiveQuotaMB : 17408
-        (UseDatabaseQuotaDefaults:False)
-
-        Current TotalMailboxSizeMB: 10912.2
-
-        10:40:06: PROMPT:  QuotaStatus: Mailbox is below mandated SendReceiveQuotaMB by 4,447.80 megabytes
-        10:40:06: PROMPT:  
-        With the following non-zero folder metrics
-
-        Folder                                                               Items SizeMB  OldestItem NewestItem          FolderType               
-        ------                                                               ----- ------  ---------- ----------          ----------               
-        annnnnnn-nbne-nnnn-anne-necncannbnnn\Inbox                           23774 5764.38 20230111   02/27/2024 16:37:25 Inbox                    
-        annnnnnn-nbne-nnnn-anne-necncannbnnn\Deleted Items                   12434 4599.58 20220323   02/27/2024 16:35:34 DeletedItems             
-        ...
-        annnnnnn-nbne-nnnn-anne-necncannbnnn\Top of Information Store        1     0                                      Root
-        10:40:06: INFO:  
-        ===output to::
-        D:\scripts\logs\823795-FNAME.LNAME@toro.com-folder-sizes-NONHIDDEN-NONZERO-run20240227-1039AM.xml
-
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  EVIDENCE OF LEGAL HOLD DETECTED!:
-        10:40:09: WARNING:  LitigationHoldEnabled    : False
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  InPlaceHolds             : UniHnbnednbn-bndn-nnnf-nddn-annndnndnnae, UniHnnnneene-ndnd-naae-annn-nnnnnnnnnncn
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  ComplianceTagHoldApplied : False
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  DelayHoldApplied         : False
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  DelayReleaseHoldApplied  : False
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  Folder          Items    SizeMB OldestItem NewestItem          FolderType                    
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  ------          -----    ------ ---------- ----------          ----------                    
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  DiscoveryHolds 267225 101967.69            02/21/2024 08:42:57 RecoverableItemsDiscoveryHolds
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  
-        10:40:09: WARNING:  - DiscoveryHolds folder: If In-Place Hold is enabled or if a Microsoft 365 or Office 365 retention policy is assigned to the mailbox, this subfolder contains all items that meet the hold query parameters and are hard deleted.
-        10:40:09: WARNING:  - DiscoveryHolds folder.NewestItem: Will reflect *last time LegalHold captured an item* (e.g. if/when LH was disabled and stopped holding traffic, if in the past)
-        10:40:09: WARNING:  
-    
-    Example that includes the -getQuotaUsage parameter, to return details on xo MailboxFolderStatistics and effective Quota, around users with mailbox size issues, and assigns the returned summary to the variable `$999999Rpt
-    Note: use of -getQuotaUsage also does an extensive check for LegalHold signs in the mailbox. including reporting on:
-        - xoMailbox.LitigationHoldEnabled
-        - xoMailbox.InPlaceHolds, 
-        - xoMailbox.ComplianceTagHoldApplied
-        - xoMailbox.DelayHoldApplied 
-        - xoMailbox.DelayReleaseHoldApplied 
-        - checks if xoMailboxFolderStats 'DiscoveryHolds' folder has ItemsInFolder -gt 0
+    PS> resolve-user -users 'John Public' -getQuotaUsage
+    Example that includes the -getQuotaUsage parameter, to return details on xo MailboxFolderStatistics and effective Quota
     .LINK
     https://github.com/tostka/verb-exo
     #>
-
+    ###Requires -Version 5
+    ##Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010
     # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     # 12:19 PM 9/26/2023 pull verb-exo ref "
     #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-IO, verb-logging
@@ -15415,7 +15303,7 @@ function resolve-user {
             [string]$Ticket,
         [Parameter(HelpMessage="switch to return mobiledevice info for target user[-getMobile]")]
             [switch] $getMobile,
-        [Parameter(HelpMessage="switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]")]
+        [Parameter(HelpMessage="switch to return Quota & MailboxFolderStatistics analysis (XO-only)[-getQuotaUsage]")]
             [switch]$getQuotaUsage,
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
         [ValidateNotNullOrEmpty()]
@@ -15442,142 +15330,14 @@ function resolve-user {
             [switch] $outObject
     ) ;
     BEGIN{
-        #region CONSTANTS_AND_ENVIRO #*======v CONSTANTS_AND_ENVIRO v======
-        # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
-        $rPSCmdlet = $PSCmdlet ; 
-        $rPSScriptRoot = $PSScriptRoot ; 
-        $rPSCommandPath = $PSCommandPath ; 
-        $rMyInvocation = $MyInvocation ; 
-        $rPSBoundParameters = $PSBoundParameters ; 
-        [array]$score = @() ; 
-        if($rPSCmdlet.MyInvocation.InvocationName){
-            if($rPSCmdlet.MyInvocation.InvocationName -match '\.ps1$'){
-                $score+= 'ExternalScript' 
-            }elseif($rPSCmdlet.MyInvocation.InvocationName  -match '^\.'){
-                write-warning "dot-sourced invocation detected!:$($rPSCmdlet.MyInvocation.InvocationName)`n(will be unable to leverage script path etc from MyInvocation objects)" ; 
-                # dot sourcing is implicit scripot exec
-                $score+= 'ExternalScript' ; 
-            } else {$score+= 'Function' };
-        } ; 
-        if($rPSCmdlet.CommandRuntime){
-            if($rPSCmdlet.CommandRuntime.tostring() -match '\.ps1$'){$score+= 'ExternalScript' } else {$score+= 'Function' }
-        } ; 
-        $score+= $rMyInvocation.MyCommand.commandtype.tostring() ; 
-        $grpSrc = $score | group-object -NoElement | sort count ;
-        if( ($grpSrc |  measure | select -expand count) -gt 1){
-            write-warning  "$score mixed results:$(($grpSrc| ft -a count,name | out-string).trim())" ;
-            if($grpSrc[-1].count -eq $grpSrc[-2].count){
-                write-warning "Deadlocked non-majority results!" ;
-            } else {
-                $runSource = $grpSrc | select -last 1 | select -expand name ;
-            } ;
-        } else {
-            write-verbose "consistent results" ;
-            $runSource = $grpSrc | select -last 1 | select -expand name ;
-        };
-        write-host "Calculated `$runSource:$($runSource)" ;
-        'score','grpSrc' | get-variable | remove-variable ; # cleanup temp varis
-
+        # for scripts wo support, can use regions to fake BEGIN;PROCESS;END:
+        # ps1 faked:#region BEGIN ; #*------v BEGIN v------
+        #region CONSTANTS-AND-ENVIRO #*======v CONSTANTS-AND-ENVIRO v======
         # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
-        ${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ;
-        $PSParameters = New-Object -TypeName PSObject -Property $rPSBoundParameters ;
-        write-verbose "`$rPSBoundParameters:`n$(($rPSBoundParameters|out-string).trim())" ;
+        ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+        $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
+        write-verbose "`$PSBoundParameters:`n$(($PSBoundParameters|out-string).trim())" ;
         $Verbose = ($VerbosePreference -eq 'Continue') ; 
-        # pre psv2, no $rPSBoundParameters autovari to check, so back them out:
-        if($rPSCmdlet.MyInvocation.InvocationName){
-            if($rPSCmdlet.MyInvocation.InvocationName  -match '^\.'){
-                $smsg = "detected dot-sourced invocation: Skipping `$PSCmdlet.MyInvocation.InvocationName-tied cmds..." ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-            } else { 
-                write-verbose 'Collect all non-default Params (works back to psv2 w CmdletBinding)'
-                $ParamsNonDefault = (Get-Command $rPSCmdlet.MyInvocation.InvocationName).parameters | Select-Object -expand keys | Where-Object{$_ -notmatch '(Verbose|Debug|ErrorAction|WarningAction|ErrorVariable|WarningVariable|OutVariable|OutBuffer)'} ;
-            } ; 
-        } else { 
-            $smsg = "(blank `$rPSCmdlet.MyInvocation.InvocationName, skipping Parameters collection)" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        } ; 
-        #region ENVIRO_DISCOVER ; #*------v ENVIRO_DISCOVER v------
-        <#
-        # Debugger:proxy automatic variables that aren't directly accessible when debugging ; 
-        $rPSScriptRoot = $PSScriptRoot ; 
-        $rPSCommandPath = $PSCommandPath ; 
-        $rMyInvocation = $MyInvocation ; 
-        $rPSBoundParameters = $PSBoundParameters ; 
-        #>
-        $ScriptDir = $scriptName = '' ;     
-        if($ScriptDir -eq '' -AND ( (get-variable -name rPSScriptRoot -ea 0) -AND (get-variable -name rPSScriptRoot).value.length)){
-            $ScriptDir = $rPSScriptRoot
-        } ; # populated rPSScriptRoot
-        if( (get-variable -name rPSCommandPath -ea 0) -AND (get-variable -name rPSCommandPath).value.length){
-            $ScriptName = $rPSCommandPath
-        } ; # populated rPSCommandPath
-        if($ScriptDir -eq '' -AND $runSource -eq 'ExternalScript'){$ScriptDir = (Split-Path -Path $rMyInvocation.MyCommand.Source -Parent)} # Running from File
-        # when $runSource:'Function', $rMyInvocation.MyCommand.Source is empty,but on functions also tends to pre-hit from the rPSCommandPath entFile.FullPath ;
-        if( $scriptname -match '\.psm1$' -AND $runSource -eq 'Function'){
-            write-host "MODULE-HOMED FUNCTION:Use `$CmdletName to reference the running function name for transcripts etc (under a .psm1 `$ScriptName will reflect the .psm1 file  fullname)"
-            if(-not $CmdletName){write-warning "MODULE-HOMED FUNCTION with BLANK `$CmdletNam:$($CmdletNam)" } ;
-        } # Running from .psm1 module
-        if($ScriptDir -eq '' -AND (Test-Path variable:psEditor)) {
-            write-verbose "Running from VSCode|VS" ; 
-            $ScriptDir = (Split-Path -Path $psEditor.GetEditorContext().CurrentFile.Path -Parent) ; 
-                if($ScriptName -eq ''){$ScriptName = $psEditor.GetEditorContext().CurrentFile.Path }; 
-        } ;
-        if ($ScriptDir -eq '' -AND $host.version.major -lt 3 -AND $rMyInvocation.MyCommand.Path.length -gt 0){
-            $ScriptDir = $rMyInvocation.MyCommand.Path ; 
-            write-verbose "(backrev emulating `$rPSScriptRoot, `$rPSCommandPath)"
-            $ScriptName = split-path $rMyInvocation.MyCommand.Path -leaf ;
-            $rPSScriptRoot = Split-Path $ScriptName -Parent ;
-            $rPSCommandPath = $ScriptName ;
-        } ;
-        if ($ScriptDir -eq '' -AND $rMyInvocation.MyCommand.Path.length){
-            if($ScriptName -eq ''){$ScriptName = $rMyInvocation.MyCommand.Path} ;
-            $ScriptDir = $rPSScriptRoot = Split-Path $rMyInvocation.MyCommand.Path -Parent ;
-        }
-        if ($ScriptDir -eq ''){throw "UNABLE TO POPULATE SCRIPT PATH, EVEN `$rMyInvocation IS BLANK!" } ;
-        if($ScriptName){
-            if(-not $ScriptDir ){$ScriptDir = Split-Path -Parent $ScriptName} ; 
-            $ScriptBaseName = split-path -leaf $ScriptName ;
-            $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($ScriptName) ;
-        } ; 
-        # blank $cmdlet name comming through, patch it for Scripts:
-        if(-not $CmdletName -AND $ScriptBaseName){
-            $CmdletName = $ScriptBaseName
-        }
-        # last ditch patch the values in if you've got a $ScriptName
-        if($rPSScriptRoot.Length -ne 0){}else{ 
-            if($ScriptName){$rPSScriptRoot = Split-Path $ScriptName -Parent }
-            else{ throw "Unpopulated, `$rPSScriptRoot, and no populated `$ScriptName from which to emulate the value!" } ; 
-        } ; 
-        if($rPSCommandPath.Length -ne 0){}else{ 
-            if($ScriptName){$rPSCommandPath = $ScriptName }
-            else{ throw "Unpopulated, `$rPSCommandPath, and no populated `$ScriptName from which to emulate the value!" } ; 
-        } ; 
-        if(-not ($ScriptDir -AND $ScriptBaseName -AND $ScriptNameNoExt  -AND $rPSScriptRoot  -AND $rPSCommandPath )){ 
-            throw "Invalid Invocation. Blank `$ScriptDir/`$ScriptBaseName/`ScriptNameNoExt" ; 
-            BREAK ; 
-        } ; 
-        # echo results dyn aligned:
-        $tv = 'runSource','CmdletName','ScriptName','ScriptBaseName','ScriptNameNoExt','ScriptDir','PSScriptRoot','PSCommandPath','rPSScriptRoot','rPSCommandPath' ; 
-        $tvmx = ($tv| Measure-Object -Maximum -Property Length).Maximum * -1 ; 
-        $tv | get-variable | %{  write-verbose ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; 
-        'tv','tvmx'|get-variable | remove-variable ; # cleanup temp varis
-        
-        #endregion ENVIRO_DISCOVER ; #*------^ END ENVIRO_DISCOVER ^------
-
-        if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
-        if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
-        if(-not $RetrySleep){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
-        if(-not $DirSyncInterval){$DirSyncInterval = 30 } ; # AADConnect dirsync interval
-        if(-not $ThrottleMs){$ThrottleMs = 50 ;}
-        if(-not $rgxDriveBanChars){$rgxDriveBanChars = '[;~/\\\.:]' ; } ; # ;~/\.:,
-        if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' } ; # if it's a 40char hex string -> cert thumbprint  
-        if(-not $rgxSmtpAddr){$rgxSmtpAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ; } ; # email addr/UPN
-        if(-not $rgxDomainLogon){$rgxDomainLogon = '^[a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]+$' } ; # DOMAIN\samaccountname 
-        if(-not $exoMbxGraceDays){$exoMbxGraceDays = 30} ; 
-
         $rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ;
         # added support for . fname lname delimiter (supports pasted in dirname of email addresses, as user)
         $rgxDName = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
@@ -15695,14 +15455,7 @@ function resolve-user {
                 @{Name="OldestItem"; Expression={get-date $_.OldestItemReceivedDate -f "yyyyMMdd"}}, 
                 @{Name="NewestItem"; Expression={$_.NewestItemReceivedDate -f "yyyyMMdd"}},"FolderType" ;
 
-            # 10:01 AM 2/27/2024 new spec for reporting on LegalHold symptom folders
-            $prpFldrLH = @{Name='Folder'; Expression={$_.Name.tostring()}},@{Name="Items"; Expression={$_.ItemsInFolder}}, 
-                @{n="SizeMB"; e={[math]::round($_.FolderSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}}, 
-                @{Name="OldestItem"; Expression={get-date $_.OldestItemReceivedDate -f "yyyyMMdd"}}, 
-                @{Name="NewestItem"; Expression={$_.NewestItemReceivedDate -f "yyyyMMdd"}},"FolderType" ;
-                
-            # 9:41 AM 2/27/2024 fixed borked InPlaceHolds expansion (was empty, and the prop is where JanelS holds actually *appear*)
-$prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) -join ', '}},
+            $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.InPlaceHolds | select -expand InPlaceHolds) -join ', '}},
                 'ComplianceTagHoldApplied','DelayHoldApplied','DelayReleaseHoldApplied' ; 
 
             $rgxHiddn = '.*\\(Versions|SubstrateHolds|DiscoveryHolds|Yammer.*|Social\sActivity\sNotifications|Suggested\sContacts|Recipient\sCache|PersonMetadata|Audits|Calendar\sLogging|Purges)$' ; 
@@ -15710,8 +15463,6 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         } ; 
         $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
-
-        #endregion CONSTANTS_AND_ENVIRO ; #*------^ END CONSTANTS_AND_ENVIRO ^------
 
         <# if we want pipeline to work have to move the clipboard grab out or down into process{}, where pipeline binding will be actually populated
         if(!$users){
@@ -16342,105 +16093,18 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         #     the foreach loop below doesn't actually loop. Process{} is the loop with a pipeline-fed param, and the bound - $users - variable once per pipeline bound element - per array item on an array -
         #     is run with the $users value populated with each element in turn. IOW, the foreach is a single-run pass, and the Process{} block is the loop.
         # you need both a bound $users at the top - to handle explicit assigns resolve-user -users $variable.
-        # with a process {} block to handle any pipeline passed input. The pipeline still maps to the bound param: $users, but the entire process{} is run per element, rather than iteratign the internal $users foreach.
+        # with a process {} block to handle any pipeline passed input. The pipeline still maps to the bound param: $users, but the e3ntire process{} is run per element, rather than iteratign the internal $users foreach.
         foreach ($usr in $users){
-            
-            #region START-LOG #*======v START-LOG OPTIONS v======
-            #region START-LOG-HOLISTIC #*------v START-LOG-HOLISTIC v------
-            # Single log for script/function example that accomodates detect/redirect from AllUsers scope'd installed code, and hunts a series of drive letters to find an alternate logging dir (defers to profile variables)
-            #${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ;
-            if(!(get-variable LogPathDrives -ea 0)){$LogPathDrives = 'd','c' };
-            foreach($budrv in $LogPathDrives){if(test-path -path "$($budrv):\scripts" -ea 0 ){break} } ;
-            if(!(get-variable rgxPSAllUsersScope -ea 0)){
-                $rgxPSAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps(((d|m))*)1|dll)$" ;
-            } ;
-            if(!(get-variable rgxPSCurrUserScope -ea 0)){
-                $rgxPSCurrUserScope="^$([regex]::escape([Environment]::GetFolderPath('MyDocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps((d|m)*)1|dll)$" ;
-            } ;
-            $pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag=$null ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($whatif) ;} ;
-            # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
-            #$pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag=$null ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($WhatIfPreference) ;} ;
-            $pltSL.Tag = $null ; # $CmdletName # $ModuleName ; 
-            if($script:rPSCommandPath){ $prxPath = $script:rPSCommandPath }
-            elseif($script:PSCommandPath){$prxPath = $script:PSCommandPath}
-            if($rMyInvocation.MyCommand.Definition){$prxPath2 = $rMyInvocation.MyCommand.Definition }
-            elseif($MyInvocation.MyCommand.Definition){$prxPath2 = $MyInvocation.MyCommand.Definition } ; 
-            if($prxPath){
-                if(($prxPath -match $rgxPSAllUsersScope) -OR ($prxPath -match $rgxPSCurrUserScope)){
-                    $bDivertLog = $true ; 
-                    switch -regex ($prxPath){
-                        $rgxPSAllUsersScope{$smsg = "AllUsers"} 
-                        $rgxPSCurrUserScope{$smsg = "CurrentUser"}
-                    } ;
-                    $smsg += " context script/module, divert logging into [$budrv]:\scripts" 
-                    write-verbose $smsg  ;
-                    if($bDivertLog){
-                        if((split-path $prxPath -leaf) -ne $cmdletname){
-                            # function in a module/script installed to allusers|cu - defer name to Cmdlet/Function name
-                            $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
-                        } else {
-                            # installed allusers|CU script, use the hosting script name
-                            $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath -leaf)) ;
-                        }
-                    } ;
-                } else {
-                    $pltSL.Path = $prxPath ;
-                } ;
-           }elseif($prxPath2){
-                if(($prxPath2 -match $rgxPSAllUsersScope) -OR ($prxPath2 -match $rgxPSCurrUserScope) ){
-                     $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath2 -leaf)) ;
-                } elseif(test-path $prxPath2) {
-                    $pltSL.Path = $prxPath2 ;
-                } elseif($cmdletname){
-                    $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
-                } else {
-                    $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$CMDLETNAME, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug 
-                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    BREAK ;
-                } ; 
-            } else{
-                $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$CMDLETNAME, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug 
-                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                BREAK ;
-            }  ;
-            write-verbose "start-Log w`n$(($pltSL|out-string).trim())" ; 
-            $logspec = start-Log @pltSL ;
-            $error.clear() ;
-            TRY {
-                if($logspec){
-                    $logging=$logspec.logging ;
-                    $logfile=$logspec.logfile ;
-                    $transcript=$logspec.transcript ;
-                    $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
-                    if($stopResults){
-                        $smsg = "Stop-transcript:$($stopResults)" ; 
-                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                    } ; 
-                    $startResults = start-Transcript -path $transcript ;
-                    if($startResults){
-                        $smsg = "start-transcript:$($startResults)" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    } ; 
-                } else {throw "Unable to configure logging!" } ;
-            } CATCH [System.Management.Automation.PSNotSupportedException]{
-                if($host.name -eq 'Windows PowerShell ISE Host'){
-                    $smsg = "This version of $($host.name):$($host.version) does *not* support native (start-)transcription" ; 
-                } else { 
-                    $smsg = "This host does *not* support native (start-)transcription" ; 
-                } ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            } CATCH {
-                $ErrTrapd=$Error[0] ;
-                $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            } ;
-            #endregion START-LOG-HOLISTIC #*------^ END START-LOG-HOLISTIC ^------
+
+            #region TRANSCRIPTNAME ; #*------v TRANSCRIPT FROM SCRIPT/MODULENAME v------
+            # ISSUES with use of start-log(), even local, deps on Remove-StringDiacritic() etc, that are in dep modules, so alt: (see 7psOFile for other alts)
+            $transcript = "$($ScriptDir)\logs" ; if(!(test-path -path $transcript)){ mkdir $transcript -verbose:$true ; } ;
+            # - FOR FUNCTIONS, build from ${CmdletName}
+            #$transcript +=  "\$($CmdletName)" ;
+            # - OR FOR SCRIPTS, use $ScriptBaseName/$ScriptNameNoExt (which reflect name of hosting .psm1/.ps1 a function was loaded from)
+            $transcript +=  "\$($ScriptNameNoExt)" ;
+            $logfile = $transcript.replace('-trans','-log') ; $logging = $true ; 
+            #endregion TRANSCRIPTNAME ; #*------^ END TRANSCRIPT FROM SCRIPT/MODULENAME ^------
             #region LOGBUILD ; #*------v LOGBUILD v------
             # building an outputfile name dynamically using paremeters
             #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
@@ -16459,8 +16123,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             #[string]$ofile = join-path -path ($logfile -split '-LOG-BATCH-')[0]  -childpath $ofile ; 
             # raw path, no cmdletname prefix
             [string]$ofile = join-path -path (split-path $logfile) -childpath $ofile ; 
-            
 
+            
             #$fname = $lname = $dname = $OPRcp = $OPMailbox = $OPRemoteMailbox = $ADUser = $xoRcp = $xoMailbox = $xoUser = $xoMemberOf = $MsolUser = $LicenseGroup = $null ;
             $isEml=$isDname=$isSamAcct=$isXORcpMulti  = $false ;
 
@@ -17488,21 +17152,14 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     $smsg = "`n===`output to::`n$($ofMbxFolderStats)`n" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    
-                    # 10:08 AM 2/27/2024: Add: .xoMailboxFolderStats DiscoveryHolds folder only has ItemsInFolder -gt 0 if there's a hold
-                    if($hSum.xoMailbox.LitigationHoldEnabled -OR $hSum.xoMailbox.InPlaceHolds -OR $hSum.xoMailbox.ComplianceTagHoldApplied -OR $hSum.xoMailbox.DelayHoldApplied -OR $hSum.xoMailbox.DelayReleaseHoldApplied -OR ($hSum.xoMailboxFolderStats | ?{$_.name -match 'DiscoveryHolds' -AND $_.ItemsInFolder -gt 0})  ){
+
+                    if($hSum.xoMailbox.LitigationHoldEnabled -OR $hSum.xoMailbox.InPlaceHolds -OR $hSum.xoMailbox.ComplianceTagHoldApplied -OR $hSum.xoMailbox.DelayHoldApplied -OR $hSum.xoMailbox.DelayReleaseHoldApplied){
                         $smsg = "`n`nEVIDENCE OF LEGAL HOLD DETECTED!:`n$(($hSum.xoMailbox | fl $prpMbxHold|out-string).trim())`n`n" ; 
-                        if($hSum.xoMailboxFolderStats | ?{$_.name -match 'DiscoveryHolds' -AND $_.ItemsInFolder -gt 0}){
-                            $smsg += "`n$(($hSum.xoMailboxFolderStats | ?{$_.name -match '^DiscoveryHolds$'} | ft -a $prpFldrLH|out-string).trim())`n`n" ; 
-                            $smsg += "`n- DiscoveryHolds folder: If In-Place Hold is enabled or if a Microsoft 365 or Office 365 retention policy is assigned to the mailbox, this subfolder contains all items that meet the hold query parameters and are hard deleted." ; 
-                            $smsg += "`n- DiscoveryHolds folder.NewestItem: Will reflect *last time LegalHold captured an item* (e.g. if/when LH was disabled and stopped holding traffic, if in the past)`n"; 
-                        } 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
 
                     } else {
                         $smsg = "`n`n*No* evidence Of Legal Hold detected:`n$(($hSum.xoMailbox | fl $prpMbxHold|out-string).trim())`n`n" ; 
-                        $smsg = "`n$(($hSum.xoMailboxFolderStats | ?{$_.name -match 'DiscoveryHolds'} | ft -a $prpFldrLH|out-string).trim())`n`n" ; 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
@@ -20779,8 +20436,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQURqHMEgAz3UDFOkkMjlbKe2mx
-# WZKgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUrwkekLZHT4LHHI6QS6+Ng7X4
+# +eOgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -20795,9 +20452,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-Exchange
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTg2m6m
-# NARcYLfr113QTISogP3rSDANBgkqhkiG9w0BAQEFAASBgKD17FmFn2watelRjZ8A
-# +UZ0WuGNHVnMDPsIxLeVPaFkbZY6kKUrsnVvdHrrkZCOWH0GzZo4IkXvK4LYOq2O
-# Nis3rFDy3Eis1EG53C854N1fmblsUKUtEnmyKo+pkH9sTF9KI2NmiorMnvRwyzOn
-# H/LF74kFFHVE3ok8ldDz1J26
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSewYJK
+# AnuE5itA35SuLc1pxv1wDDANBgkqhkiG9w0BAQEFAASBgF8BwVtNdKT6yCro1SjM
+# dFQpyL/htxRevCw4qsC5XDdk/1AE7wCoLCKvLGuauhcSxhr29zG9olgdv09JcGW/
+# j0f9Uho9cXK/J/o52E0e0OhctLApOk3DT7BBDJ6cqJDZC0/L20aaHhE3dMSktTab
+# etT74TvRvzYXnHxM5lsPAfs8
 # SIG # End signature block
