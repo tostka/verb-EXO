@@ -20,6 +20,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 3:15 PM 3/1/2024 rem'd obsolete Disconnect-PssBroken line (old PSS-supporting call from EOM)
     * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 3:26 PM 5/23/2023 fixed typo -eq/=
     * 10:59 AM 4/18/2023 step debugs ; consolidating Disconnect-EXO2 into Disconnect-EXO, aliasing dxo2,Disconnect-EXO2; removing those originals
@@ -234,7 +235,8 @@ Function Disconnect-EXO {
         } ;  # loop-E
     } ; # if-E $existingPSSession.count -gt 0
     
-    Disconnect-PssBroken -verbose:$false ;
+    # here's the 'bug', old legacy pss-based force removal cmd, I'd spliced from v205 into verb-mods
+    #Disconnect-PssBroken -verbose:$false ;
     Remove-PSTitlebar 'EXO2' #-verbose:$($VerbosePreference -eq "Continue");
     #[console]::ResetColor()  # reset console colorscheme
 } ; 
