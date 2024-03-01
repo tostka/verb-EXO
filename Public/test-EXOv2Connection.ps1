@@ -17,6 +17,7 @@ function test-EXOv2Connection {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell
     REVISIONS
+    * 1:55 PM 3/1/2024 added code to repop empty $TenOrg, prior to AcceptedDom caching (came through empty in testing, when no preexisting conn)
     * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 3:26 PM 5/30/2023 updated CBH, demos ; # reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
     * 11:20 AM 4/25/2023 added -CertTag param (passed by connect-exo; used for validating credential alignment w Tenant)
@@ -284,6 +285,8 @@ function test-EXOv2Connection {
             # implement caching of accepteddoms into the XXXMeta, in the session (cut back on queries to EXO on acceptedom)
             if( get-command Get-xoAcceptedDomain) {
                     #$TenOrg = get-TenantTag -Credential $Credential ;
+                    # 1:10 PM 3/1/2024 Tenorg coming through unpopulated (after pulling legacy code), conditionally re-use the above rem:
+                    if( (-not $TenOrg) -AND $Credential){ $TenOrg = get-TenantTag -Credential $Credential } ; 
                 if(-not (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_AcceptedDomains){
                     set-Variable  -name "$($TenOrg)Meta" -value ( (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value += @{'o365_AcceptedDomains' = (Get-xoAcceptedDomain).domainname} )
                 } ;
