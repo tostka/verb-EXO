@@ -1332,10 +1332,10 @@ Reset-xoMailboxFolderPermissionsRecursive:OutBuffer
 Reset-xoMailboxFolderPermissionsRecursive:ob
 Reset-xoMailboxFolderPermissionsRecursive:PipelineVariable
 Reset-xoMailboxFolderPermissionsRecursive:pv
-Reset-xoMailboxFolderPermissionsRecursive:WhatIf
-Reset-xoMailboxFolderPermissionsRecursive:wi
 Reset-xoMailboxFolderPermissionsRecursive:Confirm
 Reset-xoMailboxFolderPermissionsRecursive:cf
+Reset-xoMailboxFolderPermissionsRecursive:WhatIf
+Reset-xoMailboxFolderPermissionsRecursive:wi
 resolve-Name:TenOrg
 resolve-Name:Identifier
 resolve-Name:useEXOv2

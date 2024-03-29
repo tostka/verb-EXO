@@ -20,6 +20,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 12:46 PM 3/5/2024 full step debug pass, with Disconnect-PssBroken -verbose:$false ; rem'd and EOM v3.4.0 in place: ran clean this time
     * 3:15 PM 3/1/2024 rem'd obsolete Disconnect-PssBroken line (old PSS-supporting call from EOM)
     * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 3:26 PM 5/23/2023 fixed typo -eq/=
