@@ -1,4 +1,6 @@
-﻿#*------v remove-EXOLicense.ps1 v------
+﻿# remove-EXOLicense.ps1
+
+#*------v remove-EXOLicense.ps1 v------
 function remove-EXOLicense {
     <#
     .SYNOPSIS
@@ -18,6 +20,7 @@ function remove-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 9:48 AM 6/17/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
     * 4:25 PM 5/22/2023 scrapped, rewrote adapted from functional add-exoLicense(); 
      * 3:37 PM 5/17/2023 added pltRXO support
     * 12:10 PM 6/7/2022 updated cbh params
@@ -160,18 +163,108 @@ function remove-EXOLicense {
         $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
 
+         <#
         # recycling the inbound above into next call in the chain
+        # downstream commands
         $pltRXO = [ordered]@{
-            Credential = $Credential ; 
-            verbose = $($VerbosePreference -eq "Continue")  ; 
-            silent = $silent ; 
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
         } ;
+        #>
+        # 9:26 AM 6/17/2024 this needs cred resolution splice over latest get-exomailboxlicenses
+        $o365Cred = $null ;
+        if($Credential){
+            $smsg = "`Credential:Explicit credentials specified, deferring to use..." ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                # get-TenantCredentials() return format: (emulating)
+                $o365Cred = [ordered]@{
+                Cred=$Credential ;
+                credType=$null ;
+            } ;
+            $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; # Username
+            #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;   # full Credential support
+            if($uRoleReturn.UserRole){
+                $o365Cred.credType = $uRoleReturn.UserRole ;
+            } else {
+                $smsg = "Unable to resolve `$credential.username ($($credential.username))"
+                $smsg += "`nto a usable 'UserRole' spec!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                Break ;
+            } ;
+        } else {
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole=$null; verbose=$($verbose)} ;
+            if($UserRole){
+                $smsg = "(`$UserRole specified:$($UserRole -join ','))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $pltGTCred.UserRole = $UserRole;
+            } else {
+                $smsg = "(No `$UserRole found, defaulting to:'CSVC','SID' " ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $pltGTCred.UserRole = 'CSVC','SID' ;
+            } ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = get-TenantCredentials @pltGTCred
+        } ;
+        if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+            $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            # 9:58 AM 6/13/2024 populate $credential with return, if not populated (may be required for follow-on calls that pass common $Credentials through)
+            if((gv Credential) -AND $Credential -eq $null){
+                $credential = $o365Cred.Cred ;
+            }elseif($credential.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(`$Credential is properly populated; explicit -Credential was in initial call)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } else {
+                $smsg = "`$Credential is `$NULL, AND $o365Cred.Cred is unusable to populate!" ;
+                $smsg = "downstream commands will *not* properly pass through usable credentials!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                break ;
+            } ;
+        } else {
+            $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            break ;
+        } ; 
 
-        $smsg = "Retrieve & build LicenseSkuIDS from global Meta vari" ;  
-        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        [array]$LicenseSkuIds = @() ; 
-        $LicenseSkuKeys | foreach-object { $LicenseSkuIds += @((get-variable -name "$($tenorg)META").value[$_]) } ; 
+        # downstream commands
+        $pltRXO = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((get-command Reconnect-EXO).Parameters.keys -contains 'silent'){
+            $pltRxo.add('Silent',$silent) ;
+        } ;
+        # default connectivity cmds - force silent false
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ; 
+        if((get-command Reconnect-EXO).Parameters.keys -notcontains 'silent'){
+            $pltRxo.remove('Silent') ;
+        } ; 
+
+        if(-not $LicenseSkuIds){
+            $smsg = "Retrieve & build LicenseSkuIDS from global Meta vari" ;  
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            $LicenseSkuKeys | foreach-object { $LicenseSkuIds += @((get-variable -name "$($tenorg)META").value[$_]) } ; 
+        } else { 
+            $smsg = "Explicit -LicenseSkuIds specified, using those licenses (in preference order)" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            $LicenseSkuKeys = $LicenseSkuIds
+        } ;
 
         #$rgxEmailAddr = '^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$ '
  

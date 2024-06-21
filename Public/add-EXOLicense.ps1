@@ -1,10 +1,10 @@
-﻿# add-EXOLicense.ps1
+﻿# d:\scripts\add-EXOLicense.ps1
 
 #*------v add-EXOLicense.ps1 v------
 function add-EXOLicense {
     <#
     .SYNOPSIS
-    remove-EXOLicense.ps1 - Add a temporary o365 license from specified AADUser account. Returns updated MSOLUser object to pipeline.
+    add-EXOLicense.ps1 - Add a temporary o365 license from specified AADUser account. Returns updated MSOLUser object to pipeline.
     .NOTES
     Version     : 1.0.0.
     Author      : Todd Kadrie
@@ -20,6 +20,8 @@ function add-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:21 PM 6/18/2024: finally got through full tree of add-EXOLicense, and deps cred fixes in add-AADUserLicense_func.ps1; set-AADUserUsageLocation_func.ps1; get-AADlicensePlanList_func.ps1; 
+    * 9:48 AM 6/17/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
     * 3:14 PM 5/30/2023 updated CBH; udpt CBH; consold 222+223 into 1 line; add pswl compliance; expanded demos ; rem'd unused
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; generic'd the meta vari name ; general cleanup rem'd; added expanded licname to echo ; 
     * 4:11 PM 5/22/2023 flipped all lic status testing to use of test-exoislicensed ; logic fixes
@@ -54,7 +56,7 @@ function add-EXOLicense {
     spliced over UsageLocation test/assert code from add-o365license.
     * 1:34 PM 1/5/2022 init
     .DESCRIPTION
-    remove-EXOLicense.ps1 - Add a temporary o365 license from specified AADUser account. Returns updated MSOLUser object to pipeline.
+    add-EXOLicense.ps1 - Add a temporary o365 license from specified AADUser account. Returns updated MSOLUser object to pipeline.
     .PARAMETER Ticket
     Ticket Number [-Ticket '999999']
     .PARAMETER TenOrg
@@ -63,6 +65,8 @@ function add-EXOLicense {
     Array of UserPrincipalNames (or MSOLUser objects) to have a temporary Exchange License applied
     .PARAMETER LicenseSkuKeys
     Array, in preference order, of XXXMeta global value LicenseSkuKey names (resolves SKUId from TenOrg global Meta vari ; first working lic assignment, will be applied)[-LicenseSkuIds 'o365LicSkuExStd','o365LicSkuF1']
+    .PARAMETER QueryLicenseSkus
+    Switch to perform dynamic lookup of LicenseSKUIDs against Get-AzureADSubscribedSku EXCHANGE_* serviceplanname filtering
     .PARAMETER LicenseSkuIds
     Optional Array, in preference order, of LicenseSkuID (e.g. TenantName:SPE_F1) to be added, runs list until first sucess (default process is to dynamically resolve id's from Meta LicenseSkuKeys specifications)[-LicenseSkuIds @(`$XXXMETA.o365LicSkuExStd,`$XXXMETA.o365LicSkuF1)]
     .PARAMETER Force
@@ -111,6 +115,9 @@ function add-EXOLicense {
     PS>     write-host -foregroundcolor green $smsg ;
     PS> } else { write-warning "`$target does *not* contain comma delimited ticket,UPN string!"} ;    
     Fancier variant of above, with more post-confirm reporting
+    .EXAMPLE 
+    add-EXOLicense -users Test@domain.com -Ticket 999999 -verbose -QueryLicenseSkus -whatIf;
+    Demo dynamic QueryLicenseSkus in use 
     .EXAMPLE
     PS> add-EXOLicense -users 'Test@domain.com' -LicenseSkuIds $XXXMETA.o365LicSkuExStd -ticket TICKETNUMBER;
     add an explicitly specified lic to a user (in this case, using the LicenseSku for EXCHANGESTANDARD, as stored in a global variable)
@@ -150,6 +157,8 @@ function add-EXOLicense {
         [Parameter(,HelpMessage="Array, in preference order, of XXXMeta global value LicenseSkuKey names (resolves SKUId from TenOrg global Meta vari ; first working lic assignment, will be applied)[-LicenseSkuIds 'o365LicSkuExStd','o365LicSkuF1']")]
             [ValidateNotNullOrEmpty()]
             [array]$LicenseSkuKeys=@('o365LicSkuExStd','o365LicSkuF1','o365LicSkuE3'),
+        [Parameter(HelpMessage="Switch to perform dynamic lookup of LicenseSKUIDs against Get-AzureADSubscribedSku EXCHANGE_* serviceplanname filtering[-QueryLicenseSkus]")]
+            [switch] $QueryLicenseSkus,   
         [Parameter(,HelpMessage="Optional Array, in preference order, of LicenseSkuID (e.g. TenantName:SPE_F1) to be added, runs list until first sucess (default process is to dynamically resolve id's from Meta LicenseSkuKeys specifications)[-LicenseSkuIds @(`$XXXMETA.o365LicSkuExStd,`$XXXMETA.o365LicSkuF1)]")]
             #[ValidateNotNullOrEmpty()]
             [array]$LicenseSkuIds = @(), 
@@ -194,25 +203,122 @@ function add-EXOLicense {
 
         if(-not $rgxEmailAddr){ $rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$"}
 
+        <#
         # recycling the inbound above into next call in the chain
         # downstream commands
         $pltRXO = [ordered]@{
             Credential = $Credential ;
             verbose = $($VerbosePreference -eq "Continue")  ;
         } ;
-        if((gcm Reconnect-EXO).Parameters.keys -contains 'silent'){
+        #>
+        # 9:26 AM 6/17/2024 this needs cred resolution splice over latest get-exomailboxlicenses
+        $o365Cred = $null ;
+        if($Credential){
+            $smsg = "`Credential:Explicit credentials specified, deferring to use..." ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                # get-TenantCredentials() return format: (emulating)
+                $o365Cred = [ordered]@{
+                Cred=$Credential ;
+                credType=$null ;
+            } ;
+            $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; # Username
+            #$uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq "Continue") ;   # full Credential support
+            if($uRoleReturn.UserRole){
+                $o365Cred.credType = $uRoleReturn.UserRole ;
+            } else {
+                $smsg = "Unable to resolve `$credential.username ($($credential.username))"
+                $smsg += "`nto a usable 'UserRole' spec!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                Break ;
+            } ;
+        } else {
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole=$null; verbose=$($verbose)} ;
+            if($UserRole){
+                $smsg = "(`$UserRole specified:$($UserRole -join ','))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $pltGTCred.UserRole = $UserRole;
+            } else {
+                $smsg = "(No `$UserRole found, defaulting to:'CSVC','SID' " ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $pltGTCred.UserRole = 'CSVC','SID' ;
+            } ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = get-TenantCredentials @pltGTCred
+        } ;
+        if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+            $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            # 9:58 AM 6/13/2024 populate $credential with return, if not populated (may be required for follow-on calls that pass common $Credentials through)
+            if((gv Credential) -AND $Credential -eq $null){
+                $credential = $o365Cred.Cred ;
+            }elseif($credential.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(`$Credential is properly populated; explicit -Credential was in initial call)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } else {
+                $smsg = "`$Credential is `$NULL, AND $o365Cred.Cred is unusable to populate!" ;
+                $smsg = "downstream commands will *not* properly pass through usable credentials!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                break ;
+            } ;
+        } else {
+            $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            break ;
+        } ; 
+
+        # downstream commands
+        $pltRXO = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((get-command Reconnect-EXO).Parameters.keys -contains 'silent'){
             $pltRxo.add('Silent',$silent) ;
         } ;
         # default connectivity cmds - force silent false
-        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ;
-        if((gcm Reconnect-EXO).Parameters.keys -notcontains 'silent'){ $pltRxo.remove('Silent') } ; 
+        $pltRXOC = [ordered]@{} ; $pltRXO.GetEnumerator() | ?{ $_.Key -notmatch 'silent' }  | ForEach-Object { $pltRXOC.Add($_.Key, $_.Value) } ; $pltRXOC.Add('silent',$true) ; 
+        if((get-command Reconnect-EXO).Parameters.keys -notcontains 'silent'){
+            $pltRxo.remove('Silent') ;
+        } ; 
+
 
         #[array]$LicenseSkuIds = @() ; # moved to param , to permit direct lic spec when using indep of formal scripts
         if(-not $LicenseSkuIds){
-            $smsg = "Retrieve & build LicenseSkuIDS from global Meta vari" ;  
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            $LicenseSkuKeys | foreach-object { $LicenseSkuIds += @((get-variable -name "$($tenorg)META").value[$_]) } ; 
+            if($QueryLicenseSkus){
+                $smsg = "Query Get-AzureADSubscribedSku  to obtain LicenseSkuIDS dynamically from from Exchange_* ServicePlanNames" ;  
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }} 
+                #$ExMbxLicenses = get-ExoMailboxLicenses -verbose:$($VerbosePreference -eq "Continue")  ;
+                # add outdetail & unfiltered support
+                $ExMbxLicenses = get-ExoMailboxLicenses -Unfiltered -OutDetail -credential $pltRXO.Credential -verbose:$($VerbosePreference -eq "Continue")  ;
+                # assert rank order to the Licenses, serviceplanname in order, and on enabled & available -desc
+                $licOrdered = @() ; 
+                'EXCHANGE_S_DESKLESS','EXCHANGE_S_STANDARD','EXCHANGE_S_ENTERPRISE' | %{
+                    $SPN = $_ ; 
+                    $licOrdered += $ExMbxLicenses.values | ?{$_.ServicePlanName -eq $SPN } | sort Enabled,Available -Descending; 
+                } ; 
+                $TenDom = (gv -name "$($TenOrg)Meta").value['o365_TenantDom'].tolower() ; 
+                #$LicenseSkuIds = $ExMbxLicenses.values.sku | %{"$($TenDom):$($_)"} ;
+                $LicenseSkuIds = $licOrdered.sku  | %{"$($TenDom):$($_)"} ;
+            }else {
+                $smsg = "Retrieve & build LicenseSkuIDS from global Meta vari" ;  
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                # this walks key names string array, pulls meta values matching, and appends them to the array. (which come through as [tenantname]:[licname]
+                $LicenseSkuKeys | foreach-object { $LicenseSkuIds += @((get-variable -name "$($tenorg)META").value[$_]) } ; 
+            } ; 
         } else { 
             $smsg = "Explicit -LicenseSkuIds specified, using those licenses (in preference order)" ; 
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
@@ -345,7 +451,11 @@ function add-EXOLicense {
                         $AADUser = $bRet.AzureADuser ;
                         #$Report.FixedUsageLocation = $true ;
                     } else {
-                        $smsg = "set-AADUserUsageLocation: FAILED TO UPDATE USAGELOCATION!" ;
+                        if($whatif){
+                            $smsg = "-whatif: skipping" ; 
+                        } else {                         
+                            $smsg = "set-AADUserUsageLocation: FAILED TO UPDATE USAGELOCATION!" ;
+                        } ; 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
                         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         #$Report.FixedUsageLocation = $false ;
@@ -533,6 +643,6 @@ function add-EXOLicense {
     END{
 
     } ;
- } ; 
+ }
 
 #*------^ add-EXOLicense.ps1 ^------
