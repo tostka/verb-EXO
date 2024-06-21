@@ -17,6 +17,10 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 9:55 AM 6/21/2024 add: prereq checks, and $isBased support, to devert into most basic Get-ConnectionInformation , Connect-ExchangeOnline fall back support
+    * 11:26 AM 4/12/2024 validated connect-exo -prefix xo -verbose ; 
+    * 9:09 AM 4/2/2024 rem'd citations of $bPreExoPPss
+    * 1:05 PM 4/1/2024 validates functional jb    
     * 1:48 PM 3/1/2024  with v340 support for proper/native S&C conn, I can finally remove the legacy EOM connection bits from this (*substantial* simplification):
         - removed raft of pre EOMv3xx code, basic auth is fully blocked now, independantly, test-EXOv2Connection() got some updates (TenOrg tweak, likewise removed code < EOM3xx support)
     * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
@@ -94,7 +98,7 @@ Function Connect-EXO {
     # 12:50 PM 6/2/2017 expanded pshelp, added Examples, cleaned up deadwood
     * # 12:10 PM 3/15/2017 Connect-EXO2 typo, disable prefix auto spec, unless actually blanked. switch ProxyEnabled to non-Mandatory.
     .DESCRIPTION
-    Connect-EXO - Establish PSS to EXO V2 Modern Auth
+    Connect-EXO - Establish connection to Exchange Online (via EXO V2 graph-api module)
     .PARAMETER  Prefix
     [verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-Prefix tag]
     .PARAMETER Credential
@@ -184,6 +188,7 @@ Function Connect-EXO {
                 return $true ; 
             })]
             [string[]]$UserRole = @('SIDCBA','SID','CSVC'),
+            # CCMS: [string[]]$UserRole = @('SID'),
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
             [ValidateNotNullOrEmpty()]
             #[ValidatePattern("^\w{3}$")]
@@ -216,6 +221,29 @@ Function Connect-EXO {
     ) ;
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
+
+        #region CHKPREREQ ; #*------v CHKPREREQ v------
+        # critical dependancy Meta variables
+        $MetaNames = 'TOR','CMW','TOL','NOSUCH' ; 
+        # critical dependancy Meta variable properties
+        $MetaProps = 'legacyDomain','o365_TenantDomain','DOESNTEXIST' ; 
+        $isBased = $true ; $gvMiss = @() ; $ppMiss = @() ; 
+        foreach($met in $metanames){
+            write-verbose "chk:`$$($met)Meta" ; 
+            if(-not (gv -name "$($met)Meta" -ea 0)){
+                $isBased = $false; $gvMiss += "$($met)Meta" ; 
+            } ; 
+            foreach($mp in $MetaProps){
+                write-verbose "chk:`$$($met)Meta.$($mp)" ; 
+                if(-not (gv -name "$($met)Meta" -ea 0).value[$mp]){
+                    $isBased = $false; $ppMiss += "$($met)Meta.$($mp)" ; 
+                } ; 
+            } ; 
+        } ; 
+        if($gvmiss){write-warning "Missing Dependant Meta variables:`n$(($gvMiss |%{"`$$($_)" }) -join ',')" } ; 
+        if($ppMiss){write-warning "Missing Dependant Meta vari properties:`n$(($ppMiss |%{"`$$($_)" }) -join ',')" } ; 
+        if(-not $isBased){ write-warning  "missing critical dependancy profile config!" } ; 
+        #endregion CHKPREREQ ; #*------^ END CHKPREREQ ^------
 
         if(-not (gv rgxCertThumbprint -ea 0)){$rgxCertThumbprint = '[0-9a-fA-F]{40}' ; } ;
         if(-not (gv rgxCertFNameSuffix -ea 0)){$rgxCertFNameSuffix = '-([A-Z]{3})$' ; } ; 
@@ -256,6 +284,10 @@ Function Connect-EXO {
         if(-not (gv EXOv2RunStateBad -ea 0 )){ $EXOv2RunStateBad = 'Broken'} ;
         if(-not (gv EXOv1GmoFilter -ea 0 )){$EXOv1GmoFilter = 'tmp_*' } ; 
         if(-not (gv EXOv2GmoNoWinRMFilter -ea 0 )){$EXOv2GmoNoWinRMFilter = 'tmpEXO_*' };
+        # add get-connectioninformation.ConnectionURI targeting rgxs for CCMS vs EXO
+        if(-not $rgxConnectionUriEXO){$rgxConnectionUriEXO = 'https://outlook\.office365\.com'} ; 
+        if(-not $rgxConnectionUriEXO){$rgxConnectionUriCCMS = 'https://ps\.compliance\.protection\.outlook\.com'} ; 
+        $sTitleBarTag = @("EXO2") ;
         #*------^ END PSS & GMO VARIS ^------
 
         #*======v FUNCTIONS v======
@@ -276,9 +308,11 @@ Function Connect-EXO {
         } ;
         #*======^ END FUNCTIONS ^======
 
+        
         # disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
         if (-not $Prefix) {
             $Prefix = 'xo' ; # 4:31 PM 7/29/2020 MS has RESERVED use of the 'exo' prefix [facepalm]
+            #$Prefix = 'cc' ; # ccms variant
             $smsg = "(asserting Prefix:$($Prefix)" ;
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
@@ -286,6 +320,15 @@ Function Connect-EXO {
         if (($Prefix) -and ($Prefix -eq 'EXO')) {
             throw "Prefix 'EXO' is a reserved Prefix, please use a different prefix."
         }
+        if($Prefix -eq 'cc'){
+            # build in hybrid xo & ccms support, switch on the prefix spec
+            $useCCMSConn = $true ; 
+        }; 
+        if($useCCMSConn){
+            # respec userrole
+            $UserRole = @('SID') ; 
+            $sTitleBarTag = @("CCMS") ;
+        } ; 
 
         <#
         $TenOrg = get-TenantTag -Credential $Credential ;
@@ -299,147 +342,148 @@ Function Connect-EXO {
         } ; 
         #>
 
-        # transplat fr rxo ---
-        if(-not $Credential){
-            if($UserRole){
-                $smsg = "Using specified -UserRole:$( $UserRole -join ',' )" ;
+        if(-not $isBased){
+            # default to most basic rudimentary connection
+            $Status = Get-ConnectionInformation -ErrorAction SilentlyContinue
+            If (-not ($Status)) {
+              #Connect-ExchangeOnline -SkipLoadingCmdletHelp
+              Connect-ExchangeOnline -SkipLoadingCmdletHelp -ShowBanner:$false ; 
+            }
+        }else {
+
+            # transplat fr rxo ---
+            if(-not $Credential){
+                if($UserRole){
+                    $smsg = "Using specified -UserRole:$( $UserRole -join ',' )" ;
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } else { $UserRole = @('SID','CSVC') } ;
+                if($TenOrg){
+                    $smsg = "Using explicit -TenOrg:$($TenOrg)" ; 
+                } else { 
+                    switch -regex ($env:USERDOMAIN){
+                        ([regex]('(' + (( @($TORMeta.legacyDomain,$CMWMeta.legacyDomain)  |foreach-object{[regex]::escape($_)}) -join '|') + ')')).tostring() {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
+                        $TOLMeta.legacyDomain {$TenOrg = 'TOL' }
+                        default {throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; exit ; } ;
+                    } ;  
+                    $smsg = "Imputed `$TenOrg from logged on USERDOMAIN:$($TenOrg)" ;             
+                } ; 
                 if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            } else { $UserRole = @('SID','CSVC') } ;
-            if($TenOrg){
-                $smsg = "Using explicit -TenOrg:$($TenOrg)" ; 
-            } else { 
-                switch -regex ($env:USERDOMAIN){
-                    ([regex]('(' + (( @($TORMeta.legacyDomain,$CMWMeta.legacyDomain)  |foreach-object{[regex]::escape($_)}) -join '|') + ')')).tostring() {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
-                    $TOLMeta.legacyDomain {$TenOrg = 'TOL' }
-                    default {throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; exit ; } ;
-                } ;  
-                $smsg = "Imputed `$TenOrg from logged on USERDOMAIN:$($TenOrg)" ;             
-            } ; 
-            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;             
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;             
             
-            $o365Cred = $null ;
-            $pltGTCred=@{TenOrg=$TenOrg ; UserRole= $UserRole; verbose=$($verbose)} ;
-            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            $o365Cred = get-TenantCredentials @pltGTCred ;
+                $sTitleBarTag += $TenOrg ;
 
-            if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
-                $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                $o365Cred = $null ;
+                $pltGTCred=@{TenOrg=$TenOrg ; UserRole= $UserRole; verbose=$($verbose)} ;
+                $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                $Credential = $o365Cred.Cred ;
-            } else { 
-                $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                $o365Cred = get-TenantCredentials @pltGTCred ;
 
-                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                break ; 
-            } ; 
-            
-        } else { 
-            # test-exotoken only applies if $UseConnEXO  $false
-            $TenOrg = get-TenantTag -Credential $Credential ;
-        } ;
-        # build the cred etc once, for all below:
-        $pltCXO=[ordered]@{
-            Credential = $Credential ;
-            verbose = $($verbose) ; 
-            erroraction = 'STOP' ;
-        } ;
-        if((gcm connect-EXO).Parameters.keys -contains 'silent'){
-            $pltCXO.add('Silent',$false) ;
-        } ;
+                if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                    $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    $Credential = $o365Cred.Cred ;
+                } else { 
+                    $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
 
-        $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ; 
-        if($credential.username -match $rgxCertThumbprint){
-            $certTag = $uRoleReturn.TenOrg ; 
-        } ; 
-        # ---
-
-        $sTitleBarTag = @("EXO2") ;
-        $sTitleBarTag += $TenOrg ;
-
-        $MFA = get-TenantMFARequirement -Credential $Credential ;
-
-        # 12:08 PM 8/2/2022 scrap the msal.net material: it's fundementally incompatible with EXO - sure you can pull and auth a token into the PS EXO clientid, but you can't spec a prefix on the returned cmdlets.
-        # 4:45 PM 7/7/2022 workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
-
-        # * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
-        #region EOMREV ; #*------v EOMREV Check v------
-        #$EOMmodname = 'ExchangeOnlineManagement' ;
-        $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
-        # do a gmo first, faster than gmo -list
-        if([version]$EOMMv = (Get-Module @pltIMod | sort version | select -last 1 ).version){}
-        elseif([version]$EOMMv = (Get-Module -ListAvailable @pltIMod | sort version | select -last 1 ).version){} 
-        else { 
-            $smsg = "$($EOMmodname) PowerShell v$($MinNoWinRMVersion) module is required, do you want to install it?" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
-            else{ write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ; 
-            if ($bRet.ToUpper() -eq "YYY") {
-                $smsg = "Installing $($EOMmodname) module..." ; 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    break ; 
+                } ; 
+            }elseif(-not $Credential -AND -not $isBaseed){    
+                $smsg = "Missing Profile config to drive connection automation, defa" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Install-Module $EOMmodname -Repository PSGallery -AllowClobber -Force ; 
-            } else {
-                $smsg = "Please install $($EOMmodname) PowerShell v$($MinNoWinRMVersion)  module." ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            } else { 
+                # test-exotoken only applies if $UseConnEXO  $false
+                $TenOrg = get-TenantTag -Credential $Credential ;
+            } ;
+            # build the cred etc once, for all below:
+            $pltCXO=[ordered]@{
+                Credential = $Credential ;
+                verbose = $($verbose) ; 
+                erroraction = 'STOP' ;
+            } ;
+            if((gcm connect-EXO).Parameters.keys -contains 'silent'){
+                $pltCXO.add('Silent',$false) ;
+            } ;
+
+            $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ; 
+            if($credential.username -match $rgxCertThumbprint){
+                $certTag = $uRoleReturn.TenOrg ; 
+            } ; 
+            # ---
+
+            $MFA = get-TenantMFARequirement -Credential $Credential ;
+
+            # 12:08 PM 8/2/2022 scrap the msal.net material: it's fundementally incompatible with EXO - sure you can pull and auth a token into the PS EXO clientid, but you can't spec a prefix on the returned cmdlets.
+            # 4:45 PM 7/7/2022 workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
+
+            # * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
+            #region EOMREV ; #*------v EOMREV Check v------
+            # reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
+            $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
+            if($xmod = Get-Module $EOMmodname -ErrorAction Stop| sort version | select -last 1 ){ } else {
+                $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                Try {
+                    Import-Module @pltIMod | out-null ;
+                    $xmod = Get-Module $EOMmodname -ErrorAction Stop | sort version | select -last 1 ;
+                } Catch {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $smsg = $ErrTrapd.Exception.Message ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    Break ;
+                } ;
+            } ; # IsImported
+            if([version]$xmod.version -ge $MinNoWinRMVersion){
+                $MinNoWinRMVersion = $xmod.version.tostring() ;
+                $IsNoWinRM = $true ; 
+            }
+            [boolean]$UseConnEXO = [boolean]([version]$xmod.version -ge $MinNoWinRMVersion) ; 
+            #endregion EOMREV ; #*------^ END EOMREV Check  ^------
+
+            if(-not $UseConnEXO){
+                $smsg = "NON-connect-ExchangeOnline() version of ExchangeOnlineManagement installed, update to vers:$($MinNoWinRMVersion) or higher!" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                #exit 1
+                throw $smsg ; 
                 break ; 
-            }  ; 
-        } ; 
-        $smsg = "Checking for WinRM support in this EOM rev..." 
-        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        if([version]$EOMMv -ge [version]$MinNoWinRMVersion){
-            $MinNoWinRMVersion = $EOMMv.tostring() ;
-            $IsNoWinRM = $true ; 
-        }elseif([version]$EOMMv -lt [version]$MinimumVersion){
-            $smsg = "Installed $($EOMmodname) is v$($MinNoWinRMVersion): This module is obsolete!" ; 
-            $smsg += "`nAnd unsupported by this function!" ; 
-            $smsg += "`nPlease install $($EOMmodname) PowerShell v$($MinNoWinRMVersion)  module!" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-            Break ; 
-        } else {
-            $IsNoWinRM = $false ; 
-        } ; 
-        [boolean]$UseConnEXO = [boolean]([version]$EOMMv -ge [version]$MinNoWinRMVersion) ; 
-        #endregion EOMREV ; #*------^ END EOMREV Check  ^------
 
-        if(-not $UseConnEXO){
-            $smsg = "NON-connect-ExchangeOnline() version of ExchangeOnlineManagement installed, update to vers:$($MinNoWinRMVersion) or higher!" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-            throw $smsg ; 
-            break ; 
-
-            # dropping all support/legacy code for EOMv1 (PSSession native-only connections)
-            # code below is used *solely* for EOM v205 connections (uses cached creds, integrates Connect-ExchangeOnline underlying commands)
-            # EOM -lt 2.0.5preview6 .dll etc loads, from connect-exchangeonline: (should be installed with the above)
-            # removed 12:23 PM 3/1/2024
+                # dropping all support/legacy code for EOMv1 (PSSession native-only connections)
+                # code below is used *solely* for EOM v205 connections (uses cached creds, integrates Connect-ExchangeOnline underlying commands)
+                # EOM -lt 2.0.5preview6 .dll etc loads, from connect-exchangeonline: (should be installed with the above)
+                # removed 12:23 PM 3/1/2024
         
-        } else { 
-            # $UseConnEXO => we're doing native connect-ExchangeOnline connectivity, no PSSession etc
-            $smsg = "native connect-ExchangeOnline specified..." ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        } ; 
+            } else { 
+                # $UseConnEXO => we're doing native connect-ExchangeOnline connectivity, no PSSession etc
+                $smsg = "native connect-ExchangeOnline specified..." ; 
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ; 
+
+        }  # if-E $isBased 
 
     } ; # BEG-E
     PROCESS {
-        $bExistingEXOGood = $false ;
-        $certUname = $null ; 
+        if($isBased){
 
-        # Keep track of error count at beginning.
-        $errorCountAtStart = $global:Error.Count;
-        $global:_EXO_TelemetryFilePath = $null;
+            $bExistingEXOGood = $bExistingCCMSGood = $false ;
+            $certUname = $null ; 
 
-        <# EXOv1: fully deprecated 12:24 PM 3/1/2024
+            # Keep track of error count at beginning.
+            $errorCountAtStart = $global:Error.Count;
+            $global:_EXO_TelemetryFilePath = $null;
+
+                                                                                                                                                                                                                        <# EXOv1: fully deprecated 12:24 PM 3/1/2024
         Get-PSSession | fl ConfigurationName,name,state,availability,computername
         -legacy remote-ps New-PSSession results in this PSS:
           ConfigurationName : Microsoft.Exchange
@@ -495,7 +539,7 @@ Function Connect-EXO {
         Availability      : Available
         #>
 
-        <# due to bug in ExchangeOnlineManagement (still in v2.0.5)...
+                                                                                    <# due to bug in ExchangeOnlineManagement (still in v2.0.5)...
             [Issue using ExchangeOnlineManagement v2.0.4 module to connect to Exchange Online remote powershell (EXO) and Exchange On-Prem remote powershell (EXOP) in same powershell window - Microsoft Q&A - docs.microsoft.com/](https://docs.microsoft.com/en-us/answers/questions/451786/issue-using-exchangeonlinemanagement-v204-module-t.html)
             ...we need to detect and pre-disconnect any existing EXoP implicit remoting sessions
             Because EMO is so badly written it can't properly differentiate the ExOP implicit-remote session(s) from it's own *prior*
@@ -515,7 +559,7 @@ Function Connect-EXO {
             ```
         #>
 
-        <#
+                                                                                <#
         if(-not $UseConnEXO){
             
             # all the EXOP PsSession hybrid bug conflicts are only nece3ssary with v2.0.5 or less of EMO...
@@ -535,70 +579,108 @@ Function Connect-EXO {
         }; 
         #>
 
-        # clear any existing legacy EXO sessions:
-        # legacy non-OAuth EXOv2 sessions (AKA EXOv1 basic-auth PSsession-based connections) distinguished on the Computername etc
-        if ( $pssEXOv1 = Get-PSSession | 
-            where-object {$_.ConfigurationName -like $EXOv1ConfigurationName -AND ($_.ComputerName -eq $EXOv1ComputerName) -AND (
-                $_.runspace.ConnectionInfo.AppName -eq $EXOv1runspaceConnectionInfoAppName) -AND (
-                $_.runspace.ConnectionInfo.Port -eq $EXOv1runspaceConnectionInfoPort) }  ) {
-            # ignore state & Avail, close the conflicting legacy conn's
-            if ($pssEXOv1.count -gt 0) {
-                $smsg = "(closing $($pssEXOv1.count) legacy EXOv1 sessions...)" ;
-                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                for ($index = 0; $index -lt $pssEXOv1.count; $index++) {
-                    $session = $pssEXOv1[$index] ;
-                    Remove-PSSession -session $session ;
-                    $smsg = "Removed the PSSession $($session.Name) connected to $($session.ComputerName)" ;
-                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            # clear any existing legacy EXO sessions:
+            # legacy non-OAuth EXOv2 sessions (AKA EXOv1 basic-auth PSsession-based connections) distinguished on the Computername etc
+            if ( $pssEXOv1 = Get-PSSession | 
+                where-object {$_.ConfigurationName -like $EXOv1ConfigurationName -AND ($_.ComputerName -eq $EXOv1ComputerName) -AND (
+                    $_.runspace.ConnectionInfo.AppName -eq $EXOv1runspaceConnectionInfoAppName) -AND (
+                    $_.runspace.ConnectionInfo.Port -eq $EXOv1runspaceConnectionInfoPort) }  ) {
+                # ignore state & Avail, close the conflicting legacy conn's
+                if ($pssEXOv1.count -gt 0) {
+                    $smsg = "(closing $($pssEXOv1.count) legacy EXOv1 sessions...)" ;
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    for ($index = 0; $index -lt $pssEXOv1.count; $index++) {
+                        $session = $pssEXOv1[$index] ;
+                        Remove-PSSession -session $session ;
+                        $smsg = "Removed the PSSession $($session.Name) connected to $($session.ComputerName)" ;
+                        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    } ;
+                    $bExistingEXOGood = $false ;
                 } ;
-                $bExistingEXOGood = $false ;
             } ;
-        } ;
-        #if ( Get-PSSession | where-object { $_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available') } ) {
-        # update to *not* tamper with CCMS connects
-        #if ( Get-PSSession | where-object { $_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*" -and $_.State -like "*Opened*" -AND ($_.Availability -eq 'Available') -AND ($_.ComputerName -match $rgxExoPsHostName) } ) {
-        # simpler - MS uses - very simple detect: 
-        # $pssEXOv2 = Get-PSSession | Where-Object {$_.ConfigurationName -like "Microsoft.Exchange" -and $_.Name -like "ExchangeOnlineInternalSession*"} ;
-       
-        # use test-EXOConnection - cxo2 *only* drives compliant eXOv2 connections, not legacy basicAuth
-        #$IsNoWinRM = $false ; 
-        # 11:18 AM 4/25/2023 add support for passing calc'd CertTag "Cert FriendlyName Suffix to be used for validating credential alignment(Optional but required for CBA calls)[-CertTag `$certtag]")][string]$CertTag
-        if($CertTag -ne $null){
-            $smsg = "(specifying detected `$CertTag:$($CertTag))" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            $oRet = test-EXOv2Connection -Credential $credential -CertTag $certtag -verbose:$($verbose) ; 
-        } else { 
-            $oRet = test-EXOv2Connection -Credential $credential -verbose:$($verbose) ; 
-        } ; 
-        $bExistingEXOGood = $oRet.Valid ; 
-        if($oRet.Valid){
-            $pssEXOv2 = $oRet.PsSession ; 
-            $IsNoWinRM = $oRet.IsNoWinRM ; 
-            $smsg = "(Validated EXOv2 Connected to Tenant aligned with specified Credential)" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        } else { 
-            $smsg = "NO VALID EXOV2/3 PSSESSION FOUND! (DISCONNECTING...)"
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-            else{ write-host -ForegroundColor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-            # capture outlier: shows a session wo the test cmdlet, force reset
-            DisConnect-EXO ;
-            $bExistingEXOGood = $false ;
-        } ;     
-    
-        if ($bExistingEXOGood -eq $false) {
-            # open a new EXOv2 session
-            # removed all legacy code: 12:25 PM 3/1/2024
-            if(-not $UseConnEXO){
-                
-                # removed all legacy code: 12:25 PM 3/1/2024
-
+            # use test-EXOConnection - cxo2 *only* drives compliant eXOv2 connections, not legacy basicAuth
+            #$IsNoWinRM = $false ; 
+            # 11:18 AM 4/25/2023 add support for passing calc'd CertTag "Cert FriendlyName Suffix to be used for validating credential alignment(Optional but required for CBA calls)[-CertTag `$certtag]")][string]$CertTag
+            $tIn = '4/18/2024;D:\scripts\test-EXOv2Connection_func.ps1' ;
+            $tdt,$tsrc =  $tIn.split(';') ;
+            $tdt=[datetime]$tdt ;
+            if($psise -and (get-date ).date -eq $tdt){
+                $gcm = gcm (split-path $tsrc -leaf).replace('_func.ps1','') ;
+                if( $gcm -AND $gcm.source -ne ''){
+                    gci function:$((split-path $tsrc -leaf).replace('_func.ps1','')) -ea 0| remove-item -force ;
+                    ipmo -fo -verb $tsrc;
+                } else {write-host "(non-Mod vers loaded)"} ;
+            } ; 
+            if($CertTag -ne $null){
+                $smsg = "(specifying detected `$CertTag:$($CertTag))" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                # keeps diverting to verb-exo, put in a today-only test/force reload _func
+                $oRet = test-EXOv2Connection -Credential $credential -CertTag $certtag -Prefix $Prefix -verbose:$($verbose) ; 
             } else { 
-                # $UseConnEXO 
-                <#
+                $oRet = test-EXOv2Connection -Credential $credential -Prefix $Prefix -verbose:$($verbose) ; 
+            } ; 
+            <# 1:46 PM 4/5/2024 updated test-EXOv2Connection return obj:
+            $oReturn = [ordered]@{
+                PSSession = $null ; 
+                IsNoWinRM = $false ; 
+                Valid = $false ; 
+                Prefix = $Prefix ; 
+                isEXO = $false ; 
+                isCCMS = $false ;
+                ConnectionUri = $null ; 
+            } ; 
+            #>
+            if($oReturn.isEXO){
+                $bExistingEXOGood = $oRet.Valid ; 
+                $smsg = "(Validated EXOv2 Connected to Tenant aligned with specified Credential)" ;
+            }elseif($oReturn.isCCMS){
+                $bExistingCCMSGood = $oRet.Valid ; 
+                $smsg = "(Validated CCMSv2 Connected to Tenant aligned with specified Credential)" ;
+            } ; 
+            if($oRet.Valid){
+                $pssEXOv2 = $oRet.PsSession ; 
+                $IsNoWinRM = $oRet.IsNoWinRM ; 
+                #$smsg = "(Validated EXOv2 Connected to Tenant aligned with specified Credential)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } else { 
+                $smsg = "NO VALID EXOV2/3 PSSESSION FOUND! (DISCONNECTING...)"
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                else{ write-host -ForegroundColor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                # capture outlier: shows a session wo the test cmdlet, force reset
+                $pltDXO=[ordered]@{
+                    confirm = $false ;
+                    erroraction = 'STOP' ;
+                    whatif = $($whatif) ;
+                } ;
+                if($Prefix){
+                    $pltDXO.add('ModulePrefix',$Prefix) ;
+                }
+                $smsg = "Disconnect-ExchangeOnline w`n$(($pltDXO|out-string).trim())" ;
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                Disconnect-ExchangeOnline @pltDXO ;
+                #  DisConnect-CCMS ; # CCMS
+                #DisConnect-EXO ;
+                $bExistingEXOGood = $bExistingCCMSGood = $false ;
+            } ;     
+        
+            #$bExistingCCMSGood
+            #if ($bExistingEXOGood -eq $false) {
+            # $UseConnEXO indicates it's a MinNoWinRMVersino, not necc xo-only conn; $useCCMSConn indicates it's a prefix cc/CCMS connection, solely
+            if( ($useCCMSConn -AND ($bExistingCCMSGood -eq $false)) -OR (-not($useCCMSConn) -AND $bExistingEXOGood -eq $false) ){
+                # open a new EXOv2 session
+                if(-not $UseConnEXO){
+                
+                    # removed all legacy code: 12:25 PM 3/1/2024
+
+                } else { 
+                    # $UseConnEXO 
+                                                                                                                                                                    <#
                 ==4:21 PM 6/30/2022: v2.0.6p6 examples
                 -------------------------- Example 1 --------------------------
                     Connect-ExchangeOnline -UserPrincipalName chris@contoso.com
@@ -635,22 +717,44 @@ Function Connect-EXO {
                     In PowerShell 7.0.3 or later using the EXO V2 module version 2.0.4 or later, this example connects to Exchange Online PowerShell in
                     interactive scripting scenarios by passing credentials directly in the PowerShell window.
                 #>
+                    <# CCMS connect
+                    ==2:04 PM 4/1/2024: v3.4.0 examples
+                    -------------------------- Example 1 --------------------------
+                    Connect-IPPSSession -UserPrincipalName michelle@contoso.onmicrosoft.com
+                    This example connects to Security & Compliance PowerShell using the specified account and modern authentication, with or without MFA. In v3.2.0 or later of the module, we're connecting in REST API mode, so Basic authentication in WinRM isn't required on the
+                    local computer.
+                    -------------------------- Example 2 --------------------------
+                    Connect-IPPSSession -UserPrincipalName michelle@contoso.onmicrosoft.com -UseRPSSession
+                    This example connects to Security & Compliance PowerShell using the specified account and modern authentication, with or without MFA. In v3.2.0 or later of the module, we're connecting in remote PowerShell mode, so Basic authentication in WinRM is required
+                    on the local computer.
+                    -------------------------- Example 3 --------------------------
+                    Connect-IPPSSession -AppId <%App_id%> -CertificateThumbprint <%Thumbprint string of certificate%> -Organization "contoso.onmicrosoft.com"
+                    This example connects to Security & Compliance PowerShell in an unattended scripting scenario using a certificate thumbprint.
+                    -------------------------- Example 4 --------------------------
+                    Connect-IPPSSession -AppId <%App_id%> -Certificate <%X509Certificate2 object%> -Organization "contoso.onmicrosoft.com"
+                    This example connects to Security & Compliance PowerShell in an unattended scripting scenario using a certificate file. This method is best suited for scenarios where the certificate is stored in remote machines and fetched at runtime. For example, the
+                    certificate is stored in the Azure Key Vault.            
+                    #>
 
-                $pltCEO=[ordered]@{                    
-                    erroraction = 'STOP' ;
-                    ShowBanner = $false ; # force the fugly banner hidden
-                } ;
+                    $pltCEO=[ordered]@{                    
+                        erroraction = 'STOP' ;
+                        ShowBanner = $false ; # force the fugly banner hidden
+                    } ;
                 
-                # 9:43 AM 8/2/2022 add defaulted prefix spec
-                if($Prefix){
-                    $smsg = "(adding specified Connect-ExchangeOnline -Prefix:$($Prefix))" ; 
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                    $pltCEO.add('Prefix',$Prefix) ; 
-                } ; 
+                    # 9:43 AM 8/2/2022 add defaulted prefix spec
+                    if($Prefix){
+                        if($useCCMSConn){
+                            $smsg = "(adding specified  Connect-IPPSSession -Prefix:$($Prefix))" ; 
+                        } else { 
+                            $smsg = "(adding specified Connect-ExchangeOnline -Prefix:$($Prefix))" ; 
+                        } ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        $pltCEO.add('Prefix',$Prefix) ; 
+                    } ; 
 
-                if ($MFA) {
-                    if($credential.username -match $rgxCertThumbprint){
+                    if ($MFA) {
+                                                                                                                                                                            if($credential.username -match $rgxCertThumbprint){
                         $smsg =  "(UserName:Certificate Thumbprint detected)"
                         if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
@@ -688,55 +792,67 @@ Function Connect-EXO {
                         $certUname = $uRoleReturn.FriendlyName ; 
                         $certTag = $uRoleReturn.TenOrg
                     } else { 
-                        # interactive ModernAuth -UserPrincipalName
-                        #$pltCXO.Add("UserPrincipalName", [string]$Credential.username);
-                        if ($UserPrincipalName) {
-                            $pltCEO.Add("UserPrincipalName", [string]$UserPrincipalName);
-                            $smsg = "(using cred:$([string]$UserPrincipalName))" ; 
-                            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                        } elseif ($Credential -AND -not $UserPrincipalName){
-                            $pltCEO.Add("UserPrincipalName", [string]$Credential.username);
-                            $smsg = "(using cred:$($credential.username))" ; 
-                            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                        };
-                    } 
-                } else {
-                    # just use the passed $Credential vari
-                    #$pltCXO.Add("Credential", [System.Management.Automation.PSCredential]$Credential);
-                    $pltCEO.Add("Credential", [System.Management.Automation.PSCredential]$Credential);
-                    $smsg = "(using cred:$($credential.username))" ; 
-                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                } ;
+                            # interactive ModernAuth -UserPrincipalName
+                            #$pltCXO.Add("UserPrincipalName", [string]$Credential.username);
+                            if ($UserPrincipalName) {
+                                $pltCEO.Add("UserPrincipalName", [string]$UserPrincipalName);
+                                $smsg = "(using cred:$([string]$UserPrincipalName))" ; 
+                                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            } elseif ($Credential -AND -not $UserPrincipalName){
+                                $pltCEO.Add("UserPrincipalName", [string]$Credential.username);
+                                $smsg = "(using cred:$($credential.username))" ; 
+                                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            };
+                        } 
+                    } else {
+                        # just use the passed $Credential vari
+                        #$pltCXO.Add("Credential", [System.Management.Automation.PSCredential]$Credential);
+                        $pltCEO.Add("Credential", [System.Management.Automation.PSCredential]$Credential);
+                        $smsg = "(using cred:$($credential.username))" ; 
+                        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    } ;
 
-                $smsg = "Connect-ExchangeOnline w`n$(($pltCEO|out-string).trim())" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    if($useCCMSConn){
+                        $smsg = "connect-IPPSSession w`n$(($pltCEO|out-string).trim())" ; 
+                    } else { 
+                        $smsg = "Connect-ExchangeOnline w`n$(($pltCEO|out-string).trim())" ; 
+                    } ;                 
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-                TRY {
-                    #Disconnect-ExchangeOnline -confirm:$false ;
-                    #Connect-ExchangeOnline @pltCXO ;
-                    Connect-ExchangeOnline @pltCEO ;
-                    #Add-PSTitleBar $sTitleBarTag ;
-                } CATCH {
-                    $ErrTrapd=$Error[0] ;
-                    $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    #-=-record a STATUSWARN=-=-=-=-=-=-=
-                    $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
-                    if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
-                    if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
-                    #-=-=-=-=-=-=-=-=
-                    $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                    TRY {
+                        if($useCCMSConn){
+                            connect-IPPSSession @pltCEO ;
+                        } else {
+                            Connect-ExchangeOnline @pltCEO ;
+                        } ; 
+                        #Add-PSTitleBar $sTitleBarTag ;
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #-=-record a STATUSWARN=-=-=-=-=-=-=
+                        $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                        if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                        if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                        #-=-=-=-=-=-=-=-=
+                        $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                    } ; 
+                    # -------- $UseConnEXO 
                 } ; 
-                # -------- $UseConnEXO 
-            } ; 
-        } ; #  # if-E $bExistingEXOGood
+            } ; #  # if-E $bExistingEXOGood
+
+        } else { 
+            $smsg = "(-not:`$isBased: running most basic Get-ConnectionInformation , Connect-ExchangeOnline connectivity)" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } ; 
     } ; # PROC-E
     END {
         
@@ -745,89 +861,142 @@ Function Connect-EXO {
         if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         #>
+        if($isBased){
+            if( ($useCCMSConn -AND ($bExistingCCMSGood -eq $false)) -OR (-not($useCCMSConn) -AND $bExistingEXOGood -eq $false) ){
+                $tIn = '4/18/2024;D:\scripts\test-EXOv2Connection_func.ps1' ;
+                $tdt,$tsrc =  $tIn.split(';') ;
+                $tdt=[datetime]$tdt ;
+                if($psise -and (get-date ).date -eq $tdt){
+                    $gcm = gcm (split-path $tsrc -leaf).replace('_func.ps1','') ;
+                    if( $gcm -AND $gcm.source -ne ''){
+                        gci function:$((split-path $tsrc -leaf).replace('_func.ps1','')) -ea 0| remove-item -force ;
+                        ipmo -fo -verb $tsrc;
+                    } else {write-host "(non-Mod vers loaded)"} ;
+                } ; 
+                if($CertTag -ne $null){
+                    $smsg = "(specifying detected `$CertTag:$($CertTag))" ; 
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    $oRet = test-EXOv2Connection -Credential $credential -CertTag $certtag -Prefix $Prefix -verbose:$($verbose) ; 
+                } else { 
+                    $oRet = test-EXOv2Connection -Credential $credential -Prefix $Prefix -verbose:$($verbose) ; 
+                } ; 
 
-        if ($bExistingEXOGood -eq $false) {
-            
-            # defer into test-EXOv2Connection()
-            # 11:18 AM 4/25/2023 add support for passing calc'd CertTag "Cert FriendlyName Suffix to be used for validating credential alignment(Optional but required for CBA calls)[-CertTag `$certtag]")][string]$CertTag
-            if($CertTag -ne $null){
-                $smsg = "(specifying detected `$CertTag:$($CertTag))" ; 
-                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                $oRet = test-EXOv2Connection -Credential $credential -CertTag $certtag -verbose:$($verbose) ; 
-            } else { 
-                $oRet = test-EXOv2Connection -Credential $credential -verbose:$($verbose) ; 
-            } ; 
+                if($useCCMSConn){
+                    $bExistingCCMSGood = $oRet.Valid ;
+                } else { 
+                    $bExistingEXOGood = $oRet.Valid ;
+                } ; 
 
-            $bExistingEXOGood = $oRet.Valid ;
-            if($oRet.Valid){
-	            $pssEXOv2 = $oRet.PsSession ;
-                $IsNoWinRM = $oRet.IsNoWinRM ; 
-	            $smsg = "(Validated EXOv2 Connected to Tenant aligned with specified Credential)`n`$IsNoWinRM:$($IsNoWinRM )" ;
-	            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                if($oRet.Valid){
+                    $pssEXOv2 = $oRet.PsSession ;
+                    $IsNoWinRM = $oRet.IsNoWinRM ; 
+                    <#$oRet
+                    PSSession     :
+                    IsNoWinRM     : True
+                    Valid         : True
+                    Prefix        : xo
+                    isEXO         : True
+                    isCCMS        : False
+                    ConnectionUri : https://outlook.office365.com
+                    #>        
+                    switch -regex ($oRet.ConnectionUri){
+                        $rgxConnectionUriEXO {
+                            if ($oRet.Valid -AND $oRet.isEXO){
+                                $smsg = "connected to EXO" ;
+                                $bExistingEXOGood = $isEXOValid = $true ;
+                            } ;
+                        }
+                        $rgxConnectionUriCCMS {
+                            if ($oRet.Valid -AND $oRet.isCCMS){
+                                $smsg = "connected to CCMS" ;
+                                $bExistingCCMSGood = $isCCMSValid = $true ;
+                            } ;
+                        }
+                        default {
+                            $bExistingEXOGood = $isEXOValid = $bExistingCCMSGood = $isCCMSValid = $FALSE ;
+                            $smsg = "unreconized test-EXOv2Connection returned:`$oRet.ConnectionUri:$($oRet.ConnectionUri)!" 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        }
+                    } ; 
+      
+                    $smsg += ":Validated Connected to Tenant aligned with specified Credential: `$IsNoWinRM:$($IsNoWinRM)" ;
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } else {
+                    $smsg = "NO VALID EXOV2/3 SESSION FOUND! (DISCONNECTING...)"
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                    else{ write-host -ForegroundColor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    # capture outlier: shows a session wo the test cmdlet, force reset
+                    $pltDXO=[ordered]@{
+                        confirm = $false ;
+                        erroraction = 'STOP' ;
+                        whatif = $($whatif) ;
+                    } ;
+                    if($Prefix){
+                        $pltDXO.add('ModulePrefix',$Prefix) ;
+                    }
+                    $smsg = "Disconnect-ExchangeOnline w`n$(($pltDXO|out-string).trim())" ;
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    Disconnect-ExchangeOnline @pltDXO ;
+
+                    #  DisConnect-CCMS ; # CCMS
+                    #DisConnect-EXO ;
+                    $bExistingEXOGood = $false ;
+                } ;       
             } else {
-	            $smsg = "NO VALID EXOV2 PSSESSION FOUND! (DISCONNECTING...)"
-	            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
-	            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-	            # capture outlier: shows a session wo the test cmdlet, force reset
-	            DisConnect-EXO ;
-	            $bExistingEXOGood = $false ;
-            } ;       
+              <# 9:08 AM 4/2/2024 unneded post v205p5 - disabled the cod that sets vari, above
+              if($bPreExoPPss){
+                  $smsg = "(EMO bug-workaround: reconnecting prior ExOP PssSession,"
+                  $smsg += "`nreconnect-Ex2010 -Credential $($pltRX10.Credential.username) -verbose:$($VerbosePreference -eq "Continue"))" ; 
+                  if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                  else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                  reconnect-Ex2010 -Credential $pltRX10.Credential -verbose:$($VerbosePreference -eq "Continue") ; 
+              } ;
+              #>
+            } ; 
 
-        } else {
-            if($bPreExoPPss){
-                $smsg = "(EMO bug-workaround: reconnecting prior ExOP PssSession,"
-                $smsg += "`nreconnect-Ex2010 -Credential $($pltRX10.Credential.username) -verbose:$($VerbosePreference -eq "Continue"))" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            if($VerbosePreference -eq "Continue"){
+                # echo Exchange-tied PSS summary
+                if($pssEXOP = Get-PSSession | 
+                    where-object { ($_.ConfigurationName -eq $EXoPConfigurationName) -AND (
+                        $_.runspace.ConnectionInfo.AppName -match '^/(exadmin|powershell)$') -AND (
+                        $_.runspace.ConnectionInfo.Port -eq '80') } ){
+                    $smsg = "`nExOP PSSessions:`n$(($pssEXOP | fl $pssprops|out-string).trim())" ; 
+                } ;
+                if($pssEXOv1 = Get-PSSession | 
+                        where-object {$_.ConfigurationName -like $EXOv1ConfigurationName -AND (
+                            $_.ComputerName -eq 'ps.outlook.com') -AND ($_.runspace.ConnectionInfo.AppName -eq '/PowerShell-LiveID') -AND (
+                            $_.runspace.ConnectionInfo.Port -eq '443') }){
+                    $smsg += "`n`nEXOv1 PSSessions:`n$(($pssEXOv1 | fl $pssprops|out-string).trim())" ; 
+                } ; 
+                if($pssEXOv2 = Get-PSSession | 
+                        where-object {$_.ConfigurationName -like $EXOv2ConfigurationName -AND (
+                            $_.Name -like $EXOv2Name) -AND ($_.ComputerName -eq $EXOv2ComputerName)} ){
+                    $smsg += "`n`nEXOv2 PSSessions:`n$(($pssEXOv2 | fl $pssprops|out-string).trim())" ; 
+                } ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                reconnect-Ex2010 -Credential $pltRX10.Credential -verbose:$($VerbosePreference -eq "Continue") ; 
-            } ;
+            
+                if($IsNoWinRM -AND ((get-module $EXOv2GmoNoWinRMFilter) -AND (get-module $EOMModName))){
+                    $smsg = "(native non-WinRM/Non-PSSession-based EXO connection detected.)" ; 
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } ; 
+            } ; 
+
+            # 10:37 AM 4/18/2023: Rem this: Been seldom capturing returns: that's bound to contaiminate pipeline! May have planned to grab and compare, but never really implemented
+            #$bExistingEXOGood | write-output ;
+            # splice in console color scheming
+
+        } else { 
+            $smsg = "(-not:`$isBased: running most basic Get-ConnectionInformation , Connect-ExchangeOnline connectivity)" ; 
+            #if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            #else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         } ; 
-
-        if($VerbosePreference -eq "Continue"){
-            # echo Exchange-tied PSS summary
-            if($pssEXOP = Get-PSSession | 
-                where-object { ($_.ConfigurationName -eq $EXoPConfigurationName) -AND (
-                    $_.runspace.ConnectionInfo.AppName -match '^/(exadmin|powershell)$') -AND (
-                    $_.runspace.ConnectionInfo.Port -eq '80') } ){
-                $smsg = "`nExOP PSSessions:`n$(($pssEXOP | fl $pssprops|out-string).trim())" ; 
-            } ;
-            if($pssEXOv1 = Get-PSSession | 
-                    where-object {$_.ConfigurationName -like $EXOv1ConfigurationName -AND (
-                        $_.ComputerName -eq 'ps.outlook.com') -AND ($_.runspace.ConnectionInfo.AppName -eq '/PowerShell-LiveID') -AND (
-                        $_.runspace.ConnectionInfo.Port -eq '443') }){
-                $smsg += "`n`nEXOv1 PSSessions:`n$(($pssEXOv1 | fl $pssprops|out-string).trim())" ; 
-            } ; 
-            if($pssEXOv2 = Get-PSSession | 
-                    where-object {$_.ConfigurationName -like $EXOv2ConfigurationName -AND (
-                        $_.Name -like $EXOv2Name) -AND ($_.ComputerName -eq $EXOv2ComputerName)} ){
-                $smsg += "`n`nEXOv2 PSSessions:`n$(($pssEXOv2 | fl $pssprops|out-string).trim())" ; 
-            } ;
-            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            if($bPreExoPPss -AND -not $pssEXOP){
-                $smsg = "(EMO bug-workaround: reconnecting prior ExOP PssSession,"
-                $smsg += "`nreconnect-Ex2010 -Credential $($pltRX10.Credential.username) -verbose:$($VerbosePreference -eq "Continue"))" ; 
-                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                reconnect-Ex2010 -Credential $pltRX10.Credential -verbose:$($VerbosePreference -eq "Continue") ; 
-            } else { 
-                $smsg = "(no bPreExoPPss, no Rx10 conn restore)" ; 
-                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            } ; 
-
-            if($IsNoWinRM -AND ((get-module $EXOv2GmoNoWinRMFilter) -AND (get-module $EOMModName))){
-                $smsg = "(native non-WinRM/Non-PSSession-based EXO connection detected." ; 
-                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            } ; 
-        } ; 
-
-        # 10:37 AM 4/18/2023: Rem this: Been seldom capturing returns: that's bound to contaiminate pipeline! May have planned to grab and compare, but never really implemented
-        #$bExistingEXOGood | write-output ;
-        # splice in console color scheming
     }  # END-E
 } ; 
 #*------^ Connect-EXO.ps1 ^------
