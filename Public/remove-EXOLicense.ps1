@@ -20,6 +20,7 @@ function remove-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection
     * 9:48 AM 6/17/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
     * 4:25 PM 5/22/2023 scrapped, rewrote adapted from functional add-exoLicense(); 
      * 3:37 PM 5/17/2023 added pltRXO support
@@ -102,7 +103,7 @@ function remove-EXOLicense {
     #>
     # migr to verb-exo, pull the dupe spec...
     #Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-Auth, verb-IO, verb-logging, verb-Mods, verb-Text
-    #Requires -RunasAdministrator
+    ##Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\s\regex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]

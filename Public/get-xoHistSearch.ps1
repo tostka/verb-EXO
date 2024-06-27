@@ -18,6 +18,7 @@ function get-xoHistSearch {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection 
     * 1:44 PM 1/6/2022 updated example2 to have start/end rather than days; added region tags for bracketed blocks of code
     * 2:40 PM 12/10/2021 more cleanup 
     * 12:49 PM 9/28/2021 init; added MsgID support; added MsgID example
@@ -83,7 +84,7 @@ function get-xoHistSearch {
     ###Requires -Version 5
     #Requires -Modules ExchangeOnlineManagement,verb-Auth, verb-IO, verb-logging, verb-Text
     ###Requires -Modules ActiveDirectory, AzureAD, MSOnline, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-Ex2010, verb-EXO, verb-IO, verb-logging, verb-Text
-    #Requires -RunasAdministrator
+    ##Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.COMPANY\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding(DefaultParameterSetName='Days')]
