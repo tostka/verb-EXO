@@ -17,6 +17,9 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 11:10 AM 6/27/2024 wip updated for functionalized verb-AAD:Update-AADAppRegistrationKeyCertificate(); need to debug the S&C conn, haven't revisited since initial hybrid coding attempt ; odd, it lost the cxo alias def (added back, did I lose a rev in the mix?) CBA certs expired, error in connect-ExchangeOnline doesn't cite the expiration, just crashes out. So added code to precheck local cert NotAfter, and premptively feed problem cert into Update-AADAppRegistrationKeyCertificate 
+    (not debugged yet; need to reroll the certs & creds)
+    * 4:28 PM 6/26/2024 interrum, functional 
     * 9:55 AM 6/21/2024 add: prereq checks, and $isBased support, to devert into most basic Get-ConnectionInformation , Connect-ExchangeOnline fall back support
     * 11:26 AM 4/12/2024 validated connect-exo -prefix xo -verbose ; 
     * 9:09 AM 4/2/2024 rem'd citations of $bPreExoPPss
@@ -168,7 +171,7 @@ Function Connect-EXO {
     .LINK
     #>
     [CmdletBinding(DefaultParameterSetName='UPN')]
-    [Alias('cxo2','Connect-EXO2' )]
+    [Alias('cxo','cxo2','Connect-EXO2' )]
     PARAM(
         # try pulling all the ParameterSetName's - just need to get through it now. - no got through it with a defaultparametersetname (avoids 
         [Parameter(HelpMessage = "[verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-Prefix tag]")]
@@ -224,9 +227,9 @@ Function Connect-EXO {
 
         #region CHKPREREQ ; #*------v CHKPREREQ v------
         # critical dependancy Meta variables
-        $MetaNames = 'TOR','CMW','TOL','NOSUCH' ; 
+        $MetaNames = 'TOR','CMW','TOL' # ,'NOSUCH' ; 
         # critical dependancy Meta variable properties
-        $MetaProps = 'legacyDomain','o365_TenantDomain','DOESNTEXIST' ; 
+        $MetaProps = 'legacyDomain','o365_TenantDomain' #,'DOESNTEXIST' ; 
         $isBased = $true ; $gvMiss = @() ; $ppMiss = @() ; 
         foreach($met in $metanames){
             write-verbose "chk:`$$($met)Meta" ; 
@@ -618,6 +621,16 @@ Function Connect-EXO {
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 # keeps diverting to verb-exo, put in a today-only test/force reload _func
+                if($psise -AND ( (gcm test-EXOv2Connection).parameters.keys -notcontains 'Prefix' )){
+                    Do{
+                        gci function:test-EXOv2Connection | remove-item -force ; 
+                        #ipmo -fo -verb D:\scripts\Connect-EXO_func.ps1
+                        epbp ; $psise.CurrentFile.FullPath | ipmo -fo -verb ; 
+                    }while($null -ne (gcm test-EXOv2Connection).Module)
+                        
+                    #gci function:test-EXOv2Connection | remove-item -force ; 
+                    #ipmo -fo -verb D:\scripts\Connect-EXO_func.ps1
+                } ; 
                 $oRet = test-EXOv2Connection -Credential $credential -CertTag $certtag -Prefix $Prefix -verbose:$($verbose) ; 
             } else { 
                 $oRet = test-EXOv2Connection -Credential $credential -Prefix $Prefix -verbose:$($verbose) ; 
@@ -754,44 +767,148 @@ Function Connect-EXO {
                     } ; 
 
                     if ($MFA) {
-                                                                                                                                                                            if($credential.username -match $rgxCertThumbprint){
-                        $smsg =  "(UserName:Certificate Thumbprint detected)"
-                        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                        # cert CBA non-basic auth
-                        <# CertificateThumbPrint = $Credential.UserName ;
-	                        AppID = $Credential.GetNetworkCredential().Password ;
-	                        Organization = 'TENANTNAME.onmicrosoft.com' ; # org is on $xxxmeta.o365_TenantDomain
-                        #>
-                        $pltCEO.Add("CertificateThumbPrint", [string]$Credential.UserName);                    
-                        $pltCEO.Add("AppID", [string]$Credential.GetNetworkCredential().Password);
-                        if($TenDomain = (Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain){
-                            $pltCEO.Add("Organization", [string]$TenDomain);
-                        } else { 
-                            $smsg = "UNABLE TO RESOLVE `$TENORG:$($TenOrg) TO FUNCTIONAL `$$($TenOrg)meta.o365_TenantDomain!" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                            throw $smsg ; 
-                            Break ; 
-                        } ; 
-                        <# want the friendlyname to display the cred source in use #$tcert.friendlyname
-                        if($tcert = get-childitem -path "Cert:\CurrentUser\My\$($credential.username)"){
-                            $certUname = $tcert.friendlyname ; 
-                            $certTag = [regex]::match($certUname,$rgxCertFNameSuffix).captures[0].groups[1].value ; 
-                            $smsg = "(using CBA:cred:$($certTag):$([string]$tcert.friendlyname))" ; 
+                        if($credential.username -match $rgxCertThumbprint){
+                            $smsg =  "(UserName:Certificate Thumbprint detected)"
                             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            # cert CBA non-basic auth
+                            <# CertificateThumbPrint = $Credential.UserName ;
+	                            AppID = $Credential.GetNetworkCredential().Password ;
+	                            Organization = 'TENANTNAME.onmicrosoft.com' ; # org is on $xxxmeta.o365_TenantDomain
+                            #>
+                            $pltCEO.Add("CertificateThumbPrint", [string]$Credential.UserName);                    
+                            $pltCEO.Add("AppID", [string]$Credential.GetNetworkCredential().Password);
+                            if($TenDomain = (Get-Variable  -name "$($TenOrg)Meta").value.o365_TenantDomain){
+                                $pltCEO.Add("Organization", [string]$TenDomain);
+                            } else { 
+                                $smsg = "UNABLE TO RESOLVE `$TENORG:$($TenOrg) TO FUNCTIONAL `$$($TenOrg)meta.o365_TenantDomain!" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                                throw $smsg ; 
+                                Break ; 
+                            } ; 
+                            <# want the friendlyname to display the cred source in use #$tcert.friendlyname
+                            if($tcert = get-childitem -path "Cert:\CurrentUser\My\$($credential.username)"){
+                                $certUname = $tcert.friendlyname ; 
+                                $certTag = [regex]::match($certUname,$rgxCertFNameSuffix).captures[0].groups[1].value ; 
+                                $smsg = "(using CBA:cred:$($certTag):$([string]$tcert.friendlyname))" ; 
+                                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            } else { 
+                                $smsg = "UNABLE TO RESOLVE `$TENORG:$($TenOrg) TO FUNCTIONAL `$$($TenOrg)meta.o365_TenantDomain!" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                                throw $smsg ; 
+                                Break ; 
+                            } ;
+                            #>
+                            $certUname = $uRoleReturn.FriendlyName ; 
+                            $certTag = $uRoleReturn.TenOrg ; 
+
+                            <# 9:35 AM 6/25/2024 expired auth cert, need to proactively test and warn
+                            # CertificateThumbPrint = $Credential.UserName ;
+	                            AppID = $Credential.GetNetworkCredential().Password ;
+	                            Organization = 'TENANTNAME.onmicrosoft.com' ; # org is on $xxxmeta.o365_TenantDomain
+                            # warn at 2wks
+                            # warn high pause at 7 days
+                            #if((gci Cert:\CurrentUser\My\[string]$Credential.UserName).NotAfter -lt (get-date )){write-warning "Expired Cert!"} ;
+                            "cert:$(((gci Cert:\CurrentUser\My\C5672B2D81CC828F78A93CE81CF436CC8C861F8F -ea STOP).pspath -split('::'))[1])"
+                            #>
+                            $prpCertgci = 'FriendlyName','Subject','Thumbprint','NotBefore','NotAfter',@{Name='Path';Expression={( "cert:$(($_.pspath -split('::'))[-1])" )}} ; 
+                            $certWarnDays = 14 ; 
+                            $certAlarmDays = 7 ; 
+                            $oCert = gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" -ea STOP ; 
+                            $certLifeDays = (new-timespan -start (get-date ) -end $oCert.NotAfter -ea STOP).days ; `
+                            $hsRollCert = @"
+
+## To roll over manually out of band:
+
+gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegistrationKeyCertificate 
+
+"@ ; 
+                            if($certLifeDays -lt $certAlarmDays){
+                                $smsg = "`n`n*** CERTIFICATE $($Credential.UserName) ($($certUname)) EXPIRES IN $($certLifeDays) DAYS! ***" ; 
+                                $smsg += "`n$(($oCert | fl $prpCertgci |out-string).trim())`n`n" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
+                                $smsg = "DO YOU WANT TO ROLLOVER AND REPLACE THE CERTIFICATE & KEYCRED ON THE APP REGISTRATION? " ; 
+                                if($certLifeDays -lt 0){
+                                    $SMSG += "`nCERT IS ALREADY EXPIRED, THIS PROCESS WILL CRASH OUT UNTIL YOU REPLACE THE CERT!" 
+                                } ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ; 
+                                if ($bRet.ToUpper() -eq "YYY") {
+                                    $smsg = "(Moving on)" ; 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                                    #code to rollover cert
+                                    # updated name, verb-aad:Update-AADAppRegistrationKeyCertificate()
+                                    #if($rolltool = (get-command -name Rollover-AADAppRegistrationCBAAuth.ps1 -ea STOP ).source){
+                                    if(get-command Update-AADAppRegistrationKeyCertificate){
+                                        #. $rolltool -certificate $ocert  ; 
+                                        # another: & runs the script in it's own scope
+                                        #& "C:\AzureFileShare\MEDsys\Powershell Scripts\B.ps1" -ServerName medsys-dev ; 
+                                        #$smsg = "RUNNING:`n& $($rolltool) -certificate `$ocert ; " ; 
+                                        #& $rolltool -certificate $ocert ; 
+                                        # shift to func
+                                        $smsg = "Running:`nUpdate-AADAppRegistrationKeyCertificate -certificate `$ocert " ; 
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                        #Update-AADAppRegistrationKeyCertificate -certificate $ocert
+                                        if($results = Update-AADAppRegistrationKeyCertificate -certificate $ocert){
+                                            if($results.Certificate){ 
+                                                $smsg = "Updated Certificate`n$(($results.Certificate| ft -a Subject,NotAfter,Thumbprint|out-string).trim())" ; 
+                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                            }else{
+                                                $smsg = "NO SUMMARY CERTIFICATE RETURNED!" ; 
+                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                                            } ; 
+                                        }else{
+                                            $smsg = "NO SUMMARY RETURNED!" ; 
+                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
+                                        } ; 
+                                        
+                                    } else {
+                                        $smsg = "Unable to: get-command Update-AADAppRegistrationKeyCertificate!" ; 
+                                        $smsg += "`nManually resolve location issue and run:" ; 
+                                        $smsg += $hsRollCert ; 
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                                    } ;
+                                } else {
+                                    $smsg = "(Dropping through, continuing to attempt execution...)" ; 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;  
+                                } ;
+                            }elseif($certLifeDays -lt $certWarnDays){
+                                $smsg = "`n`n*** CERTIFICATE $($Credential.UserName) ($($certUname) EXPIRES IN $($certLifeDays) DAYS! ***" ; 
+                                $smsg += "`n$(($oCert | fl $prpCertgci |out-string).trim())`n`n" ; 
+                                $smsg += $hsRollCert ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                            } else{
+                                $smsg = "(Auth Certificate $($Credential.UserName) ($($certUname) remaining lifespan:$($certLifeDays) days)" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            
+                            }; 
+                            if($certLifeDays -lt $certWarnDays){
+                                
+                                
+
+                            } ; # $certLifeDays -lt $certWarnDays
+
                         } else { 
-                            $smsg = "UNABLE TO RESOLVE `$TENORG:$($TenOrg) TO FUNCTIONAL `$$($TenOrg)meta.o365_TenantDomain!" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                            throw $smsg ; 
-                            Break ; 
-                        } ;
-                        #>
-                        $certUname = $uRoleReturn.FriendlyName ; 
-                        $certTag = $uRoleReturn.TenOrg
-                    } else { 
                             # interactive ModernAuth -UserPrincipalName
                             #$pltCXO.Add("UserPrincipalName", [string]$Credential.username);
                             if ($UserPrincipalName) {
@@ -852,7 +969,7 @@ Function Connect-EXO {
             $smsg = "(-not:`$isBased: running most basic Get-ConnectionInformation , Connect-ExchangeOnline connectivity)" ; 
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        } ; 
+        } ; # $isBased
     } ; # PROC-E
     END {
         
