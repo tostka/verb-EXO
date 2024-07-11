@@ -14,9 +14,10 @@ function test-EXOIsLicensed {
     FileName    : test-EXOIsLicensed.ps1
     License     : MIT License
     Copyright   : (c) 2022 Todd Kadrie
-    Github      : https://github.com/tostka/verb-XXX
+    Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell
     REVISIONS
+    * 9:26 AM 6/17/2024 needs cred resolution splice over latest get-exomailboxlicenses
     * 3:52 PM 5/23/2023 implemented @rxo @rxoc split, (silence all connectivity, non-silent feedback of functions); flipped all r|cxo to @pltrxoC, and left all function calls as @pltrxo; 
     * 9:13 AM 5/22/2023 added Silent back, for broad call compatibility (pltrxo consistency); 
     * 2:39 PM 5/17/2023 add pltrxo support

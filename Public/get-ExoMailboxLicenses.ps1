@@ -4,7 +4,7 @@
 function get-ExoMailboxLicenses {
 <#
     .SYNOPSIS
-    get-ExoMailboxLicenses - Provides a prefab array indexed hash of Exchange-Online mailbox-supporting licenses (at least one of which is required to accomodate an EXO Usermailbox - This now dynamically calls Get-AzureADSubscribedSku and postfilters the ServicePlan list for matches on the $ServicePlanName array (which reflects Exchange mailbox ServicePlanNames). The ServicePlanName array must be manually updated to accomodate MS licensure changes over time).
+    get-ExoMailboxLicenses - Provides a prefab indexed hash of Exchange-Online mailbox-supporting licenses (at least one of which is required to accomodate an EXO Usermailbox - This now dynamically calls Get-AzureADSubscribedSku and postfilters the ServicePlan list for matches on the $ServicePlanName array (which reflects Exchange mailbox ServicePlanNames). The ServicePlanName array must be manually updated to accomodate MS licensure changes over time).
     .PARAMETER Mailboxes
     .NOTES
     Version     : 1.0.0
@@ -18,7 +18,8 @@ function get-ExoMailboxLicenses {
     Github      : https://github.com/tostka/verb-ex2010
     Tags        : Powershell
     REVISIONS
-    * 1:05 PM 6/17/2024 pulled transcript END block (unused, would kill other process logging) ; adding -OutDetail, need to implement to return avail etc full details in outobject
+    * 1:22 PM 6/18/2024 updated SERVICE_CONNECTIONS block; reflects latest variant; 
+    * 4:16 PM 6/17/2024 add: ServicePlanName to the detailed output ; pulled transcript END block (unused, would kill other process logging) ; adding -OutDetail, need to implement to return avail etc full details in outobject
     * 5:12 PM 6/13/2024 update to make dynamic, querying for plans serviceplans.serviceplanname -match  EXCHANGE_S_ENTERPRISE','EXCHANGE_S_STANDARD','EXCHANGE_S_DESKLESS (-ne MCOCAP 	Common Area Phone)
     * 12:45 PM 6/21/2022 added cbh expl that rolls up a rgx to use for independant manual tests against 
     * 2:21 PM 3/1/2022 updated CBH
@@ -26,10 +27,20 @@ function get-ExoMailboxLicenses {
     .DESCRIPTION
     get-ExoMailboxLicenses - Provides a prefab array indexed hash of Exchange-Online mailbox-supporting licenses (at least one of which is required to accomodate an EXO Usermailbox - This now dynamically calls Get-AzureADSubscribedSku and postfilters the ServicePlan list for matches on the $ServicePlanName array (which reflects Exchange mailbox ServicePlanNames). The ServicePlanName array must be manually updated to accomodate MS licensure changes over time).
 
-    Licensing classes:
+    This feeds my test-EXOIsLicensed(), and is usable for feeding add-EXOLicense & remove-EXOLicense
+    Underlying goal is to *dynamically* pursue the current supported licensure, but calling Get-AzureADSubscribedSku and postfiltering the ServicePlan list for matches on the $ServicePlanName array 
+    (which reflects Exchange mailbox ServicePlanNames). The ServicePlanName array must be manually updated to accomodate MS licensure changes over time).
 
+    ## Tracking changes in Microsoft Licensing Service Plan Names over time. 
+    
+    At the current time, there is a _five year out of date_ json here: 
     [Compare Microsoft Exchange Online Plans Microsoft 365](https://www.microsoft.com/en-us/microsoft-365/exchange/compare-microsoft-exchange-online-plans)
 
+    ... which they claim is no longer needed because of online non-code-ingestable/non-filterable giant listing
+    Or you can also use the GraphAPI and chase that ball of ugly over time. 
+    So for now, I'm basing it off of the out of date json's plan names, and leaving gapi for a later more-freetimey time.
+
+    ## MS Exchange plan compairson's posted (as of 6/17/2024)
 
     ### Exchange Online (Plan 1) $4.00 user/month
     - 50g mbx, OWA, inplace archive
@@ -44,28 +55,68 @@ function get-ExoMailboxLicenses {
 
     ## Extracting ServicePlans broadly
 
-> [Azure-AD-Licensing-DB/ProductLicensesDb.json at master · jpawlowski/Azure-AD-Licensing-DB · GitHub](https://github.com/jpawlowski/Azure-AD-Licensing-DB/blob/master/ProductLicensesDb.json) 
-has a json db of all plan details
+    [Azure-AD-Licensing-DB/ProductLicensesDb.json at master · jpawlowski/Azure-AD-Licensing-DB · GitHub](https://github.com/jpawlowski/Azure-AD-Licensing-DB/blob/master/ProductLicensesDb.json) 
+    has a json db of all plan details
 
-1. click the download link on the page, dl to file
-2. import & convert it
-```powershell
-$licdb = gc C:\sc\powershell\EXOScripts\o365-ProductLicensesDb.json | ConvertFrom-Json ; 
-```
-3. Filter for targets, exclude 'EXCHANGE_ANALYTICS, EXCHANGE_S_ARCHIVE, EXCHANGE_S_ARCHIVE_ADDON non-mailbox-granting
-```powershell
-$licdb.items | ?{$_.ServicePlans -match 'Exchange'} | select -expand ServicePlans | ?{$_ -match 'EXCHANGE_' -AND $_-notmatch '_(ANALYTICS|ARCHIVE)'} | SELECT -UNIQUE  | sort ;
-EXCHANGE_B_STANDARD
-EXCHANGE_L_STANDARD
-EXCHANGE_S_DESKLESS
-EXCHANGE_S_ENTERPRISE
-EXCHANGE_S_ESSENTIALS
-EXCHANGE_S_FOUNDATION
-EXCHANGE_S_STANDARD
-EXCHANGE_S_STANDARD_MIDMARKET
+    1. click the download link on the page, dl to file
+    2. import & convert it
+    ```powershell
+    $licdb = gc C:\sc\powershell\EXOScripts\o365-ProductLicensesDb.json | ConvertFrom-Json ; 
+    ```
+    3. Filter for targets, exclude 'EXCHANGE_ANALYTICS, EXCHANGE_S_ARCHIVE, EXCHANGE_S_ARCHIVE_ADDON non-mailbox-granting
+    ```powershell
+    $licdb.items | ?{$_.ServicePlans -match 'Exchange'} | select -expand ServicePlans | ?{$_ -match 'EXCHANGE_' -AND $_-notmatch '_(ANALYTICS|ARCHIVE|FOUNDATION)'} | SELECT -UNIQUE  | sort ;
+    EXCHANGE_B_STANDARD
+    EXCHANGE_L_STANDARD
+    EXCHANGE_S_DESKLESS
+    EXCHANGE_S_ENTERPRISE
+    EXCHANGE_S_ESSENTIALS
+    EXCHANGE_S_STANDARD
+    EXCHANGE_S_STANDARD_MIDMARKET
 
-```
-4. So we can take any give Get-AzureADSubscribedSku and filter for licenses which include the above, to pick out suitable Exchange-Mailbox-supporting licenses. This filtered list goes in the default $ServicePlanName list
+    ```
+    4. So we can take any give Get-AzureADSubscribedSku and filter for licenses which include the above, to pick out suitable Exchange-Mailbox-supporting licenses. This filtered list goes in the default $ServicePlanName list
+
+
+    ## Discussion of the topic - dynamically finding onboing licenses as they mess with the licenses
+
+    [Service plans that indicate an exchange license? - Microsoft Q&A](https://learn.microsoft.com/en-us/answers/questions/967768/service-plans-that-indicate-an-exchange-license)
+
+        #-=-=-=-=-=-=-=-=
+        Service plans that indicate an exchange license?
+        isaac parsons 6 Reputation points
+        Aug 15, 2022, 2:34 PM
+        From what I gather EXCHANGE_S_STANDARD, EXCHANGE_B_STANDARD, EXCHANGE_L_STANDARD, EXCHANGE_S_ENTERPRISE, EXCHANGE_S_STANDARD_GOV, EXCHANGE_S_ENTERPRISE_GOV, EXCHANGE_S_STANDARD_MIDMARKET are service plans that indicate an exchange license, are there any others that I'm missing?
+        Microsoft Exchange Online Management 
+        ---
+        Dillon Silzer 54,926 Reputation points
+        Aug 16, 2022, 9:58 PM
+        Hey @isaac parsons
+        If you navigate to https://learn.microsoft.com/en-us/azure/active-directory/enterprise-users/licensing-service-plan-reference you can scroll down to the Exchange plans under Enterprise Mobility + Security G5 GCC:
+        You can also use CTRL+F and type the work EXCHANGE and search the page for all the plans that include it.
+        You can also download the CSV version here.
+
+        #-=-=-=-=-=-=-=-=
+
+    ## [Mailbox plans in Exchange Online | Microsoft Learn](https://learn.microsoft.com/en-us/exchange/recipients-in-exchange-online/manage-user-mailboxes/mailbox-plans)
+
+    ### Mailbox plans in Exchange Online
+
+        Article
+        02/21/2023
+        The following table describes the mailbox plans that you're likely to see in Exchange Online.
+        Subscription or license 	Mailbox plan display name
+        Exchange Online Kiosk
+        Microsoft 365 or Office 365 Enterprise F3
+	        ExchangeOnlineDeskless
+        Microsoft 365 Business Basic
+        Microsoft 365 or Office 365 Enterprise E1
+        Exchange Online Plan 1
+	        ExchangeOnline
+        Microsoft 365 or Office 365 Enterprise E3
+        Microsoft 365 or Office 365 Enterprise E5
+        Exchange Online Plan 2
+    
 
     .PARAMETER ServicePlanName
     ServicePlanName values that identify Exchange-mailbox supporting licenses (defaults to EXCHANGE_S_DESKLESS|EXCHANGE_S_STANDARD|EXCHANGE_S_ENTERPRISE)[-ServicePlanName 'EXCHANGE_S_DESKLESS']
@@ -159,6 +210,14 @@ EXCHANGE_S_STANDARD_MIDMARKET
     PS> $ExMbxLicenses = get-ExoMailboxLicenses ;
     PS> [regex]$rgxExLics = ('(' + (($ExMbxLicenses.GetEnumerator().name |%{[regex]::escape($_)}) -join '|') + ')') ; 
     Demo pulling the underlying licenses list and building a regex for static use
+    PS> $licOrdered = @() ; 
+    PS> 'EXCHANGE_S_DESKLESS','EXCHANGE_S_STANDARD','EXCHANGE_S_ENTERPRISE' | %{
+    PS>     $SPN = $_ ; 
+    PS>     $licOrdered += $ExMbxLicenses.values | ?{$_.ServicePlanName -eq $SPN } | sort Enabled,Available -Descending; 
+    PS> } ; 
+    PS> $TenDom = (gv -name "$($TenOrg)Meta").value['o365_TenantDom'].tolower() ; 
+    PS> $LicenseSkuIds = $licOrdered.sku  | %{"$($TenDom):$($_)"} ;
+    Demo pushing the licenses into application preference order from cheapest to most $$ class, and sorted subs on Enabled & Available (lifted from Add-EXOLicense()).
     .EXAMPLE
     PS> TRY{
     PS>     $url = 'https://github.com/jpawlowski/Azure-AD-Licensing-DB/blob/master/ProductLicensesDb.json' ; 
@@ -168,7 +227,7 @@ EXCHANGE_S_STANDARD_MIDMARKET
     PS>     write-verbose "import the json into a vari" ; 
     PS>     $licdb = gc $tfile | ConvertFrom-Json ; 
     PS>     write-host "filter licenses with ServicePlans named with Exchange, filter & exclude non-mailbox variants, select unique, and output a sorted list, for use in the `$ServicePlanName array" ; 
-    PS>     $licdb.items | ?{$_.ServicePlans -match 'Exchange'} | select -expand ServicePlans | ?{$_ -match 'EXCHANGE_' -AND $_-notmatch '_(ANALYTICS|ARCHIVE)'} | SELECT -UNIQUE  | sort ;
+    PS>     $licdb.items | ?{$_.ServicePlans -match 'Exchange'} | select -expand ServicePlans | ?{$_ -match 'EXCHANGE_' -AND $_-notmatch '_(ANALYTICS|ARCHIVE|FOUNDATION)'} | SELECT -UNIQUE  | sort ;
     PS> } CATCH {
     PS>     $ErrTrapd=$Error[0] ;
     PS>     $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
@@ -185,7 +244,7 @@ EXCHANGE_S_STANDARD_MIDMARKET
         [Parameter(Mandatory=$FALSE,HelpMessage="ServicePlanName values that identify Exchange-mailbox supporting licenses[-ServicePlanName 'EXCHANGE_S_DESKLESS']")]
             #[ValidateNotNullOrEmpty()]
             #[ValidatePattern("^\w{3}$")]
-            [string[]]$ServicePlanName = @('EXCHANGE_B_STANDARD','EXCHANGE_L_STANDARD','EXCHANGE_S_DESKLESS','EXCHANGE_S_ENTERPRISE','EXCHANGE_S_ESSENTIALS','EXCHANGE_S_FOUNDATION','EXCHANGE_S_STANDARD','EXCHANGE_S_STANDARD_MIDMARKET'),
+            [string[]]$ServicePlanName = @('EXCHANGE_B_STANDARD','EXCHANGE_L_STANDARD','EXCHANGE_S_DESKLESS','EXCHANGE_S_ENTERPRISE','EXCHANGE_S_ESSENTIALS','EXCHANGE_S_STANDARD','EXCHANGE_S_STANDARD_MIDMARKET'),
             # above is full list of ServicePlans extracted from o365-ProductLicensesDb.json, other than 'EXCHANGE_ANALYTICS','EXCHANGE_S_ARCHIVE','EXCHANGE_S_ARCHIVE_ADDON'
             # our list
             #@('EXCHANGE_S_DESKLESS','EXCHANGE_S_STANDARD','EXCHANGE_S_ENTERPRISE'),
@@ -394,13 +453,13 @@ EXCHANGE_S_STANDARD_MIDMARKET
         # PRETUNE STEERING separately *before* pasting in balance of region
         #*------v STEERING VARIS v------
         $useO365 = $true ;
-        $useEXO = $false ; 
+        $useEXO = $true ; 
         $UseOP=$false ; 
         $UseExOP=$false ;
-        $useForestWide = $false ; # flag to trigger cross-domain/forest-wide code in AD & EXoP
+        $useForestWide = $false; # flag to trigger cross-domain/forest-wide code in AD & EXoP
         $UseOPAD = $false ; 
         $UseMSOL = $false ; # should be hard disabled now in o365
-        $UseAAD = $true  ; 
+        $UseAAD = $false  ; 
         $useO365 = [boolean]($useO365 -OR $useEXO -OR $UseMSOL -OR $UseAAD)
         $UseOP = [boolean]($UseOP -OR $UseExOP -OR $UseOPAD) ;
         #*------^ END STEERING VARIS ^------
@@ -489,26 +548,29 @@ EXCHANGE_S_STANDARD_MIDMARKET
                 $o365Cred = get-TenantCredentials @pltGTCred
             } ; 
             if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
-                $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
                 # 9:58 AM 6/13/2024 populate $credential with return, if not populated (may be required for follow-on calls that pass common $Credentials through)
                 if((gv Credential) -AND $Credential -eq $null){
                     $credential = $o365Cred.Cred ;
+                }elseif($credential.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                    $smsg = "(`$Credential is properly populated; explicit -Credential was in initial call)" ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 } else {
-                    $smsg = "`$Credential is `$NULL, AND $o365Cred.Cred is unusable to populate!" ; 
-                    $smsg = "downstream commands will *not* properly pass through usable credentials!" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    throw $smsg ; 
-                    break ; 
-                } ; 
-            } else { 
-                $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-
-                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                break ; 
+                    $smsg = "`$Credential is `$NULL, AND $o365Cred.Cred is unusable to populate!" ;
+                    $smsg = "downstream commands will *not* properly pass through usable credentials!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    throw $smsg ;
+                    break ;
+                } ;
+            } else {
+                $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                break ;
             } ; 
             if($o365Cred){
                 # make it script scope, so we don't have to predetect & purge before using new-variable
@@ -900,9 +962,16 @@ EXCHANGE_S_STANDARD_MIDMARKET
     } ;  # BEGIN-E
     PROCESS {
         $Error.Clear() ; 
-        $propsAADL = 'SkuId',  'SkuPartNumber',  @{name='Enabled';Expression={$_.PrepaidUnits.enabled }},
+        <#$propsAADL = 'SkuId',  'SkuPartNumber',  @{name='Enabled';Expression={$_.PrepaidUnits.enabled }},
             @{name='Consumed';Expression={$_.ConsumedUnits} }, @{name='Available';Expression={$_.PrepaidUnits.enabled - $_.ConsumedUnits} },
             @{name='Warning';Expression={$_.PrepaidUnits.warning} }, @{name='Suspended';Expression={$_.PrepaidUnits.suspended} } ;
+            #>
+        $propsAADL = 'SkuId',  'SkuPartNumber',  @{name='Enabled';Expression={$_.PrepaidUnits.enabled }},
+            @{name='Consumed';Expression={$_.ConsumedUnits} }, @{name='Available';Expression={$_.PrepaidUnits.enabled - $_.ConsumedUnits} },
+            @{name='Warning';Expression={$_.PrepaidUnits.warning} }, @{name='Suspended';Expression={$_.PrepaidUnits.suspended} },
+            @{name='ServicePlanName';Expression={(($_.ServicePlans).ServicePlanName |?{$_ -match 'EXCHANGE_'})}} ;
+
+        $rgxExSvcPlans = ('(' + (($ServicePlanName |%{[regex]::escape($_)}) -join '|') + ')') ; 
 
         $ExMbxLicenses = @() ; 
         foreach($SPName in $ServicePlanName){
@@ -911,8 +980,7 @@ EXCHANGE_S_STANDARD_MIDMARKET
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             
             TRY{
-                if($thisPlan = Get-AzureADSubscribedSku | ?{$_.serviceplans.serviceplanname -match $SPName} | 
-                    select $propsAADL | ?{$_.SkuPartNumber -notmatch $rgxbannedSPN}){
+                if($thisPlan = Get-AzureADSubscribedSku | ?{$_.serviceplans.serviceplanname -match $SPName} | select $propsAADL | ?{$_.SkuPartNumber -notmatch $rgxbannedSPN}){
                     if(-not $Unfiltered){
                         $smsg = "Postfilter:`$_.available -gt 0 -AND `$_.Enabled -gt 0 " ; 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -926,9 +994,10 @@ EXCHANGE_S_STANDARD_MIDMARKET
                             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                             if($OutDetail){
                                 $oReturn = [ordered]@{
-                                    SKU = $thisplan.SkuPartNumber ;                                 
-                                    Label= $thisplan.SkuPartNumber.split('_')[-1] ; 
-                                    Notes= "$($thisplan.SkuPartNumber):Detailed usage" ; 
+                                    SKU = $item.SkuPartNumber ;                                 
+                                    Label= $item.SkuPartNumber.split('_')[-1] ; 
+                                    Notes= "$($item.SkuPartNumber):Detailed usage" ; 
+                                    ServicePlanName = $item.ServicePlanName ; 
                                     Enabled  = $item.Enabled ; 
                                     Consumed = $item.Consumed ; 
                                     Available = $item.Available ; 
@@ -937,8 +1006,8 @@ EXCHANGE_S_STANDARD_MIDMARKET
                                 } ; 
                             }else {
                                 $oReturn = [ordered]@{
-                                    SKU = $thisplan.SkuPartNumber ;                                 
-                                    Label= $thisplan.SkuPartNumber.split('_')[-1] ; 
+                                    SKU = $item.SkuPartNumber ;                                 
+                                    Label= $item.SkuPartNumber.split('_')[-1] ; 
                                     Notes= "Enabled:{0}|Consumed:{1}|Avail:{2}|Warn:{3}|Susp:{4}" -f $item.Enabled,$item.Consumed,$item.Available,$item.WArning,$item.Suspended ; 
                                 } ; 
                             } ; 
@@ -948,16 +1017,12 @@ EXCHANGE_S_STANDARD_MIDMARKET
                             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         } ; 
                     } else { 
-                        $smsg = "NOTE:serviceplans.serviceplanname -match $($SPName) yielded *NONE* with Available and Enabled -gt 0!" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                        else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #$smsg = "NOTE:serviceplans.serviceplanname -match $($SPName) yielded *NONE* with Available and Enabled -gt 0!" ; 
+                        #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                        #else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                     } ; 
-                } else { 
-                    $smsg = "(current plan didn't come through populated, after any filtering)" ; 
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                } ; 
+                } else { } ; 
 
             } CATCH {
                 $ErrTrapd=$Error[0] ;

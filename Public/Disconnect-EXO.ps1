@@ -20,6 +20,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 11:31 AM 7/9/2024 subd in silent for write-verbose 
     * 1:25 PM 7/8/2024 spliced in cxo constatns
     * 9:47 am 4/9/2024:validated updated disconnect-exo -prefix cc -verbose ; 
     * 10:59 AM 4/18/2023 step debugs ; consolidating Disconnect-EXO2 into Disconnect-EXO, aliasing dxo2,Disconnect-EXO2; removing those originals
@@ -187,7 +188,7 @@ Function Disconnect-EXO {
         # 2:28 PM 8/1/2022 issue: it sometimes defers to the verb-EXO obsolete disconnect-exchangeonline (which doesn't properly resolve .dll paths, and doesn't exist/conflict in EOMv205), force load it out of the module
         if(-not (get-command -mod $EOMmodname -name Disconnect-ExchangeOnline -ea 0 )){
             $smsg = "(found dxo2, *not* sourced from EOM: ipmo -forcing EOM)" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             import-module -Name $EOMmodname -force -RequiredVersion $MinNoWinRMVersion ; 
         } ; 
@@ -197,8 +198,8 @@ Function Disconnect-EXO {
 
         if($xmod | where-object {$_.version -ge $MinNoWinRMVersion} ){
             $smsg = "EOM v3+ connection detected" ;
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             TRY{
                 $conns = Get-ConnectionInformation -ea STOP ;
             } CATCH {
@@ -216,16 +217,16 @@ Function Disconnect-EXO {
                 $rgxConnectionUriEXO {
                     if ($conns.tokenStatus -eq 'Active') {
                         $smsg = "(connected to EXO)" ;
-                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         $bExistingEXOGood = $isEXOValid = $true ;
                     } ;
                 }
                 $rgxConnectionUriCCMS {
                     if ($conns.tokenStatus -eq 'Active') {
                         $smsg = "(connected to CCMS)" ;
-                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         $bExistingCCMSGood = $isCCMSValid = $true ;
                     } ;
                 }
@@ -263,7 +264,7 @@ Function Disconnect-EXO {
             # v2.0.5 3:01 PM 3/29/2022 no longer exists
         } else { 
             $smsg = "(no existing session matched)" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         } ; 
     } else { 

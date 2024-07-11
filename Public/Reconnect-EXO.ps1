@@ -17,6 +17,8 @@ Function Reconnect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    *1:44 PM 7/9/2024 passes hybrid xo/s&c, with variant prefixes (other than hard-req that prefix cc indicates an s&c conn); 
+         un-remmed cc-specific $UserRole default (steers into SID);  sub'd in silent for w-v
     * 4:12 PM 7/8/2024 passes dbg xo;  spliced over updates from cxo using test-exoconnectionTDO+resolve-AppIDToCBAFriendlyName(), tore out most old PROCESS testing & all END code; spliced over constants block from cxo as well
     * 9:55 AM 6/21/2024 add: prereq checks, and $isBased support, to devert into most basic Get-ConnectionInformation , Connect-ExchangeOnline fall back support
     * 5:18 PM 4/18/2024 spliced together hybrid of latest built and recent revs; undebugged;  been working a variant missing the 4/19/23-2/26/24 revs!
@@ -266,8 +268,8 @@ Function Reconnect-EXO {
         }; 
         if($useCCMSConn){
             # respec userrole
-            #$UserRole = @('SID') ; 
-            #$sTitleBarTag = @("CCMS") ;
+            $UserRole = @('SID') ; 
+            $sTitleBarTag = @("CCMS") ;
         } ; 
 
          # * 11:02 AM 4/4/2023 reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
@@ -372,26 +374,7 @@ Function Reconnect-EXO {
             } ;
 
             # defer to resolve-UserNameToUserRole -Credential $Credential
-            <# need certtag further down, for credential align test
-            if($credential.username -match $rgxCertThumbprint){
-                $smsg =  "(UserName:Certificate Thumbprint detected)"
-                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                if($tcert = get-childitem -path "Cert:\CurrentUser\My\$($credential.username)"){
-                    $certUname = $tcert.friendlyname ; 
-                    $certTag = [regex]::match($certUname,$rgxCertFNameSuffix).captures[0].groups[1].value ; 
-                    $smsg = "(using CBA:cred:$($certTag):$([string]$tcert.friendlyname))" ; 
-                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                } else { 
-                    $smsg = "UNABLE TO RESOLVE `$TENORG:$($TenOrg) TO FUNCTIONAL `$$($TenOrg)meta.o365_TenantDomain!" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    throw $smsg ; 
-                    Break ; 
-                } ;
-            } ; 
-            #>
+            
             $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ; 
             if($credential.username -match $rgxCertThumbprint){
                 $certTag = $uRoleReturn.TenOrg ; 
@@ -480,7 +463,7 @@ Function Reconnect-EXO {
                 $pltTXO.add('Prefix',$Prefix) ; 
             } ; 
             $smsg = "test-EXOConnectionTDO w`n$(($pltTXO|out-string).trim())" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingCCMSGood = $false ;
@@ -489,7 +472,7 @@ Function Reconnect-EXO {
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){
                         $Tenantdomain = convert-TenantIdToDomainName -TenantId $xSess.TenantID ;
                         $smsg = "(coercing blank Session Org, to resolved TenantID equivelent TenantDomain)" ; 
-                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         $xSess.Organization = $Tenantdomain ; 
                     } ; 
@@ -565,11 +548,11 @@ Function Reconnect-EXO {
 
             if($Prefix -ne 'cc' -AND $bExistingEXOGood){
                 $smsg = "existing EXO session" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             }elseif($Prefix -eq 'cc' -AND $bExistingCCMSGood){
                 $smsg = "existing S&C session" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             } else { 
                 $smsg = "NO VALID EXO3 "
@@ -614,7 +597,7 @@ Function Reconnect-EXO {
         
         } else { 
             $smsg = "(-not:`$isBased: running most basic Get-ConnectionInformation , Connect-ExchangeOnline connectivity)" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             # default to most basic rudimentary connection
             $Status = Get-ConnectionInformation -ErrorAction SilentlyContinue
@@ -631,7 +614,7 @@ Function Reconnect-EXO {
             $pltTXO=[ordered]@{erroraction = 'STOP' } ;
             if($Prefix){$pltTXO.add('Prefix',$Prefix) } ; 
             $smsg = "test-EXOConnectionTDO w`n$(($pltTXO|out-string).trim())" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingCCMSGood = $false ;
@@ -640,7 +623,7 @@ Function Reconnect-EXO {
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){
                         $Tenantdomain = convert-TenantIdToDomainName -TenantId $xSess.TenantID ;
                         $smsg = "(coercing blank Session Org, to resolved TenantID equivelent TenantDomain)" ; 
-                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         $xSess.Organization = $Tenantdomain ; 
                     } ;
@@ -721,12 +704,12 @@ Function Reconnect-EXO {
 
             if($Prefix -ne 'cc' -AND $bExistingEXOGood){
                 $smsg = "existing EXO session" ;
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             }elseif($Prefix -eq 'cc' -AND $bExistingCCMSGood){
                 $smsg = "existing S&C session" ;
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             } else {
                 $smsg = "NO VALID EXO3 "
                 if($Prefix -ne 'cc'){
@@ -766,7 +749,7 @@ Function Reconnect-EXO {
             
         } else { 
             $smsg = "(-not:`$isBased: running most basic Get-ConnectionInformation , Connect-ExchangeOnline connectivity)" ; 
-            #if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            #if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             #else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             
             $pltGCInfo=[ordered]@{
@@ -776,7 +759,7 @@ Function Reconnect-EXO {
             } ;
             if($Prefix){
                 $smsg = "(checking specified  -Prefix:$($Prefix))" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 $pltGCInfo.add('ModulePrefix',$Prefix) ; 
             } ; 

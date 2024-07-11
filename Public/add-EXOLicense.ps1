@@ -20,7 +20,6 @@ function add-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection
     * 1:21 PM 6/18/2024: finally got through full tree of add-EXOLicense, and deps cred fixes in add-AADUserLicense_func.ps1; set-AADUserUsageLocation_func.ps1; get-AADlicensePlanList_func.ps1; 
     * 9:48 AM 6/17/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
     * 3:14 PM 5/30/2023 updated CBH; udpt CBH; consold 222+223 into 1 line; add pswl compliance; expanded demos ; rem'd unused
@@ -142,7 +141,7 @@ function add-EXOLicense {
     #>
     # migr to verb-exo, pull the dupe spec...
     #Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-Auth, verb-IO, verb-logging, verb-Mods, verb-Text
-    ##Requires -RunasAdministrator
+    #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\s\regex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]

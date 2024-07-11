@@ -19,6 +19,7 @@ function test-EXOConnectionTDO{
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 11:03 AM 7/9/2024 added txo alias; subbed in silent block for all wv
     * 4:31 PM 7/8/2024 added CBH example demoing variant output ; added blank Org resolution (resolve TenentID into equiv TenantDomain); this should always return a full set of values even if we have to work around the bugs in the MS code.
     * 9:48 AM 7/3/2 add:$AppId to return, need a way to resolve CBA back to identifiable role; resolve-UserNameToUserRole() resolves cert thumb to role, 
     * 3:59 PM 7/2/2024 added TenantID, as the Organization has been coming back blank (post filter -OR against either); 
@@ -279,6 +280,7 @@ function test-EXOConnectionTDO{
     https://github.com/tostka/verb-EXO
     #>
     [CmdletBinding(DefaultParameterSetName='Prefix')]
+    [Alias('txo')]
     PARAM(
         [Parameter(HelpMessage="Office365 TenantDomain to be filtered on returns[-Organization 'TENANTDOMAIN.onmicrosoft.com']")]
             [string]$Organization,
@@ -310,8 +312,9 @@ function test-EXOConnectionTDO{
                 $pltGConn.add('ConnectionID',$ConnectionID) ; 
             } ; 
             $smsg = "get-connectioninformation w`n$(($pltGConn|out-string).trim())" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+
             $connections = get-connectioninformation @pltGConn ; 
             
         } CATCH {
@@ -322,46 +325,53 @@ function test-EXOConnectionTDO{
         } ; 
     } ;  # BEG-E
     PROCESS{
-        $connections|%{
-            $sessRet = [ordered]@{
-                Connection = $_ ; 
-                Organization = $_.Organization ; 
-                Prefix = $_.ModulePrefix ;  
-                UserPrincipalName = $_.UserPrincipalName ; 
-                ConnectionId = $_.ConnectionId ; 
-                AppId = $_.AppID ;
-                TenantID = $_.TenantID ; 
-                ModuleName = $_.ModuleName ; 
-                isXO = [boolean](($_.connectionuri -match $rgxConnectionUriEXO) -AND $_.IsEopSession -eq $false)
-                isSC = [boolean](($_.connectionuri -match $rgxConnectionUriCCMS) -AND $_.IsEopSession -eq $true)
-                isCBA = [boolean]($_.CertificateAuthentication); 
-                isValid = [boolean]($_.TokenStatus -eq 'Active') ; 
-                TokenLifeMins = if($_.TokenExpiryTimeUTC){(new-timespan -start (get-date ) -end ($_.TokenExpiryTimeUTC).LocalDateTime).minutes}else{$null} ;  ; 
-                #$null ; 
-            } ; 
-            #if($_.TokenExpiryTimeUTC){
-            #    $sessRet.TokenLifeMins = (new-timespan -start (get-date ) -end ($_.TokenExpiryTimeUTC).LocalDateTime).minutes ; ; 
-            #} ; 
-            if($null -eq $sessRet.Organization -AND $sessRet.TenantID){
-                $Tenantdomain = convert-TenantIdToDomainName -TenantId $sessRet.TenantID ;
-                $smsg = "(coercing blank Session Org, to resolved TenantID equivelent TenantDomain)" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                $sessRet.Organization = $Tenantdomain ; 
-            } ; 
-            if($Organization){
-                # instead of compare test, use it as a post-filter
-                if($sessRet = $sessRet | ?{$_.Organization -match $Organization}){
-                    [pscustomobject]$sessRet | Write-Output ;
-                } else {
-                    $smsg = "(no existing connection matched: `$_.Organization -match $($Organization))" ; 
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        if($connections){
+            $connections|%{
+                $sessRet = [ordered]@{
+                    Connection = $_ ; 
+                    Organization = $_.Organization ; 
+                    Prefix = $_.ModulePrefix ;  
+                    UserPrincipalName = $_.UserPrincipalName ; 
+                    ConnectionId = $_.ConnectionId ; 
+                    AppId = $_.AppID ;
+                    TenantID = $_.TenantID ; 
+                    ModuleName = $_.ModuleName ; 
+                    isXO = [boolean](($_.connectionuri -match $rgxConnectionUriEXO) -AND $_.IsEopSession -eq $false)
+                    isSC = [boolean](($_.connectionuri -match $rgxConnectionUriCCMS) -AND $_.IsEopSession -eq $true)
+                    isCBA = [boolean]($_.CertificateAuthentication); 
+                    isValid = [boolean]($_.TokenStatus -eq 'Active') ; 
+                    TokenLifeMins = if($_.TokenExpiryTimeUTC){(new-timespan -start (get-date ) -end ($_.TokenExpiryTimeUTC).LocalDateTime).minutes}else{$null} ;  ; 
+                    #$null ; 
                 } ; 
-            } else{ 
-                [pscustomobject]$sessRet | Write-Output ; 
-            } ; 
-        } ;    
+                if($null -eq $sessRet.Organization -AND $sessRet.TenantID){
+                    $Tenantdomain = convert-TenantIdToDomainName -TenantId $sessRet.TenantID ;
+                    $smsg = "(coercing blank Session Org, to resolved TenantID equivelent TenantDomain)" ; 
+                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                    $sessRet.Organization = $Tenantdomain ; 
+                } ; 
+                if($Organization){
+                    # instead of compare test, use it as a post-filter
+                    if($sessRet = $sessRet | ?{$_.Organization -match $Organization}){
+                        [pscustomobject]$sessRet | Write-Output ;
+                    } else {
+                        $smsg = "(no existing connection matched: `$_.Organization -match $($Organization))" ; 
+                        if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                    } ; 
+                } else{ 
+                    [pscustomobject]$sessRet | Write-Output ; 
+                } ; 
+            } ;    
+        }else {
+            $smsg = "(No EXO EOM connections found)" ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            # get-connectioninformation returns nothing when no connection, even with verbose
+            # so we're not going to return a 'faked' summary to indicate a non-connection.
+            
+        } ; 
     } ;  # PROC-E
     END{} ; 
 } ; 

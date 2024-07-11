@@ -17,6 +17,7 @@ function test-EXOv2Connection {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell
     REVISIONS
+    * 1:44 PM 7/9/2024 100% obsoleted by verb-EXO, test-EXOConnectionTDO(), which isn't a full emulation of this, so I'll leave this in place against obsolete calls to it.
     * 1:55 PM 3/1/2024 added code to repop empty $TenOrg, prior to AcceptedDom caching (came through empty in testing, when no preexisting conn)
     * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 3:26 PM 5/30/2023 updated CBH, demos ; # reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
@@ -32,6 +33,8 @@ function test-EXOv2Connection {
     * 10:18 AM 6/24/2022 init ; ren test-EXOConnection -> test-EXOv2Connection, as this only validates EXOversion2 connections, not basic-auth-based EXOv1
     .DESCRIPTION
     test-EXOv2Connection.ps1 - Validate EXO connection, and that the proper Tenant is connected (as per provided Credential)
+    .PARAMETER  Prefix
+    [verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-Prefix tag]
     .PARAMETER Credential
     Credential to be used for connection
     .PARAMETER CertTag
@@ -48,7 +51,7 @@ function test-EXOv2Connection {
     PS> } else { 
     PS>     write-warning 'NO EXO USERMAILBOX TYPE LICENSE!'
     PS> } ; 
-    Evaluate EXOv2 connection status & Tenant:Credential alignment, with verbose output
+    Evaluate EXOv2 connection status & Tenant Credential alignment, (on defalt Xo Prefix connection) with verbose output
     .EXAMPLE
     PS> $TenOrg = get-TenantTag -Credential $Credential ;
     PS> if($Credential){
@@ -81,7 +84,13 @@ function test-EXOv2Connection {
     PS>     DisConnect-EXO ;
     PS>     $bExistingEXOGood = $false ;
     PS> } ;    
-    Fancier demo using a variety of verb-Auth & verb-xo cmdlets
+    Fancier demo using a variety of verb-Auth & verb-xo cmdlets (on defalt Xo Prefix connection)
+    .EXAMPLE 
+    PS>     $oRet = test-EXOv2Connection -Credential $credential -Prefix xo -verbose:$($verbose) ; 
+    Demo connection test for explicit XO sessions (indicated by use of -Prefix xo, to focus on those prefixed sessions, default Prefix, but this demos explicitng the param).
+    .EXAMPLE 
+    PS>     $oRet = test-EXOv2Connection -Credential $credential -Prefix cc -verbose:$($verbose) ; 
+    Demo connection test for CCMS sessions (indicated by use of -Prefix cc, to focus on those prefixed sessions).
     .LINK
     https://github.com/tostka/verb-EXO
     #>
@@ -91,12 +100,15 @@ function test-EXOv2Connection {
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
      Param(
-        [Parameter(Mandatory=$True,HelpMessage="Credentials [-Credentials [credential object]]")]
-        [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
+        [Parameter(HelpMessage = "[verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-Prefix tag]")]
+            [string]$Prefix = 'xo',
+        #[Parameter(Mandatory=$True,HelpMessage="Credentials [-Credentials [credential object]]")]
+        [Parameter(Mandatory=$false,HelpMessage="Credentials [-Credentials [credential object]]")]
+            [System.Management.Automation.PSCredential]$Credential = $global:credo365TORSID,
         [Parameter(HelpMessage = "Cert FriendlyName Suffix to be used for validating credential alignment(Optional but required for CBA calls)[-CertTag `$certtag]")]
-        [string]$CertTag,
+            [string]$CertTag,
         [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']")]
-        [version] $MinNoWinRMVersion = '3.0.0'
+            [version] $MinNoWinRMVersion = '3.0.0'
     )
     BEGIN {
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
@@ -114,6 +126,7 @@ function test-EXOv2Connection {
             @{name='runspace.ConnectionInfo.Credentialusername';Expression={$_.runspace.ConnectionInfo.Credential.username} },  
             @{name='runspace.ConnectionInfo.AuthenticationMechanism';Expression={$_.runspace.ConnectionInfo.AuthenticationMechanism } },  
             @{name='runspace.ExpiresOn';Expression={$_.runspace.ExpiresOn} } ; 
+        $EOMmodname = 'ExchangeOnlineManagement' ;
         $EXOv1ConfigurationName = $EXOv2ConfigurationName = $EXoPConfigurationName = "Microsoft.Exchange" ;
 
         if(-not $EXOv1ConfigurationName){$EXOv1ConfigurationName = "Microsoft.Exchange" };
@@ -138,10 +151,14 @@ function test-EXOv2Connection {
         if(-not $PSSAvailabilityOK){$PSSAvailabilityOK = 'Available' };
         if(-not $EXOv1GmoFilter){$EXOv1GmoFilter = 'tmp_*' } ; 
         if(-not $EXOv2GmoNoWinRMFilter){$EXOv2GmoNoWinRMFilter = 'tmpEXO_*' };
-        $EOMmodname = 'ExchangeOnlineManagement' ;
+        # add get-connectioninformation.ConnectionURI targeting rgxs for CCMS vs EXO
+        if(-not $rgxConnectionUriEXO){$rgxConnectionUriEXO = 'https://outlook\.office365\.com'} ; 
+        if(-not $rgxConnectionUriCCMS){$rgxConnectionUriCCMS = 'https://ps\.compliance\.protection\.outlook\.com'} ; 
+        if(-not $prpConnInf){$prpConnInf = 'ModulePrefix','ConnectionId','ConnectionUri','State','TokenStatus'} ; 
+        #*------^ END PSS & GMO VARIS ^------
         # reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
         #region EOMREV ; #*------v EOMREV Check v------
-        #$EOMmodname = 'ExchangeOnlineManagement' ;
+        # reduced the ipmo and vers chk block, removed the lengthy gmo -list; and any autoinstall. Assume EOM is installed, & break if it's not
         $pltIMod = @{Name = $EOMmodname ; ErrorAction = 'Stop' ; verbose=$false} ;
         if($xmod = Get-Module $EOMmodname -ErrorAction Stop| sort version | select -last 1 ){ } else {
             $smsg = "Import-Module w`n$(($pltIMod|out-string).trim())" ;
@@ -170,11 +187,26 @@ function test-EXOv2Connection {
 
     } ;  # if-E BEGIN    
     PROCESS {
-        $oReturn = [ordered]@{
+        # handling concurrent CCMS & EXO, there will be multiple conns returned by get-connectionstatus, so aggreg what comes back and return it
+        $oReturnEXO = [ordered]@{
             PSSession = $null ; 
             IsNoWinRM = $false ; 
             Valid = $false ; 
+            Prefix = $Prefix ; 
+            isEXO = $false ; 
+            isCCMS = $false ;
+            ConnectionUri = $null ; 
         } ; 
+        $oReturnCCMS = [ordered]@{
+            PSSession = $null ; 
+            IsNoWinRM = $false ; 
+            Valid = $false ; 
+            Prefix = $Prefix ; 
+            isEXO = $false ; 
+            isCCMS = $false ;
+            ConnectionUri = $null ; 
+        } ; 
+        $oRetAggr = @() ; 
         $isEXOValid = $false ;
         # corrected $EXoPConfigurationName -> $EXOv2ConfigurationName; same value, but vari name should indicate purpose, as well as contents
         if($pssEXOv2 = Get-PSSession | 
@@ -246,15 +278,73 @@ function test-EXOv2Connection {
             #>
             # EOM v3 adds Get-ConnectionInformation, which has .tokenStatus -eq 'Active'
 
-            if($xmod | Where-Object {$_.version -like "3.*"} ){
-                $smsg = "EOM v3+ connection detected" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            if(-not (get-command -mod $EOMmodname -name Get-ConnectionInformation -ea 0 )){
+                $smsg = "(found txo, *not* sourced from EOM: ipmo -forcing EOM)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                if ((Get-ConnectionInformation).tokenStatus -eq 'Active') {
-                    #write-host 'Connecting to Exchange Online' -ForegroundColor Cyan
-                    #Connect-ExchangeOnline -UserPrincipalName $adminUPN
-                    $bExistingEXOGood = $isEXOValid = $true ;
-                }
+                remove-module -Name $EOMmodname -force ; 
+                import-module -Name $EOMmodname -force -RequiredVersion $MinNoWinRMVersion ; 
+            } ; 
+
+            #if($xmod | Where-Object {$_.version -ge 3} ){ # won't resolve to version, have to 
+            #if(($xmod.version -ge [version]("{0}.{1}.{2}" -f 3, 0, 0))){
+            #if($xmod | Where-Object {$_.version.major -ge 3} ){
+            if($xmod | where-object {$_.version -ge $MinNoWinRMVersion} ){
+                $smsg = "EOM v3+ connection detected" ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                TRY{
+                    $conns = Get-ConnectionInformation -ea STOP ;
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    throw $smsg ;
+                    BREAK ;
+                } ;
+                if($Prefix){
+                    $conns = $conns | ?{$_.ModulePrefix -eq $Prefix} ;
+                } ;
+                # 3:48 PM 6/27/2024there's two connection uri's there; it's possible both would be connected, need to accomodate the combo: need to loop them:
+                # exo should never connect with -prefix 'cc', but still should loop them
+
+
+                foreach($conn in $conns){
+
+                    foreach($CUri in $conn.ConnectionUri){
+                        switch -regex ($CUri){
+                            $rgxConnectionUriEXO {
+                                #if ($oRet.Valid -AND $oRet.isEXO){
+                                    $oReturnEXO.isexo = $true ; 
+                                    $oReturnEXO.ConnectionUri = $CUri ;
+                                    $smsg = "connected to EXO" ;
+                                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                    $bExistingEXOGood = $isEXOValid = $true ;
+                                #} ;
+                            }
+                            $rgxConnectionUriCCMS {
+                                #if ($oRet.Valid -AND $oRet.isCCMS){
+                                    $smsg = "connected to CCMS" ;
+                                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                    $oReturnCCMS.isCCMS = $true ; 
+                                    $oReturnCCMS.ConnectionUri = $CUri ; 
+                                    $bExistingCCMSGood = $isCCMSValid = $true ;
+                                #} ;
+                            }
+                            default {
+                                $bExistingEXOGood = $isEXOValid = $bExistingCCMSGood = $isCCMSValid = $FALSE ;
+                                $smsg = "unreconized test-EXOv2Connection returned:`$oRet.ConnectionUri:$($oRet.ConnectionUri)!"
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            }
+                        } ; 
+                    } ; 
+                    $oRetAggr += $oReturn
+                } ; 
+                
             } else {  
                 $smsg = "EOM v205p6+ connection detected" ; 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
@@ -281,18 +371,37 @@ function test-EXOv2Connection {
             $bExistingEXOGood = $isEXOValid = $false ; 
         } ; 
 
-        if($bExistingEXOGood -ANd $isEXOValid){
-            # implement caching of accepteddoms into the XXXMeta, in the session (cut back on queries to EXO on acceptedom)
-            if( get-command Get-xoAcceptedDomain) {
-                    #$TenOrg = get-TenantTag -Credential $Credential ;
-                    # 1:10 PM 3/1/2024 Tenorg coming through unpopulated (after pulling legacy code), conditionally re-use the above rem:
-                    if( (-not $TenOrg) -AND $Credential){ $TenOrg = get-TenantTag -Credential $Credential } ; 
-                if(-not (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_AcceptedDomains){
-                    set-Variable  -name "$($TenOrg)Meta" -value ( (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value += @{'o365_AcceptedDomains' = (Get-xoAcceptedDomain).domainname} )
-                } ;
-            } ;
-            
-            $smsg = "(validating Tenant:Credential alignment)" ; 
+        if( ($bExistingEXOGood -ANd $isEXOValid) -OR ($bExistingCCMSGood -eq $isCCMSValid)){
+            #if($conns.ConnectionUri){
+            #    $oReturn.ConnectionUri = $conns.ConnectionUri ; 
+            #} ;
+            foreach($conn in $conns){ 
+                switch -regex ($conns.ConnectionUri){
+                    $rgxConnectionUriEXO {
+                        
+                        #$oReturn.isEXO = $true ;
+                        # implement caching of accepteddoms into the XXXMeta, in the session (cut back on queries to EXO on acceptedom)
+                        if( get-command Get-xoAcceptedDomain -ea 0) {
+                                #$TenOrg = get-TenantTag -Credential $Credential ;
+                                # 1:10 PM 3/1/2024 Tenorg coming through unpopulated (after pulling legacy code), conditionally re-use the above rem:
+                                if( (-not $TenOrg) -AND $Credential){ $TenOrg = get-TenantTag -Credential $Credential } ; 
+                            if(-not (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_AcceptedDomains){
+                                set-Variable  -name "$($TenOrg)Meta" -value ( (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value += @{'o365_AcceptedDomains' = (Get-xoAcceptedDomain).domainname} )
+                            } ;
+                        } ;
+                    }
+                    $rgxConnectionUriCCMS {
+                        #$oReturn.isCCMS = $true ;
+                        $smsg = "(No accdom caching on CCMS)" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    }
+                    default {
+                        #$bExistingEXOGood = $isEXOValid = $bExistingCCMSGood = $isCCMSValid = $FALSE ; 
+                    }
+                } ; 
+            } ; 
+    `       $smsg = "(validating Tenant:Credential alignment)" ; 
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             
@@ -306,18 +415,38 @@ function test-EXOv2Connection {
                 # 9:59 AM 6/24/2022 need a case for CBA cert (thumbprint username)
                 # compare cert fname suffix to $xxxMeta.o365_Prefix
                 # validate that the connected EXO is to the CBA Cert tenant
-                $smsg = "(EXO Authenticated & Functional CBA cert:$($certTag),($($certUname)))" ;
-                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
-                $bExistingEXOGood = $isEXOValid = $true ;
-            }elseif((Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
+
+                foreach($conn in $conns){
+                    switch -regex ($conn.ConnectionUri){
+                        $rgxConnectionUriEXO {
+                            $bExistingEXOGood = $isEXOValid = $true ;
+                            $smsg = "(EXO Authenticated & Functional CBA cert:$($certTag),($($certUname)))" ;
+                            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                        }
+                        $rgxConnectionUriCCMS {
+                            $bExistingCCMSGood = $isCCMSValid = $true ; 
+                            $smsg = "(CCMS Authenticated & Functional CBA cert:$($certTag),($($certUname)))" ;
+                            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                        }
+                        default {
+                            $bExistingEXOGood = $isEXOValid = $bExistingCCMSGood = $isCCMSValid = $FALSE ; 
+                        }
+                    } ;
+                } ; 
+            #}elseif((Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring())){
+            # pretest that accdoms is populated before trying to parse it
+            }elseif( (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_AcceptedDomains -AND (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_AcceptedDomains.contains($Credential.username.split('@')[1].tostring()) ){
                 # validate that the connected EXO is to the $Credential tenant
                 $smsg = "(EXO Authenticated & Functional:$($Credential.username.split('@')[1].tostring())),($($Credential.username))" ;
                 if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 $bExistingEXOGood = $isEXOValid = $true ;
             # issue: found fresh bug in cxo: svcacct UPN suffix @tenantname.onmicrosoft.com, but testing against AccepteDomain, it's not in there (tho @DOMAIN.mail.onmicrosoft.comis)
-            }elseif((Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
+            #}elseif((Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring())){
+            # SID comes through with non onmicrosoft domain, need to test the o365_OPDomain as well, to get through these
+            }elseif( ( (Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_TenantDomain -eq ($Credential.username.split('@')[1].tostring()) ) -OR ((Get-Variable  -name "$($TenOrg)Meta" -ea 0).value.o365_OPDomain -eq ($Credential.username.split('@')[1].tostring())) ){
                 $smsg = "(EXO Authenticated & Functional(TenDom):$($Credential.username.split('@')[1].tostring()))" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -326,28 +455,73 @@ function test-EXOv2Connection {
                 $smsg = "(Credential mismatch:disconnecting from existing EXO:$($eEXO.Identity) tenant)" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $tIn = '4/18/2024;D:\scripts\Disconnect-exo_func.ps1' ;
+                $tdt,$tsrc =  $tIn.split(';') ;
+                $tdt=[datetime]$tdt ;
+                if($psise -and (get-date ).date -eq $tdt){
+                    $gcm = gcm (split-path $tsrc -leaf).replace('_func.ps1','') ;
+                    if( $gcm -AND $gcm.source -ne ''){
+                            gci function:$((split-path $tsrc -leaf).replace('_func.ps1','')) -ea 0| remove-item -force ;
+                            ipmo -fo -verb $tsrc;
+                    } else {write-host "(non-Mod vers loaded)"} ;
+                } ; 
                 Disconnect-exo ;
                 $bExistingEXOGood = $isEXOValid = $false ;
             } ;
 
             if($bExistingEXOGood -AND $isEXOValid){
-                $oReturn.PSSession = $pssEXOv2 ; 
+                $oReturnEXO.PSSession = $pssEXOv2 ; 
                 if( ($IsNoWinRM -eq $true) -AND -not $pssEXOv2){
                     $smsg = "IsNoWinRM & no detected EXO PsSession:" ; 
                     if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                    $oReturn.IsNoWinRM = $IsNoWinRM
+                    $oReturnEXO.IsNoWinRM = $IsNoWinRM
                 }
-                $oReturn.Valid = $isEXOValid ; 
+                $oReturnEXO.Valid = $isEXOValid ; 
+            }elseif($bExistingCCMSGood -AND $isCCMSValid){
+                $oReturnCCMS.PSSession = $pssEXOv2 ; 
+                if( ($IsNoWinRM -eq $true) -AND -not $pssEXOv2){
+                    $smsg = "IsNoWinRM & no detected EXO PsSession:" ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    $oReturnCCMS.IsNoWinRM = $IsNoWinRM
+                }
+                $oReturnCCMS.Valid = $isEXOValid ;
             } else {
+                $pltDXO=[ordered]@{
+                    #erroraction = 'STOP' ;
+                } ;
+                if($Prefix){
+                    $pltDXO.Prefix = $Prefix
+                } ; 
+                $smsg = "Disconnect-exo w`n$(($pltDXO|out-string).trim())" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 $smsg = "(invalid session `$bExistingEXOGood:$($bExistingEXOGood) -OR `$isEXOValid:$($isEXOValid))" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                Disconnect-exo ;
+                $tIn = '4/18/2024;D:\scripts\Disconnect-exo_func.ps1' ;
+                $tdt,$tsrc =  $tIn.split(';') ;
+                $tdt=[datetime]$tdt ;
+                if($psise -and (get-date ).date -eq $tdt){
+                    $gcm = gcm (split-path $tsrc -leaf).replace('_func.ps1','') ;
+                    if( $gcm -AND $gcm.source -ne ''){
+                        gci function:$((split-path $tsrc -leaf).replace('_func.ps1','')) -ea 0| remove-item -force ;
+                        ipmo -fo -verb $tsrc;
+                    } else {write-host "(non-Mod vers loaded)"} ;
+                } ; 
+                Disconnect-exo @pltDXO ; 
             } ;  ; 
         } else { 
-            $oReturn.PSSession = $pssEXOv2 ; 
-            $oReturn.Valid = $isEXOValid ; 
+            #$oReturn.PSSession = $pssEXOv2 ; 
+            #$oReturn.Valid = $isEXOValid ; 
+            $oReturnEXO.PSSession = $pssEXOv2 ; 
+            if( ($IsNoWinRM -eq $true) -AND -not $pssEXOv2){
+                $smsg = "IsNoWinRM & no detected EXO PsSession:" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $oReturnEXO.IsNoWinRM = $IsNoWinRM
+            }
+            $oReturnEXO.Valid = $isEXOValid ; 
         } ; 
 
     }  # PROC-E
@@ -357,10 +531,31 @@ function test-EXOv2Connection {
             Valid = $false ; 
         } ; 
         #>
-        $smsg = "Returning `$oReturn:`n$(($oReturn|out-string).trim())" ; 
+        if($oReturnEXO.ConnectionUri){
+            $oRetAggr += New-Object PSObject -Property $oReturnEXO
+        } ; 
+        if($oReturnCCMS.ConnectionUri){
+            $oRetAggr += New-Object PSObject -Property $oReturnCCMS
+        } ; 
+        if(-not $oReturnEXO.ConnectionUri -AND -not $oReturnCCMS.ConnectionUri){
+            # send a stock dummy back
+
+            $oRetAggr += New-Object PSObject -Property @{
+                PSSession = $null ;
+                IsNoWinRM = $false ;
+                Valid = $false ;
+                Prefix = $Prefix ;
+                isEXO = $false ;
+                isCCMS = $false ;
+                ConnectionUri = $null ;
+            } ;
+        } ; 
+        #$smsg = "Returning `$oReturn:`n$(($oReturn|out-string).trim())" ; 
+        $smsg = "Returning `$oRetAggr:`n$(($oRetAggr|out-string).trim())" ; 
         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        New-Object PSObject -Property $oReturn | write-output ; 
+        #New-Object PSObject -Property $oReturn | write-output ; 
+        $oRetAggr | write-output ; 
     } ;
 } ; 
 #*------^ END Function test-EXOv2Connection() ^------
