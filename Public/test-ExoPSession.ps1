@@ -15,6 +15,7 @@ Function test-ExoPSession {
     Github      : https://github.com/tostka
     Tags        : Powershell,Exchange,Exchange-2013,Exchange-2016
     REVISIONS   :
+     * 12:01 PM 7/15/2024 long obso pssession target func, delete
     * 11:40 AM 5/14/2021 added -ea 0 to the gv tests (suppresses not-found error when called without logging config)
     * 10:38 AM 5/3/2021 init vers
     .DESCRIPTION
