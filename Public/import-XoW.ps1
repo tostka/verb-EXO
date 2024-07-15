@@ -18,6 +18,7 @@ function import-XoW_func {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:10 PM 7/15/2024 temp EOM v206p5-era bug workaround, aimed at addressing long-standing hgybrid exop<->exo connection bug; fixed in EOM3+ releases
     * 10:07 AM 3/28/2023 typo, didn't have $ModuleName in trailing w-h
     * 10:20 AM 3/27/2023 completing work, added CBH demo
     * 10:32 AM 3/24/2023 flip wee lxoW into full function call
