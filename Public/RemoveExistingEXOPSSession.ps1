@@ -17,6 +17,7 @@ function RemoveExistingEXOPSSession() {
     AddedCredit : Microsoft (edited version of published commands in the module)
     AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
     REVISIONS
+    * 12:01 PM 7/15/2024 long obso pssession target func, delete
     * 8:34 AM 11/9/2020 init
     .DESCRIPTION
     RemoveExistingEXOPSSession.ps1 - Tweaked version of the Exchangeonline module:RemoveExistingPSSession() to avoid purging CCMW sessions on connect. Intent is to permit *concurrent* EXO & CCMS sessions.
