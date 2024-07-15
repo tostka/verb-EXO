@@ -17,6 +17,7 @@ function Print-Details{
     AddedCredit : Microsoft (edited version of published commands in the module)
     AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
     REVISIONS
+    * 12:01 PM 7/15/2024 long obso banner func, delete
     * 8:34 AM 11/9/2020 init
     .DESCRIPTION
     Print-Details.ps1 - localized verb-EXO vers of non-'$global:' helper funct from ExchangeOnlineManagement. The globals export fine, these don't and appear to need to be loaded manually
