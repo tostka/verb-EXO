@@ -16,6 +16,7 @@ function invoke-XOWrapper  {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnlineManagement,Bug,Workaround
     REVISIONS
+    * 12:16 PM 7/15/2024 temp EOM260 era hybrid connection conflict workaround; fixed in EOM3+
     * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
     * 2:02 PM 4/17/2023 rev: $MinNoWinRMVersion from 2.0.6 => 3.0.0.
     * 2:33 PM 4/13/2023 pull [E]req for verb-exo (merging)
