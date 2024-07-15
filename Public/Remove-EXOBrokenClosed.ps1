@@ -18,6 +18,7 @@ function Remove-EXOBrokenClosed(){
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    11:59 AM 7/15/2024 only targets pssessions; obsolete, delete
     * 9:29 AM 7/30/2020 lifted from EXO V2 connect-exchangeonline() as RemoveBrokenOrClosedPSSession()
     * 3:24 PM 7/24/2020 updated to support tenant-alignment & sub'd out showdebug for verbose
     * 11:50 AM 5/27/2020 added alias:dxo win func
