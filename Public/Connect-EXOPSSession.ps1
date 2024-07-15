@@ -17,6 +17,7 @@ function Connect-EXOPSSession {
     AddedCredit : Microsoft (edited version of published commands in the module)
     AddedWebsite: https://www.powershellgallery.com/packages/CreateExoPsSession/0.1/Content/CreateExoPsSession.psm1
     REVISIONS
+    * 12:01 PM 7/15/2024 long obso pssession target func, delete
     * 3:36 PM 11/9/2020 init debugged to basic function
     .DESCRIPTION
    Connect-EXOPSSession.ps1 - *another* take on a stripped to basics version of the Exchangeonlinemanagement module:connect-ExchangeOnline(), uses RemoveExistingEXOPSSession (vs RemoveExistingPSSession) to leave CCMS sessions intact, and permit run of concurrent EXO & CCMS sessions
