@@ -17,6 +17,7 @@ Tags        : Powershell
 AddedCredit : Microsoft (edited version of published commands in the module)
 AddedWebsite:	https://docs.microsoft.com/en-us/powershell/exchange/exchange-online-powershell-v2
 REVISIONS
+* 12:15 PM 7/15/2024 obso pssession-targeting old exo cxo variant, delete
 * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
 # 8:34 AM 3/31/2021 added verbose suppress to all import-mods
 * 8:34 AM 11/9/2020 init
