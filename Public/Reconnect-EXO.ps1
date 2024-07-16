@@ -17,6 +17,7 @@ Function Reconnect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 3:11 PM 7/15/2024 needed to change CHKPREREQ to check for presence of prop, not that it had a value (which fails as $false); hadn't cleared $MetaProps = ...,'DOESNTEXIST' ; confirmed cxo working non-based
     *1:44 PM 7/9/2024 passes hybrid xo/s&c, with variant prefixes (other than hard-req that prefix cc indicates an s&c conn); 
          un-remmed cc-specific $UserRole default (steers into SID);  sub'd in silent for w-v
     * 4:12 PM 7/8/2024 passes dbg xo;  spliced over updates from cxo using test-exoconnectionTDO+resolve-AppIDToCBAFriendlyName(), tore out most old PROCESS testing & all END code; spliced over constants block from cxo as well
@@ -162,25 +163,26 @@ Function Reconnect-EXO {
         
         #region CHKPREREQ ; #*------v CHKPREREQ v------
         # critical dependancy Meta variables
-        $MetaNames = 'TOR','CMW','TOL' #,'NOSUCH' ; 
+        $MetaNames = 'TOR','CMW','TOL' # ,'NOSUCH' ;
         # critical dependancy Meta variable properties
-        $MetaProps = 'legacyDomain','o365_TenantDomain' #,'DOESNTEXIST' ; 
-        $isBased = $true ; $gvMiss = @() ; $ppMiss = @() ; 
+        $MetaProps = 'legacyDomain','o365_TenantDomain' #,'DOESNTEXIST' ;
+        $isBased = $true ; $gvMiss = @() ; $ppMiss = @() ;
         foreach($met in $metanames){
-            write-verbose "chk:`$$($met)Meta" ; 
+            write-verbose "chk:`$$($met)Meta" ;
             if(-not (gv -name "$($met)Meta" -ea 0)){
-                $isBased = $false; $gvMiss += "$($met)Meta" ; 
-            } ; 
+                $isBased = $false; $gvMiss += "$($met)Meta" ;
+            } ;
             foreach($mp in $MetaProps){
-                write-verbose "chk:`$$($met)Meta.$($mp)" ; 
-                if(-not (gv -name "$($met)Meta" -ea 0).value[$mp]){
-                    $isBased = $false; $ppMiss += "$($met)Meta.$($mp)" ; 
-                } ; 
-            } ; 
-        } ; 
-        if($gvmiss){write-warning "Missing Dependant Meta variables:`n$(($gvMiss |%{"`$$($_)" }) -join ',')" } ; 
-        if($ppMiss){write-warning "Missing Dependant Meta vari properties:`n$(($ppMiss |%{"`$$($_)" }) -join ',')" } ; 
-        if(-not $isBased){ write-warning  "missing critical dependancy profile config!" } ; 
+                write-verbose "chk:`$$($met)Meta.$($mp)" ;
+                #if(-not (gv -name "$($met)Meta" -ea 0).value[$mp]){ # testing has a value, not is present as a spec!
+                if(-not (gv -name "$($met)Meta" -ea 0).value.keys -contains $mp){
+                    $isBased = $false; $ppMiss += "$($met)Meta.$($mp)" ;
+                } ;
+            } ;
+        } ;
+        if($gvmiss){write-warning "Missing Dependant Meta variables:`n$(($gvMiss |%{"`$$($_)" }) -join ',')" } ;
+        if($ppMiss){write-warning "Missing Dependant Meta vari properties:`n$(($ppMiss |%{"`$$($_)" }) -join ',')" } ;
+        if(-not $isBased){ write-warning  "missing critical dependancy profile config!" } ;
         #endregion CHKPREREQ ; #*------^ END CHKPREREQ ^------
 
 

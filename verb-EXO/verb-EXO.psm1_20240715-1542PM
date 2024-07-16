@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 8.0.0.0
+  Version     : 7.0.1.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -925,7 +925,6 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
-    * 3:11 PM 7/15/2024 needed to change CHKPREREQ to check for presence of prop, not that it had a value (which fails as $false); hadn't cleared $MetaProps = ...,'DOESNTEXIST' ; confirmed cxo working non-based
     * 1:43 PM 7/9/2024 passes hybrid xo/s&c, with variant prefixes (other than hard-req that prefix cc indicates an s&c conn).
     * 4:13 PM 7/8/2024 passes dbg xo; END block validation code using test-exoConnectionTDO()+resolve-AppIDToCBAFriendlyName() is now functional
     * 3:33 PM 7/3/2024 updated, rewrote tests & END block to rely on test-EXOConnectionTDO, and new resolve-AppIDToCBAFriendlyName(); Initial tests are working. 
@@ -1153,8 +1152,7 @@ Function Connect-EXO {
             } ; 
             foreach($mp in $MetaProps){
                 write-verbose "chk:`$$($met)Meta.$($mp)" ; 
-                #if(-not (gv -name "$($met)Meta" -ea 0).value[$mp]){ # testing has a value, not is present as a spec!
-                if(-not (gv -name "$($met)Meta" -ea 0).value.keys -contains $mp){
+                if(-not (gv -name "$($met)Meta" -ea 0).value[$mp]){
                     $isBased = $false; $ppMiss += "$($met)Meta.$($mp)" ; 
                 } ; 
             } ; 
@@ -12755,7 +12753,6 @@ Function Reconnect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
-    * 3:11 PM 7/15/2024 needed to change CHKPREREQ to check for presence of prop, not that it had a value (which fails as $false); hadn't cleared $MetaProps = ...,'DOESNTEXIST' ; confirmed cxo working non-based
     *1:44 PM 7/9/2024 passes hybrid xo/s&c, with variant prefixes (other than hard-req that prefix cc indicates an s&c conn); 
          un-remmed cc-specific $UserRole default (steers into SID);  sub'd in silent for w-v
     * 4:12 PM 7/8/2024 passes dbg xo;  spliced over updates from cxo using test-exoconnectionTDO+resolve-AppIDToCBAFriendlyName(), tore out most old PROCESS testing & all END code; spliced over constants block from cxo as well
@@ -12901,26 +12898,25 @@ Function Reconnect-EXO {
         
         #region CHKPREREQ ; #*------v CHKPREREQ v------
         # critical dependancy Meta variables
-        $MetaNames = 'TOR','CMW','TOL' # ,'NOSUCH' ;
+        $MetaNames = 'TOR','CMW','TOL' #,'NOSUCH' ; 
         # critical dependancy Meta variable properties
-        $MetaProps = 'legacyDomain','o365_TenantDomain' #,'DOESNTEXIST' ;
-        $isBased = $true ; $gvMiss = @() ; $ppMiss = @() ;
+        $MetaProps = 'legacyDomain','o365_TenantDomain' #,'DOESNTEXIST' ; 
+        $isBased = $true ; $gvMiss = @() ; $ppMiss = @() ; 
         foreach($met in $metanames){
-            write-verbose "chk:`$$($met)Meta" ;
+            write-verbose "chk:`$$($met)Meta" ; 
             if(-not (gv -name "$($met)Meta" -ea 0)){
-                $isBased = $false; $gvMiss += "$($met)Meta" ;
-            } ;
+                $isBased = $false; $gvMiss += "$($met)Meta" ; 
+            } ; 
             foreach($mp in $MetaProps){
-                write-verbose "chk:`$$($met)Meta.$($mp)" ;
-                #if(-not (gv -name "$($met)Meta" -ea 0).value[$mp]){ # testing has a value, not is present as a spec!
-                if(-not (gv -name "$($met)Meta" -ea 0).value.keys -contains $mp){
-                    $isBased = $false; $ppMiss += "$($met)Meta.$($mp)" ;
-                } ;
-            } ;
-        } ;
-        if($gvmiss){write-warning "Missing Dependant Meta variables:`n$(($gvMiss |%{"`$$($_)" }) -join ',')" } ;
-        if($ppMiss){write-warning "Missing Dependant Meta vari properties:`n$(($ppMiss |%{"`$$($_)" }) -join ',')" } ;
-        if(-not $isBased){ write-warning  "missing critical dependancy profile config!" } ;
+                write-verbose "chk:`$$($met)Meta.$($mp)" ; 
+                if(-not (gv -name "$($met)Meta" -ea 0).value[$mp]){
+                    $isBased = $false; $ppMiss += "$($met)Meta.$($mp)" ; 
+                } ; 
+            } ; 
+        } ; 
+        if($gvmiss){write-warning "Missing Dependant Meta variables:`n$(($gvMiss |%{"`$$($_)" }) -join ',')" } ; 
+        if($ppMiss){write-warning "Missing Dependant Meta vari properties:`n$(($ppMiss |%{"`$$($_)" }) -join ',')" } ; 
+        if(-not $isBased){ write-warning  "missing critical dependancy profile config!" } ; 
         #endregion CHKPREREQ ; #*------^ END CHKPREREQ ^------
 
 
@@ -21764,3 +21760,29 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 
 
 
+
+# SIG # Begin signature block
+# MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
+# gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUbH01osoEZ/XBEcd1R/gbMRzX
+# 9rWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
+# Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
+# ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
+# a+NnFYNRPPa8Bnm071ohGe27jNWKPVUbDfd0OY2sqCBQCEFVb5pqcIECRRnlhN5H
+# +EEJmm2x9AU0uS7IHxHeUo8fkW4vm49adkat5gAoOZOwbuNntBOAJy9LCyNs4F1I
+# KKphP3TyDwe8XqsEVwB2m9FPAgMBAAGjdjB0MBMGA1UdJQQMMAoGCCsGAQUFBwMD
+# MF0GA1UdAQRWMFSAEL95r+Rh65kgqZl+tgchMuKhLjAsMSowKAYDVQQDEyFQb3dl
+# clNoZWxsIExvY2FsIENlcnRpZmljYXRlIFJvb3SCEGwiXbeZNci7Rxiz/r43gVsw
+# CQYFKw4DAh0FAAOBgQB6ECSnXHUs7/bCr6Z556K6IDJNWsccjcV89fHA/zKMX0w0
+# 6NefCtxas/QHUA9mS87HRHLzKjFqweA3BnQ5lr5mPDlho8U90Nvtpj58G9I5SPUg
+# CspNr5jEHOL5EdJFBIv3zI2jQ8TPbFGC0Cz72+4oYzSxWpftNX41MmEsZkMaADGC
+# AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
+# Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
+# AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQw+phL
+# ywVmdQBUOW/3gFBsdZRSfTANBgkqhkiG9w0BAQEFAASBgE6kF25Ny/N/ZzB9/4PW
+# 9fZnno8Z2uSeArml/Jjbf2cbIVM+yl5O5LZ8blOU+XoJ13bPo5NKtcTUxcPGGmDW
+# /2msVYk9lB1jHBeWiClx2DL3UBzZHncZDlVzKJPcWrfa/Syy9FMAhdUeg0P7+Fw1
+# Z4eXDg6KcJyBsW87qAcViSvP
+# SIG # End signature block

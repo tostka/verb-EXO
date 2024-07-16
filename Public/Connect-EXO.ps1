@@ -17,6 +17,7 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 3:11 PM 7/15/2024 needed to change CHKPREREQ to check for presence of prop, not that it had a value (which fails as $false); hadn't cleared $MetaProps = ...,'DOESNTEXIST' ; confirmed cxo working non-based
     * 1:43 PM 7/9/2024 passes hybrid xo/s&c, with variant prefixes (other than hard-req that prefix cc indicates an s&c conn).
     * 4:13 PM 7/8/2024 passes dbg xo; END block validation code using test-exoConnectionTDO()+resolve-AppIDToCBAFriendlyName() is now functional
     * 3:33 PM 7/3/2024 updated, rewrote tests & END block to rely on test-EXOConnectionTDO, and new resolve-AppIDToCBAFriendlyName(); Initial tests are working. 
@@ -244,7 +245,8 @@ Function Connect-EXO {
             } ; 
             foreach($mp in $MetaProps){
                 write-verbose "chk:`$$($met)Meta.$($mp)" ; 
-                if(-not (gv -name "$($met)Meta" -ea 0).value[$mp]){
+                #if(-not (gv -name "$($met)Meta" -ea 0).value[$mp]){ # testing has a value, not is present as a spec!
+                if(-not (gv -name "$($met)Meta" -ea 0).value.keys -contains $mp){
                     $isBased = $false; $ppMiss += "$($met)Meta.$($mp)" ; 
                 } ; 
             } ; 
