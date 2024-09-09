@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 8.0.0.0
+  Version     : 8.1.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -925,6 +925,7 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
     * 3:11 PM 7/15/2024 needed to change CHKPREREQ to check for presence of prop, not that it had a value (which fails as $false); hadn't cleared $MetaProps = ...,'DOESNTEXIST' ; confirmed cxo working non-based
     * 1:43 PM 7/9/2024 passes hybrid xo/s&c, with variant prefixes (other than hard-req that prefix cc indicates an s&c conn).
     * 4:13 PM 7/8/2024 passes dbg xo; END block validation code using test-exoConnectionTDO()+resolve-AppIDToCBAFriendlyName() is now functional
@@ -1139,7 +1140,22 @@ Function Connect-EXO {
     ) ;
     BEGIN {
         $verbose = ($VerbosePreference -eq "Continue") ;
-
+		$CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
+        write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
+        # psv6+ already covers, test via the SslProtocol parameter presense
+        if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
+            $currentMaxTlsValue = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__,[Net.SecurityProtocolType]::Tls.value__) ;
+            write-verbose "`$currentMaxTlsValue : $($currentMaxTlsValue )" ;
+            $newerTlsTypeEnums = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $currentMaxTlsValue }
+            if($newerTlsTypeEnums){
+                write-verbose "Appending upgraded/missing TLS `$enums:`n$(($newerTlsTypeEnums -join ','|out-string).trim())" ;
+            } else {
+                write-verbose "Current TLS `$enums are up to date with max rev available on this machine" ;
+            };
+            $newerTlsTypeEnums | ForEach-Object {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
+            } ;
+        } ;
         #region CHKPREREQ ; #*------v CHKPREREQ v------
         # critical dependancy Meta variables
         $MetaNames = 'TOR','CMW','TOL' # ,'NOSUCH' ; 
@@ -21768,8 +21784,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUtM8I1MyM8n+/ziLaBK+IQSfb
-# 7FGgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUgHAABcSiZfP/WCmsAJ/86uIC
+# yp2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -21784,9 +21800,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTx7opX
-# lofpN6E7GWyW365FzWo5GjANBgkqhkiG9w0BAQEFAASBgBUsgtP6asEBlo8gpQtj
-# ELmDOFb6WqNMLMqGD30f/X7mLEcFnQDrNduAyxYg5H+4HM72sdD7fyAN2DBVL2DC
-# OpZE5u9Zh9gA3okLSQt6yadNODjkuu1/d7c6UCY5yMMEI/3Y+0jZNXaGN722RY1P
-# 6sNhr7GIz8b8/4X/Wu4WYTdr
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQnk0os
+# WgqBB4+Ye8wPCvQDKMMIBTANBgkqhkiG9w0BAQEFAASBgERRhnyLlHCK5AGxFNgj
+# 7Yhmul7TRkhLMkfVZI5d7apJ00xXPnZNvQ8728LFqpXmKoxIp/s6nqWG+W34D2Ov
+# KS4gQHGaZ2pa+O6pcOZWx0acmLoZjeIlQjtoK8MOF+fddOpQNs26EPf2YqBQMZGl
+# FflZEmdombJhFtgCdr0eGIaA
 # SIG # End signature block
