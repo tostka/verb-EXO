@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:06 PM 9/23/2024 added param for regex to detect non-raw text names; ahdd running $usr input through Remove-StringDiacritic & Remove-StringLatinCharacters() ; 
     * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection
     * 4:28 PM 2/27/2024 updated path-detect code (was discovering into the Mods dir);  updated CBH, quota mbx size, LegalHold example; add additional reporting/detecting to LegalHold status; fixed borked/non-dumping $prpMbxHold = ...@{n="InPlaceHolds";e={ ($_.inplaceholds (*KEY* indicator of a hold in place); updated prompts to echo DiscoveryHolds folder & it's newestItem (both indicate LHs, and if not curr, when it was disabled)
     * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
@@ -93,6 +94,8 @@ function resolve-user {
     switch to return mobiledevice info for target XO Mailbox (not supported for onprem mailboxes)[-getMobile]
     .PARAMETER getQuotaUsage
     switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]
+    .PARAMETER rgxAccentedNameChars
+    Regular Expression that identifies input 'user' strings that should ahve diacriticals/latin/non-simple english characters replaced, before lookups
     .PARAMETER useEXOv2
     Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
     .PARAMETER outObject
@@ -269,6 +272,9 @@ function resolve-user {
             [switch] $getMobile,
         [Parameter(HelpMessage="switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]")]
             [switch]$getQuotaUsage,
+        [Parameter(HelpMessage="Regular Expression that identifies input 'user' strings that should ahve diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]")]
+            [ValidateNotNullOrEmpty()]
+            [regex]$rgxAccentedNameChars = "[^a-zA-Z0-9\s\.\(\)\{\}\/\&\$\#\@\,\`"\'\’\:\–_-]",
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
         [ValidateNotNullOrEmpty()]
             #[ValidatePattern("^\w{3}$")]
@@ -1370,6 +1376,20 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 $hsum.add('xoNetOfSendReceiveQuotaMB',$null) ; 
                 [string]$ofMbxFolderStats = $ofile.replace('REPORT',"folder-sizes-NONHIDDEN-NONZERO") ; 
 
+            } ; 
+
+            if($usr -match $rgxAccentedNameChars){
+                # 9:36 AM 9/23/2024 pre remove all diacritics & latin chars 
+                #Remove-StringDiacritic -String 'Helen Bräuchle' |Remove-StringLatinCharacters
+                $smsg = "Remove-StringDiacritic -String $($usr) (if needed)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $usr = Remove-StringDiacritic -String $usr ; 
+            
+                $smsg = "Remove-StringLatinCharacters -String $($usr) (if needed)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $usr = Remove-StringLatinCharacters -String $usr ; 
             } ; 
 
             switch -regex ($usr){

@@ -1,11 +1,11 @@
-﻿# verb-EXO.psm1
+﻿# verb-Exo.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 8.1.0.0
+  Version     : 8.1.1.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -15871,6 +15871,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:06 PM 9/23/2024 added param for regex to detect non-raw text names; ahdd running $usr input through Remove-StringDiacritic & Remove-StringLatinCharacters() ; 
     * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection
     * 4:28 PM 2/27/2024 updated path-detect code (was discovering into the Mods dir);  updated CBH, quota mbx size, LegalHold example; add additional reporting/detecting to LegalHold status; fixed borked/non-dumping $prpMbxHold = ...@{n="InPlaceHolds";e={ ($_.inplaceholds (*KEY* indicator of a hold in place); updated prompts to echo DiscoveryHolds folder & it's newestItem (both indicate LHs, and if not curr, when it was disabled)
     * 2:51 PM 2/26/2024 add | sort version | select -last 1  on gmos, LF installed 3.4.0 parallel to 3.1.0 and broke auth: caused mult versions to come back and conflict with the assignement of [version] type (would require [version[]] to accom both, and then you get to code everything for mult handling)
@@ -15946,6 +15947,8 @@ function resolve-user {
     switch to return mobiledevice info for target XO Mailbox (not supported for onprem mailboxes)[-getMobile]
     .PARAMETER getQuotaUsage
     switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]
+    .PARAMETER rgxAccentedNameChars
+    Regular Expression that identifies input 'user' strings that should ahve diacriticals/latin/non-simple english characters replaced, before lookups
     .PARAMETER useEXOv2
     Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
     .PARAMETER outObject
@@ -16122,6 +16125,9 @@ function resolve-user {
             [switch] $getMobile,
         [Parameter(HelpMessage="switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]")]
             [switch]$getQuotaUsage,
+        [Parameter(HelpMessage="Regular Expression that identifies input 'user' strings that should ahve diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]")]
+            [ValidateNotNullOrEmpty()]
+            [regex]$rgxAccentedNameChars = "[^a-zA-Z0-9\s\.\(\)\{\}\/\&\$\#\@\,\`"\'\’\:\–_-]",
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
         [ValidateNotNullOrEmpty()]
             #[ValidatePattern("^\w{3}$")]
@@ -17223,6 +17229,20 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 $hsum.add('xoNetOfSendReceiveQuotaMB',$null) ; 
                 [string]$ofMbxFolderStats = $ofile.replace('REPORT',"folder-sizes-NONHIDDEN-NONZERO") ; 
 
+            } ; 
+
+            if($usr -match $rgxAccentedNameChars){
+                # 9:36 AM 9/23/2024 pre remove all diacritics & latin chars 
+                #Remove-StringDiacritic -String 'Helen Bräuchle' |Remove-StringLatinCharacters
+                $smsg = "Remove-StringDiacritic -String $($usr) (if needed)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $usr = Remove-StringDiacritic -String $usr ; 
+            
+                $smsg = "Remove-StringLatinCharacters -String $($usr) (if needed)" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $usr = Remove-StringLatinCharacters -String $usr ; 
             } ; 
 
             switch -regex ($usr){
@@ -21164,7 +21184,7 @@ Function test-xoMailbox {
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                             <# Count Name                      Group
                             ----- ----                      -----
-                              448 Delivered                 {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<BN8PR12MB33158F1D07B3862078D758E6EB499@BN8PR12MB3315.namprd12.prod.o...
+                              448 Delivered                 {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<BN8PR12MB33158.1.17B3862078D758E6EB499@BN8PR12MB3315.namprd12.prod.o...
                                 1 Failed                    {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<5bc2055fed4d43d3827cf7f61d37a4c9@CH2PR04MB7062.namprd04.prod.outlook...
                                 1 Quarantined               {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<threatsim-5f0bc0101d-c200b2590d@app.emaildistro.com>; Received=4/28/...
                                 1 FilteredAsSpam            {@{PSComputerName=ps.outlook.com; RunspaceId=25f3aa28-9437-4e30-aa8f-8d83d2d2fc5a; PSShowComputerName=False; Organization=DOMAIN.onmicrosoft.com; MessageId=<SA0PR01MB61858E3C6111672E081373C1E45F9@SA0PR01MB6185.prod.exchangela...
