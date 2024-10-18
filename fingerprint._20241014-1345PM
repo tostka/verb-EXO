@@ -1204,7 +1204,6 @@ resolve-user:users
 resolve-user:Ticket
 resolve-user:getMobile
 resolve-user:getQuotaUsage
-resolve-user:rgxAccentedNameChars
 resolve-user:TenOrg
 resolve-user:Credential
 resolve-user:UserRole
