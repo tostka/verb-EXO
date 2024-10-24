@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 4:40 PM 10/16/2024 added code to do above, users I thot were c1 weren't, had rmbxs, so it needs further testing;  cloud first: VEN,INT,AA,HH, may not match ADU properly, but if they have AADU & AADUser.DirSyncEnabled, the .aaduser.ExtensionProperty.onPremisesDistinguishedName will point to the assoicated ADU! Need to re-resolve when missing ADU
     * 12:50 PM 10/11/2024 substantial rewrites in query code to accomodate apostrophe's in names (selective rewrap " vs ' for queries). Still not great, still doesn't necessarily work searching dname on apostrophe'd names, but it gets through the pass wo crashing (as it did previously).
     * 12:06 PM 9/23/2024 added param for regex to detect non-raw text names; ahdd running $usr input through Remove-StringDiacritic & Remove-StringLatinCharacters() ; 
     * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection
@@ -2629,17 +2630,53 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
 
                 # display user info:
                 if(-not($hSum.ADUser)){
-                    # remote fed, use AADU to proxy remote AD hybrid info:
-                    write-host -foreground yellow "===`$hSum.AADUser: " #-nonewline;
-                    $smsg = "$(($hSum.AADUser| select $propsAADL1 |out-markdowntable @MDtbl |out-string).trim())" ;
-                    $smsg += "`n$(($hSum.AADUser|select $propsAADL2 |out-markdowntable @MDtbl|out-string).trim())" ;
-                    $smsg += "`n$(($hSum.AADUser|select $propsAADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
-                    $smsg += "`n$(($hSum.AADUser|select $propsAADL4 |out-markdowntable @MDtbl|out-string).trim())" ;
-                    $smsg += "`n$(($hSum.AADUser|select $propsAADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
-                    #$hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName
-                    if($hSum.Federator -ne $TORMeta.adforestname){
-                        $smsg += "`n$($hSum.Federator):Remote ADUser.DN:`n$(($hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName|out-string).trim())" ;
-                    }  ;
+                    if($hSum.AADUser.DirSyncEnabled -AND $hSum.aaduser.ExtensionProperty.onPremisesDistinguishedName){
+                        $pltGadu.Identity = $hSum.aaduser.ExtensionProperty.onPremisesDistinguishedName ; 
+                        $hSum.ADUser  += Get-ADUser @pltGadu | select -first $MaxRecips ;
+                        if($pltGadu.identity){
+                            write-verbose "Get-ADUser w`n$(($pltGadu|out-string).trim())" ;
+                            # try a nested local trycatch, against a missing result
+                            Try {
+                                #Get-ADUser $DN -ErrorAction Stop ;
+                                $hSum.ADUser  += Get-ADUser @pltGadu | select -first $MaxRecips ;
+                            } Catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
+                                write-warning "(no matching ADuser found:$($pltGadu.identity))" ;
+                            } catch {
+                                $ErrTrapd=$Error[0] ;
+                                $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                Continue ;
+                            } ;
+
+                            write-verbose "`$hSum.ADUser:`n$(($hSum.ADUser|fl $propsADU | out-string).trim())" ;
+                            $smsg = "(TOR USER, fed:$($TORMeta.adforestname))" ;
+                            $hSum.Federator  +=  $TORMeta.adforestname ;
+                            write-host -Fore yellow $smsg ;
+                            if($hSum.OPRemoteMailbox){
+                                $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
+                                #$smsg += "`n-Title:$($hSum.ADUser.Title)"
+                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                            } ;
+                            if($hSum.OPMailbox){
+                                $smsg =  "$(($hSum.OPMailbox |fl $propsMailx|out-string).trim())" ;
+                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                            } ;
+                            write-host $smsg ;
+                        } ;
+                    } else { 
+                        # remote fed, use AADU to proxy remote AD hybrid info:
+                        write-host -foreground yellow "===`$hSum.AADUser: " #-nonewline;
+                        $smsg = "$(($hSum.AADUser| select $propsAADL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                        $smsg += "`n$(($hSum.AADUser|select $propsAADL2 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        $smsg += "`n$(($hSum.AADUser|select $propsAADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        $smsg += "`n$(($hSum.AADUser|select $propsAADL4 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        $smsg += "`n$(($hSum.AADUser|select $propsAADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        #$hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName
+                        if($hSum.Federator -ne $TORMeta.adforestname){
+                            $smsg += "`n$($hSum.Federator):Remote ADUser.DN:`n$(($hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName|out-string).trim())" ;
+                        }  ;
+                    }; 
 
                     write-host $smsg
 
@@ -2875,6 +2912,9 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 $smsg += "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
                 
                 $hsum.IsLicensed  +=  $false ;
+            } elseif($hsum | ?{-not $_.ADUser -AND $_.AADUser -AND $_.xomailbox -AND -not $_.opMailbox -AND -not $_.opRemoteMailbox}){
+                # 3:54 PM 10/16/2024 add cloud-first VEN|INT|AA|HH detect
+                $smsg += "LICENSED AADUSER CLOUD-FIRST XOMAILBOX  (No ADUser, No OPMailbox, No OPRemoteMailbox)~" ; 
             } ELSE { } ;
 
             if($hsum.IsSplitBrain -OR $hsum.IsNoBrain -OR -not $hsum.IsLicensed){
