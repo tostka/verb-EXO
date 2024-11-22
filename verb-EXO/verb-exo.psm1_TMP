@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 8.4.0.0
+  Version     : 8.5.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -6364,6 +6364,8 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 5:34 PM 11/22/2024 fundmental rework of the output, looping single & multip failcode entries, and outputing summary for types; removed inline processing outputs, in favor of condenced explanations in the $hsFailxxx outputs herestring reports ; also added the recipienttypedetails, aduser.enabled & TermOU status etc to the output on each Fail message exported as MsgsFail;
+        added ConfRm block explicit, and expanded Security* transportrule echo's to cite the rule (if can be parsed from Detail); added recipienttypedetails support for shared|room|equpiment mailboxes
     * 2:59 PM 11/21/2024 working, added code to target 'otherfails', non-OOO, non-Recall, expaanded into Get-xoMessageTraceDetail, then id mail loops, and transport rule blocks (OtherAccounts currently); 
         added considerable expansion and profiling to the fails, also added new sub objects to the return object: 'MsgLast','MsgsFail','MsgsFailOther','MsgsFailOtherDetail','MTMessages','MTMessagesCSVFile','StatusHisto'
     * 5:12 PM 11/20/2024 added -DetailedOtherFails, to force Get-xoMessageTraceDetail on any 'Other' fails, only;
@@ -7851,49 +7853,228 @@ function Get-EXOMessageTraceExportedTDO {
 
                 $hReports.add('MTMessages',$msgs) ; 
 
-                $smsg = "Status Distrib:" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                $smsg = "`n#*------v Status DISTRIB v------" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor blue "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-
                 if($Msgs){
+                    $smsg = "`n#*------v Status DISTRIB v------`n`n" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor blue "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                     $hReports.add('StatusHisto',($Msgs | select -expand Status | group | sort count,count -desc | select count,name)) ;
 
                     $smsg = "`n$(($hReports.StatusHisto|out-string).trim())" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    $smsg = "`n#*------^ Status DISTRIB ^------" ;
-
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    $smsg = "`n`n#*------^ Status DISTRIB ^------`n`n" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor blue "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    $smsg = "`n#*------v MOST RECENT MATCH v------" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    $smsg = "`n`n#*------v MOST RECENT MATCH v------`n`n" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
 
                     $hReports.add('MsgLast',($msgs[-1]| fl $propsMsgDump)) ;
                     $smsg = "`n$(($hReports.MsgLast |out-string).trim())";
-
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    $smsg = "`n#*------^ MOST RECENT MATCH ^------" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    $smsg = "`n`n#*------^ MOST RECENT MATCH ^------`n`n" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
 
                 } ; 
 
-                
+                if($mFails = $msgs | ?{$_.status -eq 'Failed'} | select -first $MessageTraceDetailLimit){
+                    $smsg = "Expanded analysis on first $($MessageTraceDetailLimit) Status:Failed messages..." ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
 
-                if($mFails = $msgs | ?{$_.status -eq 'Failed'}){
+                    if($mFails | ?{$_.Subject -notmatch '^Recall:\s' -AND $_.Subject -notmatch '^Automatic\sreply:\s'}){
+                        $smsg = "Other Fails detected: Opening ExoP & ADMS connections..." ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        #region CXOP ; #*------v CXOP v------
+                        $smsg = "Resolve ComputerSite..." ;
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                        TRY{
+                            $Site=[System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().Name
+                        }CATCH{
+                            $Site=$env:COMPUTERNAME ;
+                            $smsg = "Non-AD-Connected system, setting `$Site:`$env:COMPUTERNAME" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        } ;
+                        $smsg = "Resolved ComputerSite: $($Site)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $smsg = "Discovering and connecting to a local Exchange server in local AD Site"  ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $pltNPSS=[ordered]@{
+                            siteName = $Site ;
+                            RoleNames = @('HUB','CAS') ;
+                            Verbose = ($PSBoundParameters['Verbose'] -eq $true) ;
+                        } ;
+                        $smsg = "Connect-ExchangeServerTDO w`n$(($pltNPSS|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $PSSession = Connect-ExchangeServerTDO @pltNPSS ;
+                        #endregion CXOP ; #*------^ END CXOP ^------
+                        #region loadADMS ; #*------v loadADMS v------
+                        if(-not (get-command -name get-aduser -ea 0)){
+                            $env:ADPS_LoadDefaultDrive = 0 ; $sName="ActiveDirectory"; if (!(Get-Module | where {$_.Name -eq $sName})) {Import-Module $sName -ea Stop}
+                        } ; 
+                        #endregion loadADMS ; #*------^ END loadADMS ^------
+                    } ; 
+                    
+                    $FailAggr = @() ;                                         
+                    foreach($failed in $mFails){
+                        # 'RunspaceId',
+                        # $propsMTAll = 'Organization','MessageId','Received', @{N='ReceivedLocal';E={[datetime]$_.Received.ToLocalTime()}},'SenderAddress','RecipientAddress','Subject','Status','ToIP','FromIP','Size','MessageTraceId','StartDate','EndDate','Index'
+
+                        if($host.version.major -ge 3){$FailMsgSummary=[ordered]@{Dummy = $null ;} }
+                        else {$FailMsgSummary=@{Dummy = $null ;} ;}
+                        If($FailMsgSummary.Contains("Dummy")){$FailMsgSummary.remove("Dummy")} ;
+                        $fieldsnull = 'Organization','MessageId','Received','ReceivedLocal','SenderAddress',
+                            'RecipientAddress','Subject','Status','ToIP','FromIP','Size','MessageTraceId',
+                            'StartDate','EndDate','Index','FailXoRecipientType','FailXopRecipientType',
+                            'FailDetailEvent','FailDetailDetail','ADUserTermOU' ;  ; 
+                        $fieldsnull | % { $FailMsgSummary.add($_,$null) } ;
+                        $fieldsbool = 'isFailed','ADUserDisabled'
+                            #,'isFailedOOO','isFailRecall','isFailOther','isFailOtherAcctsBlock',
+                            #'isFailSecBlock','isFailMailLoop','isFailBrokenTerm','isFailNoMailbox', ; 
+                        # 4:11 PM 11/22/2024 pulled the is*, do it by parsing the FailCode instead
+                        $fieldsbool | % { $FailMsgSummary.add($_,$false) } ;
+
+
+                        <#$FailMsgSummary=[indexed]@{
+                            Organization = $failed.Organization ; 
+                            MessageId = $failed.MessageId ; 
+                            Received = $failed.Received ; 
+                            ReceivedLocal = $failed.ReceivedLocal ; 
+                            SenderAddress = $failed.SenderAddress ; 
+                            RecipientAddress = $failed.RecipientAddress ; 
+                            Subject = $failed.Subject ; 
+                            Status = $failed.Status ; 
+                            ToIP = $failed.ToIP ; 
+                            FromIP = $failed.FromIP ; 
+                            Size = $failed.Size ; 
+                            MessageTraceId = $failed.MessageTraceId ; 
+                            StartDate = $failed.StartDate ; 
+                            EndDate = $failed.EndDate ; 
+                            Index = $failed.Index ;      
+                            isFailed = $true ; 
+                            isFailedOOO = $false ;
+                            isFailRecall = $false ;
+                            isFailOther = $false ;
+                            isFailOtherAcctsBlock = $false ; 
+                            isFailSecBlock = $false ; 
+                            isFailMailLoop = $false ;
+                            isFailBrokenTerm = $false ; 
+                            isFailNoMailbox = $false ; 
+                            FailXoRecipientType = $null ; 
+                            FailXopRecipientType = $null ;
+                            FailDetailEvent = $null ; 
+                            FailDetailDetail = $null ; 
+                            ADUserDisabled = $false ; 
+                            ADUserTermOU = $null ; 
+                        } ; 
+                        #>
+                        $FailMsgSummary.Organization = $failed.Organization ; 
+                        $FailMsgSummary.MessageId = $failed.MessageId ; 
+                        $FailMsgSummary.Received = $failed.Received ; 
+                        $FailMsgSummary.ReceivedLocal = $failed.ReceivedLocal ; 
+                        $FailMsgSummary.SenderAddress = $failed.SenderAddress ; 
+                        $FailMsgSummary.RecipientAddress = $failed.RecipientAddress ; 
+                        $FailMsgSummary.Subject = $failed.Subject ; 
+                        $FailMsgSummary.Status = $failed.Status ; 
+                        $FailMsgSummary.ToIP = $failed.ToIP ; 
+                        $FailMsgSummary.FromIP = $failed.FromIP ; 
+                        $FailMsgSummary.Size = $failed.Size ; 
+                        $FailMsgSummary.MessageTraceId = $failed.MessageTraceId ; 
+                        $FailMsgSummary.StartDate = $failed.StartDate ; 
+                        $FailMsgSummary.EndDate = $failed.EndDate ; 
+                        $FailMsgSummary.Index = $failed.Index ;      
+                        $FailMsgSummary.isFailed = $true ; 
+                        <#
+                        $FailMsgSummary.isFailedOOO = $false ;
+                        $FailMsgSummary.isFailRecall = $false ;
+                        $FailMsgSummary.isFailOther = $false ;
+                        $FailMsgSummary.isFailOtherAcctsBlock = $false ; 
+                        $FailMsgSummary.isFailSecBlock = $false ; 
+                        $FailMsgSummary.isFailMailLoop = $false ;
+                        $FailMsgSummary.isFailBrokenTerm = $false ; 
+                        $FailMsgSummary.isFailNoMailbox = $false ; 
+                        #>
+                        $FailMsgSummary.FailCode = $null ; 
+                        $FailMsgSummary.FailXoRecipientType = $null ; 
+                        $FailMsgSummary.FailXopRecipientType = $null ;
+                        $FailMsgSummary.FailDetailEvent = $null ; 
+                        $FailMsgSummary.FailDetailDetail = $null ; 
+                        $FailMsgSummary.ADUserDisabled = $false ; 
+                        $FailMsgSummary.ADUserTermOU = $null ;
+
+                        if($failed | ?{$_.Subject -match '^Automatic\sreply:\s'}){
+                            $FailMsgSummary.FailCode += @('FailOOO') ; 
+                        } ; 
+                        if($failed | ?{$_.Subject -match '^Recall:\s'}){
+                            $FailMsgSummary.FailCode += @('FailRecall') ; 
+                        } ; 
+                        if($failed | ?{$_.Subject -notmatch '^Recall:\s' -AND $_.Subject -notmatch '^Automatic\sreply:\s'}){
+                            #$FailMsgSummary.isFailOther = $true ; 
+                            $FODetail =  $failed | Get-xoMessageTraceDetail -ea STOP; 
+                            $FailMsgSummary.FailDetailEvent = $FODetail.event ; 
+                            $FailMsgSummary.FailDetailDetail = $FODetail.Detail ; 
+                            if($FODetail | ?{$_.event -eq 'Transport rule' -AND $_.Detail -match 'OtherAccts-External-Mail-Rejection'}){
+                                $FailMsgSummary.FailCode += @('FailOtherAcctBlock') ; 
+                            } ; 
+                            if($FODetail | ?{$_.event -eq 'Transport rule' -AND $_.Detail -match 'ConfRm-External-Mail-Rejection'}){
+                                $FailMsgSummary.FailCode += @('FailConfRmExtBlock') ; 
+                            } ; 
+                            if($FODetail | ?{$_.event -eq 'Transport rule' -AND $_.Detail -match '^Security(\s-\s|-)'}){
+                                if(($FODetail.detail | select -unique ) -match "Transport\srule:\s'(.*)',"){
+                                    $TRule = $matches[0] ; 
+                                    $FailMsgSummary.FailCode += @("FailSecBlock:$($Trule)") ; 
+                                }else{
+                                    $FailMsgSummary.FailCode += @('FailSecBlock') ; 
+                                } ; 
+                            }
+                            if($FODetail | ?{$_.event -eq 'FAIL' -AND $_.Detail -match 'Hop\scount\sexceeded\s-\spossible\smail\sloop'}){
+                                $FailMsgSummary.FailCode += @('FailMailLoop') ; 
+                                $xopRcp = $xoRCP = $adu = $null ; 
+                                $xopRcp = get-recipient $failed.RecipientAddress -ea 0;
+                                $xoRCP = get-xorecipient $failed.RecipientAddress -ea 0 ; 
+                                $adu = get-aduser -id $xoRCP.alias -ea 0 ; 
+                                $FailMsgSummary.FailXoRecipientType = $xoRCP.RecipientTypeDetails  ; 
+                                $FailMsgSummary.FailXopRecipientType = $xopRcp.RecipientTypeDetails  ; 
+                                if($FailMsgSummary.FailXoRecipientType -eq 'MailUser' -AND $FailMsgSummary.FailXopRecipientType -eq 'RemoteUserMailbox'){
+                                    $FailMsgSummary.FailCode += @('FailBrokenTerm') ; 
+                                    $FailMsgSummary.FailCode += @('FailNoMailbox') ; 
+                                } ; 
+                                if($adu.DistinguishedName -match 'OU=(Disabled|TERMedUsers|TERMedUserSharedEmail),'){
+                                    $FailMsgSummary.ADUserTermOU = ($adu.DistinguishedName.split(',') | select -skip 1) -join ','  
+                                    $FailMsgSummary.FailCode += @('FailBrokenTerm','FailADUserTermOU') ; 
+                                } ;
+                                if($adu.Enabled -eq $false){
+                                    $FailMsgSummary.ADUserDisabled = $true  ; 
+                                    $FailMsgSummary.FailCode += @('FailBrokenTerm','FailADUserDisabled') ; 
+                                } ;
+                            }
+                        } ; 
+                        if($FailMsgSummary.FailCode){
+                            # reduce to single instance of each code
+                            $FailMsgSummary.FailCode = $FailMsgSummary.FailCode | select -unique ;
+                        } ; 
+                        $FailAggr +=  New-Object -TypeName PsObject -Property $FailMsgSummary
+                        #[pscustomobject]$FailMsgSummary ; 
+                    } ; 
+                    #---
+
                     $smsg = "adding:`$hReports.MsgsFail" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    $hReports.add('MsgsFail',$mFails) ; 
+                    $hReports.add('MsgsFail',$FailAggr) ; 
                     $ofileF = $ofile.replace('-EXOMsgTrc,','FAILMsgs,') ;
                     if($DoExports){
                         TRY{
-                            $mFails | export-csv -notype -path $ofileF -ea STOP ;
+                            $FailAggr | export-csv -notype -path $ofileF -ea STOP ;
                             $smsg = "export-csv'd to:`n$((resolve-path $ofileF).path)" ; 
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                             else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
@@ -7904,6 +8085,192 @@ function Get-EXOMessageTraceExportedTDO {
                             else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         } ; 
                     } ; 
+
+
+                    # divide up the results & report on the types
+                    $FailVariants = $hReports.MsgsFail | group failcode | select -expand name; 
+
+                    $prpFailMsg = 'ReceivedLocal','SenderAddress','RecipientAddress','Subject','Status' ; 
+
+                    # do the single fails
+                    $SingleFails = $hReports.MsgsFail | ?{-not ($_.failcode -is [array])} ; 
+                    $FailVariantsSingle = $SingleFails | group failcode | select -expand name; 
+                    foreach($FV in $FailVariantsSingle){
+                        $theseFails = $SingleFails |?{$_.failcode -eq $FV} ; 
+                        #$pltWH=get-colorcombo -Rand ;
+                        #$Host.UI.RawUI.BackgroundColor = $pltWH.BackgroundColor ;
+                        #$Host.UI.RawUI.ForegroundColor = $pltWH.ForegroundColor ;
+                        $hsFailRpt = @"
+
+*------v Delivery Status:Failed of type: $($FV) v------
+
+$(($theseFails|ft -a $prpFailMsg  | out-string).trim())
+
+$(
+    switch -regex ($FV){
+        'FailOtherAcctBlock'{
+            "`n$($FV): Blocked by Security-mandated Transport rule:'OtherAccts-External-Mail-Rejection'`n"
+        }
+        'FailConfRmExtBlock'{
+            "`n$($FV): Blocked by Security-mandated Transport rule:'ConfRm-External-Mail-Rejection'`n"
+        }
+        'FailOOO'{
+            "`n$($FV): Blocked by Security Policy: Blocked external delivery of Out-Of-Office messages`n"
+        }
+        'FailRecall' {
+            "`n$($FV): Expected fail: Sender issued Outlook Recall of message`n"
+        }
+        'FailSecBlock' {
+            "`n$($FV): Blocked by Security-configured Transport rule`n"
+        }
+        'FailBrokenTerm|FailNoMailbox|FailMailLoop' {
+            "`n$($FV): No valid recipient found: Broken offboarded user: Email looped between environments until hop count exceeded, and Non-Delivery Notice (NDR) was issued`n"
+        }
+        'FailADUserTermOU' {
+            "`n$($FV): No valid recipient found: Broken offboarded user:ADUser is in Term OU: Email looped between environments until hop count exceeded, and Non-Delivery Notice (NDR) was issued`n"
+        }
+        'FailADUserDisabled' {
+            "`n$($FV): No valid recipient found: Broken offboarded user: ADUser is disabled: Email looped between environments until hop count exceeded, and Non-Delivery Notice (NDR) was issued`n"
+        }  
+        default{
+            "`n$($FV): Undefined error (not configured as a response in this script)`n"
+        }   
+    }
+)
+
+*------^ END Delivery Status:Failed of type: $($FV) ^------
+
+"@ ; 
+                        #write-host @pltWH $hsFailRpt ; 
+                        $smsg = $hsFailRpt ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    } ;  # loop-E
+
+                    $ArrayFails = $hReports.MsgsFail | ?{$_.failcode -is [array]} ; 
+                    $FailVariantsArray = $ArrayFails | group failcode | select -expand name; 
+                    $BadTermFailCodes = 'FailBrokenTerm','FailNoMailbox','FailADUserTermOU','FailADUserDisabled' ; 
+                    [regex]$rgxBadTerm = ('(' + (($BadTermFailCodes  |%{[regex]::escape($_)}) -join '|') + ')') ;
+                    #$pltWH=get-colorcombo -Rand ;
+                    #foreach($FV in $FailVariantsArray){
+                    foreach($Fail in $ArrayFails){
+                        # do the BadTermFails
+                        #$BadTermFails = $hReports.MsgsFail | ?{$_.failcode -match $rgxbadterm}
+                        #$OtherArrayFails = $hReports.MsgsFail | ?{$_.failcode -notmatch $rgxbadterm}
+
+                        #$(($theseFails|ft -a $prpGXMTfta | out-string).trim())       
+                        # MessageID: $($Fail.MessageID)                  
+                        $hsFailRpt = @"
+
+*------v Delivery Status:Failed : $($Fail.MessageID) v------
+
+
+$(($Fail |ft -a $prpFailMsg  | out-string).trim())
+
+$(
+    
+    if($Fail.FailDetailEvent){
+        "`nFailDetailEvent: $(($Fail.FailDetailEvent) -join ',')`n"
+    }
+    if($Fail.FailDetailDetail){
+        "`nFailDetailDetail:`n$(($Fail.FailDetailDetail | out-string).trim())`n"
+    }
+    if($Fail.FailXoRecipientType){
+        "`nCloud Recipient"
+        "`nFailXoRecipientType: $(($Fail.FailXoRecipientType | out-string).trim())"
+        switch ($Fail.FailXoRecipientType){
+            "UserMailbox" {
+                "`nis a standard functional MAILBOX: UserMailbox" ; 
+            }
+            "SharedMailbox" {
+                "`nis a standard functional MAILBOX: SharedMailbox" ; 
+            }
+            "EquipmentMailbox" {
+                "`nis a standard functional MAILBOX: EquipmentMailbox" ; 
+            }
+            "RoomMailbox" {
+                "`nis a standard functional MAILBOX: RoomMailbox" ; 
+            }
+            "MailUser" {
+                "`nMAILUSER: Generally reflects a removed license: => MS immediately deletes mailbox"
+                "`nis a NON-MAILBOX: MailUser *forwards* to matching cloud UserMailbox object" ; 
+            } ;
+            default {
+                write-warning "$((get-date).ToString('HH:mm:ss')):Unsupported RecipientType:($Fail.recipienttype). EXITING!" ;
+                Break ;
+            }
+        }
+        
+    }
+    if($fail.FailXopRecipientType){
+        "`n`nOnPrem Recipient"
+        "`nFailXopRecipientType: $(($fail.FailXopRecipientType | out-string).trim())"
+        switch ($fail.FailXopRecipientType){
+            'RemoteUserMailbox' {
+                "`nis a NON-MAILBOX: RemoteUserMailbox *forwards* to matching cloud UserMailbox object" ; 
+            }
+            'RemoteSharedMailbox' {
+                "`nis a NON-MAILBOX: RemoteSharedMailbox *forwards* to matching cloud SharedMailbox object" ; 
+            }
+            'RemoteRoomMailbox' {
+                "`nis a NON-MAILBOX: RemoteRoomMailbox *forwards* to matching cloud RoomMailbox object" ; 
+            }
+            'RemoteEquipmentMailbox' {
+                "`nis a NON-MAILBOX: RemoteEquipmentMailbox *forwards* to matching cloud EquipmentMailbox object" ; 
+            }
+            'UserMailbox' {
+                "`nis a MISCONFIGURED MAILBOX: UserMailbox objects should no longer remain OnPrem (longer than it takes to migrate them to cloud during onboarding)" ; 
+            }
+            'SharedMailbox' {
+                "`nis a MISCONFIGURED MAILBOX: SharedMailbox objects should no longer remain OnPrem (longer than it takes to migrate them to cloud during onboarding)" ; 
+            }
+            'MailUser' {
+                "`nMAILUSER WO RMBX DETECTED! - POSSIBLE NOBRAIN?"
+                "`nis a NON-MAILBOX: MailUser forwards to matching cloud UserMailbox object" ; 
+            }
+            'MailUniversalDistributionGroup' {
+                "`nis a NON-MAILBOX: MailUniversalDistributionGroup are DistrubutionGroup objects that distribute mail to a membership" ; 
+            }
+            'DynamicDistributionGroup'  {
+                "`nis a NON-MAILBOX: DynamicDistributionGroup are Dynamic DistrubutionGroup objects that distribute mail to an on-demand query-populated membership" ; 
+            }
+            'MailContact' {
+                "`nis a NON-MAILBOX: MailContact is a non-SecurityPrincipal, that forwards mail to an exteral email address" ; 
+            }
+            default{
+                "`nUnable to resolve `$fail.FailXopRecipientType: $($fail.FailXopRecipientType)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                break ;
+            }
+        }
+    }
+    if($Fail.ADUserDisabled){
+        "`nADUserDisabled: $(($Fail.ADUserDisabled | out-string).trim())"
+    }
+    if($Fail.ADUserTermOU){
+        "`nADUserTermOU: $(($Fail.ADUserTermOU | out-string).trim())"
+    }
+    if($fail.FailXopRecipientType -notmatch '^(Mailbox|SharedMailbox|RoomMailbox|EquipmentMailbox)' -AND $Fail.FailXoRecipientType -notmatch '^(Mailbox|SharedMailbox|RoomMailbox|EquipmentMailbox)'){
+        "`n`n==> EXPECTED LOOP FAILURE: BOTH CLOUD AND ONPREM RECIPIENT OBJECTS ARE _NON-MAILBOXES_ `n=> THERE IS NO WHERE TO DELIVER ANY MESSAGES TO THE ADDRESS!`n" ; 
+    } 
+)
+
+*------^ END  Delivery Status:Failed : $($Fail.MessageID)  ^------
+
+"@ ; 
+                        #write-host @pltWH $hsFailRpt ; 
+                        $smsg = $hsFailRpt ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    } ;  # loop-E
+
+                    
+
+                    #----- prior code v
+
+                    <#
                     if($mOOO = $mFails | ?{$_.Subject -match '^Automatic\sreply:\s'}){
                         $smsg = "adding:`$hReports.MsgsFailOOO" ; 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -8036,7 +8403,7 @@ function Get-EXOMessageTraceExportedTDO {
                                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
                                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                                 } ; 
-                            } ; 
+                            } ;  # loop-E
                             if($aggDetailedOtherFails){
                                 $smsg = "adding:`$hReports.MsgsFailOtherDetail" ; 
                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -8044,8 +8411,9 @@ function Get-EXOMessageTraceExportedTDO {
                                 $hReports.add('MsgsFailOtherDetail',$aggDetailedOtherFails) ; 
                             } ; 
                         } ; 
-
+                        
                     } ;
+                    #>
                 } ;
                 if(-not $NoQuarCheck -AND ($mQuars = $msgs | ?{$_.status -eq 'Quarantined'})){
                     $hReports.add('MsgsQuar',$mQuars) ;
