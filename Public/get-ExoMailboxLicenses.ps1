@@ -18,6 +18,7 @@ function get-ExoMailboxLicenses {
     Github      : https://github.com/tostka/verb-ex2010
     Tags        : Powershell
     REVISIONS
+    * 10:17 AM 11/27/2024 cleaned up CBH expls, pulled spurious quota #1, added in its place a simple call & review; updated #2's comment to actually reflect what's going on (vs the original indexed hash pull for quotas, it wass lifted from).
     * 1:22 PM 6/18/2024 updated SERVICE_CONNECTIONS block; reflects latest variant; 
     * 4:16 PM 6/17/2024 add: ServicePlanName to the detailed output ; pulled transcript END block (unused, would kill other process logging) ; adding -OutDetail, need to implement to return avail etc full details in outobject
     * 5:12 PM 6/13/2024 update to make dynamic, querying for plans serviceplans.serviceplanname -match  EXCHANGE_S_ENTERPRISE','EXCHANGE_S_STANDARD','EXCHANGE_S_DESKLESS (-ne MCOCAP 	Common Area Phone)
@@ -137,12 +138,16 @@ function get-ExoMailboxLicenses {
     .PARAMETER Silent
     Switch to specify suppression of all but warn/error echos.(unimplemented, here for cross-compat)
     .EXAMPLE
-    PS> $hQuotas = get-ExoMailboxLicenses -verbose ; 
-    PS> $hQuotas['database2']
-    Name           ProhibitSendReceiveQuotaGB ProhibitSendQuotaGB IssueWarningQuotaGB
-    ----           -------------------------- ------------------- -------------------
-    database2      12.000                     10.000              9.000
-    Retrieve local org on-prem MailboxDatabase quotas and assign to a variable, with verbose outputs. Then output the retrieved quotas from the indexed hash returned, for the mailboxdatabase named 'database2'.
+    PS> $ExMbxLicenses = get-ExoMailboxLicenses ;
+    PS> $ExMbxLicenses
+
+        Name                           Value
+        ----                           -----
+        SPE_F1                         @{SKU=SPE_F1; Label=F1; Notes=Enabled:5681|Consumed:5179|Avail:502|Warn:0|Susp:0}
+        SPE_E3                         @{SKU=SPE_E3; Label=E3; Notes=Enabled:5326|Consumed:5298|Avail:28|Warn:0|Susp:0}
+        STANDARDPACK                   @{SKU=STANDARDPACK; Label=STANDARDPACK; Notes=Enabled:268|Consumed:241|Avail:27|Warn:0|Susp:0}    
+
+    Simplest demo, unformatted output, that is still fast-readable to find usables
     .EXAMPLE
     PS>  $pltGXML=[ordered]@{
     PS>      #TenOrg= $TenOrg;
@@ -190,7 +195,7 @@ function get-ExoMailboxLicenses {
     PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
     PS>     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
     PS> } ;
-    Expanded example with testing of returned object, and demoes use of the returned hash against a mailbox spec, steering via .UseDatabaseQuotaDefaults
+    Expanded example with testing of returned object, and demoes use of the returned hash against a AzureADUser spec
     .EXAMPLE
     PS> $pltGXML=[ordered]@{
     PS>    #TenOrg= $TenOrg;
