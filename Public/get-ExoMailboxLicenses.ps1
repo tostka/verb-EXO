@@ -18,7 +18,7 @@ function get-ExoMailboxLicenses {
     Github      : https://github.com/tostka/verb-ex2010
     Tags        : Powershell
     REVISIONS
-    * 10:17 AM 11/27/2024 cleaned up CBH expls, pulled spurious quota #1, added in its place a simple call & review; updated #2's comment to actually reflect what's going on (vs the original indexed hash pull for quotas, it wass lifted from).
+    * 10:23 AM 11/27/2024 cleaned up CBH expls, pulled spurious quota #1, added in its place a simple call & review; updated #2's comment to actually reflect what's going on (vs the original indexed hash pull for quotas, it wass lifted from).
     * 1:22 PM 6/18/2024 updated SERVICE_CONNECTIONS block; reflects latest variant; 
     * 4:16 PM 6/17/2024 add: ServicePlanName to the detailed output ; pulled transcript END block (unused, would kill other process logging) ; adding -OutDetail, need to implement to return avail etc full details in outobject
     * 5:12 PM 6/13/2024 update to make dynamic, querying for plans serviceplans.serviceplanname -match  EXCHANGE_S_ENTERPRISE','EXCHANGE_S_STANDARD','EXCHANGE_S_DESKLESS (-ne MCOCAP 	Common Area Phone)
@@ -211,10 +211,13 @@ function get-ExoMailboxLicenses {
     PS> $objRet = $null ;
     PS> $objRet = get-ExoMailboxLicenses @pltGXML ;
     Demo that shows retrieving unfiltered full detail - as this now returns filtered usable/assignable licenses by default.
-    . EXAMPLE
+    .EXAMPLE
     PS> $ExMbxLicenses = get-ExoMailboxLicenses ;
     PS> [regex]$rgxExLics = ('(' + (($ExMbxLicenses.GetEnumerator().name |%{[regex]::escape($_)}) -join '|') + ')') ; 
     Demo pulling the underlying licenses list and building a regex for static use
+    .EXAMPLE
+    PS> $TenOrg = 'ABC' ; 
+    PS> $ExMbxLicenses = get-ExoMailboxLicenses ;
     PS> $licOrdered = @() ; 
     PS> 'EXCHANGE_S_DESKLESS','EXCHANGE_S_STANDARD','EXCHANGE_S_ENTERPRISE' | %{
     PS>     $SPN = $_ ; 
