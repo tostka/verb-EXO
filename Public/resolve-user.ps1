@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 9:04 AM 11/27/2024 add SharedMbx quota support: flipped logic to pull xomailbox to pull any $hSum.xoRcp|?{$_.recipienttype -eq 'UserMailbox'... (any mailbox type), vs orig: recipienttypedetails, which would only stock UserMailbox details type.
     * 4:40 PM 10/16/2024 added code to do above, users I thot were c1 weren't, had rmbxs, so it needs further testing;  cloud first: VEN,INT,AA,HH, may not match ADU properly, but if they have AADU & AADUser.DirSyncEnabled, the .aaduser.ExtensionProperty.onPremisesDistinguishedName will point to the assoicated ADU! Need to re-resolve when missing ADU
     * 12:50 PM 10/11/2024 substantial rewrites in query code to accomodate apostrophe's in names (selective rewrap " vs ' for queries). Still not great, still doesn't necessarily work searching dname on apostrophe'd names, but it gets through the pass wo crashing (as it did previously).
     * 12:06 PM 9/23/2024 added param for regex to detect non-raw text names; ahdd running $usr input through Remove-StringDiacritic & Remove-StringLatinCharacters() ; 
@@ -2470,7 +2471,9 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             # 10:42 AM 9/9/2021 force populate the xoMailbox, ALWAYS - need for xbrain ids
             #if($hSum.xoRcp.recipienttypedetails -eq 'UserMailbox' -AND -not($hSum.xoMailbox)){
             # accomodate array xorcp
-            if(($hSum.xoRcp|?{$_.recipienttypedetails -eq 'UserMailbox'}) -AND -not($hSum.xoMailbox)){
+            #if(($hSum.xoRcp|?{$_.recipienttypedetails -eq 'UserMailbox'}) -AND -not($hSum.xoMailbox)){
+            # issue:quota on Shared: above only keys on recipienttypedetails -eq 'UserMailbox', should be *any* mailbox type, if we want quotas etc for shared/room/equipment  switch to rcptype: $hSum.xoRcp.RecipientType
+            if(($hSum.xoRcp|?{$_.recipienttype -eq 'UserMailbox'}) -AND -not($hSum.xoMailbox)){
                 #write-verbose "$((get-alias ps1GetxMbx).definition) w`n$(($pltGMailObj|out-string).trim())" ;
                 write-verbose "get-xomailbox w`n$(($pltGMailObj|out-string).trim())" ;
                 if($hSum.xoMailbox += get-xomailbox @pltGMailObj -ea 0| select -first $MaxRecips ){
