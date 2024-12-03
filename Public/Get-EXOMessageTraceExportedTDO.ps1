@@ -18,7 +18,7 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 4:06 PM 12/3/2024 add: FailReason, to cover other fails with a Detail: Reason:\s string, and echo out some of the Get-xoMessageTraceDetail detail (though it should be stored in the export as well).
+    * 4:39 PM 12/3/2024 add: updated CBH demos; FailReason, to cover other fails with a Detail: Reason:\s string, and echo out some of the Get-xoMessageTraceDetail detail (though it should be stored in the export as well).
     * 1:45 PM 11/27/2024 minor updates, appears functional;  updated Fail echos for OtherAccount block, citing DDG exclusion setting under CA4 of UserMailbox types.
     * 4:20 PM 11/25/2024 updated from get-exomessagetraceexportedtdo(), more silent suppression, integrated dep-less ExOP conn support
         add: constants for rgxFailSecBlock, $rgxFailOOO, $rgxFailRecallSubj, $rgxFailOtherAcctBlock, $FailOtherAcctBlockExemptionGroup, $rgxFailConfRmExtBlock
@@ -174,23 +174,33 @@ function Get-EXOMessageTraceExportedTDO {
             no booking conflict, but pending ResDelegate approval 
         - MessageTrace (which will come from Meeting Originator email address), to the ResDelegate addresses, with default 100-message MessageTraceDetail report, with verbose output.
         .EXAMPLE
-        PS> $pltGEXOMT=[ordered]@{
-        PS>     Ticket = '999999' ; 
-        PS>     Requestor = 'fname.lname@domain.tld' ; 
-        PS>     Tag = 'TestGxmtD' ;
-        PS>     senderaddress = 'fname.lname@domain.tld','fname.lname@domain2.TLD' ;
-        PS>     StartDate = (get-date ).AddDays(-1) ;
-        PS>     EndDate = (get-date ) ;
-        PS>     erroraction = 'STOP' ;
+        PS> $pltGxMT=[ordered]@{
+        PS>    Ticket = '999999' ; 
+        PS>    Requestor = 'fname.lname@domain.tld' ; 
+        PS>    Tag = 'TestGxmtD' ;
+        PS>    RecipientAddress  = 'fname.lname@domain.tld','fname.lname@domain2.TLD' ;
+        PS>    senderaddress = 'fname.lname@domain.tld','fname.lname@domain2.TLD' ;
+        PS>    StartDate = (get-date ).AddDays(-1) ;
+        PS>    EndDate = (get-date ) ;
+        PS>    Subject="" ;
+        PS>    Status='' ;
+        PS>    MessageTraceId='' ;
+        PS>    MessageId='' ;
+        PS>    FromIP='' ;
+        PS>    NoQuarCheck='';
+        PS>    Tag='' ;
         PS>     verbose = $true ; 
         PS> } ;
-        PS> $smsg = "Get-EXOMessageTraceExportedTDO w`n$(($pltGEXOMT|out-string).trim())" ;
-        PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        PS> $results = Get-EXOMessageTraceExportedTDO @pltGEXOMT ; 
-        PS> $results.MTMessages | ft -a ReceivedLocal,Sender*,Recipient*,subject,*status,*ip ;
+        PS> $pltGxMT = [ordered]@{} ;
+        PS> $pltI.GetEnumerator() | ?{ $_.value}  | ForEach-Object { $pltGxMT.Add($_.Key, $_.Value) } ;
+        PS> $vn = (@("xoMsgs$($pltI.ticket)",$pltI.Tag) | ?{$_}) -join '_' ;
+        PS> write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Get-EXOMessageTraceExportedTDO w`n$(($pltGxMT|out-string).trim())`n(assign to `$$($vn))" ;
+        PS> if(gv $vn -ea 0){rv $vn} ;
+        PS> if($tmsgs = Get-EXOMessageTraceExportedTDO @pltGxMT){sv -na $vn -va $tmsgs ;
+        PS> write-host "(assigned to `$$vn)"} ;
         Splatted demo
         .EXAMPLE
-        PS> $pltGEXOMT=[ordered]@{
+        PS> $pltGxMT=[ordered]@{
         PS>     Ticket = '99999' ;
         PS>     Requestor = 'fname.lname@domain.tld' ; 
         PS>     Tag = 'AnyTraffic' ;
@@ -200,12 +210,16 @@ function Get-EXOMessageTraceExportedTDO {
         PS>     erroraction = 'STOP' ;
         PS>     verbose = $true ;
         PS> } ;
-        PS> $smsg = "Get-EXOMessageTraceExportedTDO w`n$(($pltGEXOMT|out-string).trim())" ;
-        PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        PS> $results = Get-EXOMessageTraceExportedTDO @pltGEXOMT ; 
+        PS> $pltGxMT = [ordered]@{} ;
+        PS> $pltI.GetEnumerator() | ?{ $_.value}  | ForEach-Object { $pltGxMT.Add($_.Key, $_.Value) } ;
+        PS> $vn = (@("xoMsgs$($pltI.ticket)",$pltI.Tag) | ?{$_}) -join '_' ;
+        PS> write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Get-EXOMessageTraceExportedTDO w`n$(($pltGxMT|out-string).trim())`n(assign to `$$($vn))" ;
+        PS> if(gv $vn -ea 0){rv $vn} ;
+        PS> if($tmsgs = Get-EXOMessageTraceExportedTDO @pltGxMT){sv -na $vn -va $tmsgs ;
+        PS> write-host "(assigned to `$$vn)"} ;
         Demo search on wildcard sender address (using * wildcard character)
         .EXAMPLE
-        PS> $pltGEXOMT=[ordered]@{
+        PS> $pltGxMT=[ordered]@{
         PS>     Ticket = '999999' ; 
         PS>     Requestor = 'fname.lname@domain.tld' ; 
         PS>     Tag = 'SEARCHTAG' ;
@@ -231,11 +245,16 @@ function Get-EXOMessageTraceExportedTDO {
         PS>     #useEXOv2 = $true
         PS>     #silent = $false ;
         PS>     verbose = $true ; 
+        PS>     Tag='' ;
         PS> } ;
-        PS> $smsg = "Get-EXOMessageTraceExportedTDO w`n$(($pltGEXOMT|out-string).trim())" ;
-        PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        PS> $results = Get-EXOMessageTraceExportedTDO @pltGEXOMT ; 
-        Fully eunmerated splat parameters demo
+        PS> $pltGxMT = [ordered]@{} ;
+        PS> $pltI.GetEnumerator() | ?{ $_.value}  | ForEach-Object { $pltGxMT.Add($_.Key, $_.Value) } ;
+        PS> $vn = (@("xoMsgs$($pltI.ticket)",$pltI.Tag) | ?{$_}) -join '_' ;
+        PS> write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):Get-EXOMessageTraceExportedTDO w`n$(($pltGxMT|out-string).trim())`n(assign to `$$($vn))" ;
+        PS> if(gv $vn -ea 0){rv $vn} ;
+        PS> if($tmsgs = Get-EXOMessageTraceExportedTDO @pltGxMT){sv -na $vn -va $tmsgs ;
+        PS> write-host "(assigned to `$$vn)"} ;
+        Fully eunmerated splat parameters demo, with constructed variable output (uses $pltI.ticket & $pltI.tag)
         .LINK
         https://docs.microsoft.com/en-us/powershell/module/exchange/get-messagetrace
         .LINK

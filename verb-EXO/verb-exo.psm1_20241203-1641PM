@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 8.4.0.0
+  Version     : 8.5.2.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -4960,6 +4960,7 @@ function get-ExoMailboxLicenses {
     Github      : https://github.com/tostka/verb-ex2010
     Tags        : Powershell
     REVISIONS
+    * 10:23 AM 11/27/2024 cleaned up CBH expls, pulled spurious quota #1, added in its place a simple call & review; updated #2's comment to actually reflect what's going on (vs the original indexed hash pull for quotas, it wass lifted from).
     * 1:22 PM 6/18/2024 updated SERVICE_CONNECTIONS block; reflects latest variant; 
     * 4:16 PM 6/17/2024 add: ServicePlanName to the detailed output ; pulled transcript END block (unused, would kill other process logging) ; adding -OutDetail, need to implement to return avail etc full details in outobject
     * 5:12 PM 6/13/2024 update to make dynamic, querying for plans serviceplans.serviceplanname -match  EXCHANGE_S_ENTERPRISE','EXCHANGE_S_STANDARD','EXCHANGE_S_DESKLESS (-ne MCOCAP 	Common Area Phone)
@@ -5079,12 +5080,16 @@ function get-ExoMailboxLicenses {
     .PARAMETER Silent
     Switch to specify suppression of all but warn/error echos.(unimplemented, here for cross-compat)
     .EXAMPLE
-    PS> $hQuotas = get-ExoMailboxLicenses -verbose ; 
-    PS> $hQuotas['database2']
-    Name           ProhibitSendReceiveQuotaGB ProhibitSendQuotaGB IssueWarningQuotaGB
-    ----           -------------------------- ------------------- -------------------
-    database2      12.000                     10.000              9.000
-    Retrieve local org on-prem MailboxDatabase quotas and assign to a variable, with verbose outputs. Then output the retrieved quotas from the indexed hash returned, for the mailboxdatabase named 'database2'.
+    PS> $ExMbxLicenses = get-ExoMailboxLicenses ;
+    PS> $ExMbxLicenses
+
+        Name                           Value
+        ----                           -----
+        SPE_F1                         @{SKU=SPE_F1; Label=F1; Notes=Enabled:5681|Consumed:5179|Avail:502|Warn:0|Susp:0}
+        SPE_E3                         @{SKU=SPE_E3; Label=E3; Notes=Enabled:5326|Consumed:5298|Avail:28|Warn:0|Susp:0}
+        STANDARDPACK                   @{SKU=STANDARDPACK; Label=STANDARDPACK; Notes=Enabled:268|Consumed:241|Avail:27|Warn:0|Susp:0}    
+
+    Simplest demo, unformatted output, that is still fast-readable to find usables
     .EXAMPLE
     PS>  $pltGXML=[ordered]@{
     PS>      #TenOrg= $TenOrg;
@@ -5132,7 +5137,7 @@ function get-ExoMailboxLicenses {
     PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
     PS>     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
     PS> } ;
-    Expanded example with testing of returned object, and demoes use of the returned hash against a mailbox spec, steering via .UseDatabaseQuotaDefaults
+    Expanded example with testing of returned object, and demoes use of the returned hash against a AzureADUser spec
     .EXAMPLE
     PS> $pltGXML=[ordered]@{
     PS>    #TenOrg= $TenOrg;
@@ -5148,10 +5153,13 @@ function get-ExoMailboxLicenses {
     PS> $objRet = $null ;
     PS> $objRet = get-ExoMailboxLicenses @pltGXML ;
     Demo that shows retrieving unfiltered full detail - as this now returns filtered usable/assignable licenses by default.
-    . EXAMPLE
+    .EXAMPLE
     PS> $ExMbxLicenses = get-ExoMailboxLicenses ;
     PS> [regex]$rgxExLics = ('(' + (($ExMbxLicenses.GetEnumerator().name |%{[regex]::escape($_)}) -join '|') + ')') ; 
     Demo pulling the underlying licenses list and building a regex for static use
+    .EXAMPLE
+    PS> $TenOrg = 'ABC' ; 
+    PS> $ExMbxLicenses = get-ExoMailboxLicenses ;
     PS> $licOrdered = @() ; 
     PS> 'EXCHANGE_S_DESKLESS','EXCHANGE_S_STANDARD','EXCHANGE_S_ENTERPRISE' | %{
     PS>     $SPN = $_ ; 
@@ -6364,6 +6372,11 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:45 PM 11/27/2024 minor updates, appears functional;  updated Fail echos for OtherAccount block, citing DDG exclusion setting under CA4 of UserMailbox types.
+    * 4:20 PM 11/25/2024 updated from get-exomessagetraceexportedtdo(), more silent suppression, integrated dep-less ExOP conn support
+        add: constants for rgxFailSecBlock, $rgxFailOOO, $rgxFailRecallSubj, $rgxFailOtherAcctBlock, $FailOtherAcctBlockExemptionGroup, $rgxFailConfRmExtBlock
+    * 5:34 PM 11/22/2024 fundmental rework of the output, looping single & multip failcode entries, and outputing summary for types; removed inline processing outputs, in favor of condenced explanations in the $hsFailxxx outputs herestring reports ; also added the recipienttypedetails, aduser.enabled & TermOU status etc to the output on each Fail message exported as MsgsFail;
+        added ConfRm block explicit, and expanded Security* transportrule echo's to cite the rule (if can be parsed from Detail); added recipienttypedetails support for shared|room|equpiment mailboxes
     * 2:59 PM 11/21/2024 working, added code to target 'otherfails', non-OOO, non-Recall, expaanded into Get-xoMessageTraceDetail, then id mail loops, and transport rule blocks (OtherAccounts currently); 
         added considerable expansion and profiling to the fails, also added new sub objects to the return object: 'MsgLast','MsgsFail','MsgsFailOther','MsgsFailOtherDetail','MTMessages','MTMessagesCSVFile','StatusHisto'
     * 5:12 PM 11/20/2024 added -DetailedOtherFails, to force Get-xoMessageTraceDetail on any 'Other' fails, only;
@@ -6667,57 +6680,6 @@ function Get-EXOMessageTraceExportedTDO {
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
             [switch] $silent
     ) ;
-    <# emulate aliases on the ExoP params: Get-MessageTrackingLog -Start -End -EventId -MessageSubject -MessageId
-    And HistSearch: Start-HistoricalSearch -EndDate <DateTime> -ReportTitle 
-        <String> -ReportType <MessageTrace | MessageTraceDetail | DLP | TransportRule | 
-        SPAM | Malware> -StartDate <DateTime> [-DeliveryStatus <String>] [-Direction 
-        <All | Sent | Received>] [-DLPPolicy <MultiValuedProperty>] [-Locale 
-        <CultureInfo>] [-MessageID <MultiValuedProperty>] [-NotifyAddress 
-        <MultiValuedProperty>] [-OriginalClientIP <String>] [-RecipientAddress 
-        <MultiValuedProperty>] [-SenderAddress <MultiValuedProperty>] [-TransportRule 
-        <MultiValuedProperty>] 
-    fully emulate whats in psmsgtrkexo:
-    $pltI=@{     ticket="TICKETNO" ;
-       uid="USERID"; # used for ofile, leave ofile to external process, picking name etc and vn to outside concrete process of getting stock email trace
-       days=10 ;
-       StartDate='' ;
-       EndDate='' ;
-       Sender="" ;
-       Recipients="" ;
-       MessageSubject="" ;
-       Status='' ;
-       MessageTraceId='' ;
-       MessageId='' ;
-       FromIP='' ;
-       NoQuarCheck='';
-       Tag='' ;
-    }   ;
-    #>
-    <# #-=-=-=MUTUALLY EXCLUSIVE PARAMS OPTIONS:-=-=-=-=-=
-    # designate a default paramset, up in cmdletbinding line
-    [CmdletBinding(DefaultParameterSetName='SETNAME')]
-      # * set blank, if none of the sets are to be forced (eg optional mut-excl params)
-      # * force exclusion by setting ParameterSetName to a diff value per exclusive param
-
-    # example:single $Computername param with *multiple* ParameterSetName's, and varying Mandatory status per set
-        [Parameter(ParameterSetName='LocalOnly', Mandatory=$false)]
-        $LocalAction,
-        [Parameter(ParameterSetName='Credential', Mandatory=$true)]
-        [Parameter(ParameterSetName='NonCredential', Mandatory=$false)]
-        $ComputerName,
-        # $Credential as tied exclusive parameter
-        [Parameter(ParameterSetName='Credential', Mandatory=$false)]
-        $Credential ;    
-        # effect: 
-        -computername is mandetory when credential is in use
-        -when $localAction param (w localOnly set) is in use, neither $Computername or $Credential is permitted
-        write-verbose -verbose:$verbose "ParameterSetName:$($PSCmdlet.ParameterSetName)"
-        Can also steer processing around which ParameterSetName is in force:
-        if ($PSCmdlet.ParameterSetName -eq 'LocalOnly') {
-            return "some localonly stuff" ; 
-        } ;     
-    #-=-=-=-=-=-=-=-=
-    #>
     BEGIN{
         #region CONSTANTS_AND_ENVIRO #*======v CONSTANTS_AND_ENVIRO v======
         # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
@@ -6752,7 +6714,7 @@ function Get-EXOMessageTraceExportedTDO {
             write-verbose "consistent results" ;
             $runSource = $grpSrc | select -last 1 | select -expand name ;
         };
-        write-host "Calculated `$runSource:$($runSource)" ;
+        write-verbose  "Calculated `$runSource:$($runSource)" ;
         'score','grpSrc' | get-variable | remove-variable ; # cleanup temp varis
 
         # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
@@ -6764,8 +6726,8 @@ function Get-EXOMessageTraceExportedTDO {
         if($rPSCmdlet.MyInvocation.InvocationName){
             if($rPSCmdlet.MyInvocation.InvocationName  -match '^\.'){
                 $smsg = "detected dot-sourced invocation: Skipping `$PSCmdlet.MyInvocation.InvocationName-tied cmds..." ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
             } else { 
                 write-verbose 'Collect all non-default Params (works back to psv2 w CmdletBinding)'
@@ -6839,9 +6801,13 @@ function Get-EXOMessageTraceExportedTDO {
         # echo results dyn aligned:
         $tv = 'runSource','CmdletName','ScriptName','ScriptBaseName','ScriptNameNoExt','ScriptDir','PSScriptRoot','PSCommandPath','rPSScriptRoot','rPSCommandPath' ; 
         $tvmx = ($tv| Measure-Object -Maximum -Property Length).Maximum * -1 ; 
-        #$tv | get-variable | %{  write-host -fore yellow ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; # w-h
-        $tv | get-variable | %{  write-verbose ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; # w-v
+        if($silent){}else{
+            #$tv | get-variable | %{  write-host -fore yellow ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; # w-h
+            $tv | get-variable | %{  write-verbose ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; # w-v
+        }
         'tv','tvmx'|get-variable | remove-variable ; # cleanup temp varis        
+
+        #endregion ENVIRO_DISCOVER ; #*------^ END ENVIRO_DISCOVER ^------
 
         # Get-EXOMessageTraceExportedTDO -ticket 651268 -SenderAddress='SENDER@exmark.com' -RecipientAddress='RECIPIENT@domain.com' -StartDate='11/1/2021  4:35:39 PM' -Subject 'Accepted: [MTGSUBJECT]';
         <#$ticket = '651268' ;
@@ -6877,11 +6843,1032 @@ function Get-EXOMessageTraceExportedTDO {
         $s24HTimestamp = 'yyyyMMdd-HHmm'
         $sFiletimestamp =  $s24HTimestamp
 
-        ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
-        # Get parameters this function was invoked with
-        $PSParameters = New-Object -TypeName PSObject -Property $PSBoundParameters ;
-        $Verbose = ($VerbosePreference -eq 'Continue') ; 
+        # block identifying filters
+        $rgxFailOOOSubj = '^Automatic\sreply:\s' ; 
+        $rgxFailRecallSubj = '^Recall:\s' ; 
+        $rgxFailOtherAcctBlock = 'OtherAccts-External-Mail-Rejection' ; 
+        $FailOtherAcctBlockExemptionGroup = 'LYN-DL-OPExch-OtherAcctMbxs-ExternalMailOK@toro.com' ; 
+        $rgxFailConfRmExtBlock = 'ConfRm-External-Mail-Rejection' ; 
+        $rgxFailSecBlock = '^Security(\s-\s|-)' ; 
+
+        #endregion CONSTANTS_AND_ENVIRO ; #*------^ END CONSTANTS_AND_ENVIRO ^------
         
+        #region FUNCTIONS ; #*======v FUNCTIONS v======
+        # Pull the CUser mod dir out of psmodpaths:
+        #$CUModPath = $env:psmodulepath.split(';')|?{$_ -like '*\Users\*'} ;
+    
+        # 2b4() 2b4c() & fb4() are located up in the CONSTANTS_AND_ENVIRO\ENCODED_CONTANTS block ( to convert Constant assignement strings)
+
+        #region SWRITELOG ; #*------v SIMPLIFIED WRITE-LOG v------
+        if(-not(get-command write-log -ea 0)){
+            function write-log  {
+                [Alias('write-log')]
+                Param (
+                    [Parameter(Mandatory = $true, ValueFromPipelineByPropertyName = $true)][Alias('LogContent')][ValidateNotNullOrEmpty()][string]$Message,
+                    [Parameter(Mandatory = $false)][string]$Path = 'C:\Logs\PowerShellLog.log',
+                    [Parameter(Mandatory = $false)][ValidateSet('Error','Warn','Info','H1','H2','H3','Debug','Verbose','Prompt')][string]$Level = "Info",
+                    [switch] $useHost
+                )  ;
+                if($host.Name -eq 'Windows PowerShell ISE Host' -AND $host.version.major -lt 3){
+                    write-verbose "(low-contrast/visibility ISE 2 detected: using alt colors)" ;
+                    $pltWH = @{foregroundcolor = 'yellow' ; backgroundcolor = 'black'} ;
+                    $pltErr=@{foregroundcolor='yellow';backgroundcolor='red'};
+                    $pltWarn=@{foregroundcolor='black';backgroundcolor='yellow'};
+                    $pltInfo=@{foregroundcolor='green';backgroundcolor='black'};
+                    $pltH1=@{foregroundcolor='black';backgroundcolor='darkyellow'};
+                    $pltH2=@{foregroundcolor='black';backgroundcolor='gray'};
+                    $pltH3=@{foregroundcolor='black';backgroundcolor='darkgray'};
+                    $pltDbg=@{foregroundcolor='red';backgroundcolor='black'};
+                    $pltVerb=@{foregroundcolor='Gray';backgroundcolor='black'};
+                    $pltPrmpt=@{foregroundcolor='Blue';backgroundcolor='White'};
+                } else {
+                    $pltWH = @{} ;
+                    $pltErr=@{foregroundcolor='yellow';backgroundcolor='red'};
+                    $pltWarn=@{foregroundcolor='yellow';backgroundcolor='red'};
+                    $pltInfo=@{foregroundcolor='yellow';backgroundcolor='red'};
+                    $pltH1=@{foregroundcolor='black';backgroundcolor='darkyellow'};
+                    $pltH2=@{foregroundcolor='black';backgroundcolor='gray'};
+                    $pltH3=@{foregroundcolor='black';backgroundcolor='darkgray'};
+                    $pltDbg=@{foregroundcolor='red';backgroundcolor='black'};
+                    $pltVerb=@{foregroundcolor='yellow';backgroundcolor='red'};
+                    $pltPrmpt=@{foregroundcolor='Blue';backgroundcolor='White'};
+                } ; 
+                if (-not (Test-Path $Path)) {
+                        Write-Verbose "Creating $Path."  ;
+                        $NewLogFile = New-Item $Path -Force -ItemType File  ;
+                }  ; 
+                $FormattedDate = Get-Date -Format "yyyy-MM-dd HH:mm:ss"  ;
+                $EchoTime = "$((get-date).ToString('HH:mm:ss')): " ;
+                switch ($Level) {
+                    'Error' {
+                        $LevelText = 'ERROR: ' ; $smsg = $EchoTime ;
+                        if ($useHost) {
+                            $smsg += $LevelText + $Message ;
+                            write-host @pltErr $smsg ; 
+                        } else {if (-not $NoEcho) { Write-Error ($smsg + $Message) } } ;
+                    }
+                    'Warn' {
+                        $LevelText = 'WARNING: ' ; $smsg = $EchoTime ;
+                        if ($useHost) {
+                            $smsg += $LevelText + $Message ; 
+                            write-host @pltWarn $smsg ; 
+                        } else {if (-not $NoEcho) { Write-Warning ($smsg + $Message) } } ;
+                    }
+                    'Info' {
+                        $LevelText = 'INFO: ' ; $smsg = $EchoTime ;
+                            $smsg += $LevelText + $Message ; 
+                            if (-not $NoEcho) { write-host @pltInfo $smsg ;} ;
+                    }
+                    'H1' {
+                        $LevelText = '# ' ; $smsg = $EchoTime ;
+                        $smsg += $LevelText + $Message ;  
+                        if (-not $NoEcho) { write-host @pltH1 $smsg ; };             
+                    }
+                    'H2' {
+                        $LevelText = '## ' ; $smsg = $EchoTime ;
+                        $smsg += $LevelText + $Message ; 
+                        if (-not $NoEcho) { write-host @pltH2 $smsg ;};
+                    }
+                    'H3' {
+                        $LevelText = '### ' ; $smsg = $EchoTime ;
+                        $smsg += $LevelText + $Message ; 
+                        if (-not $NoEcho) { write-host @pltH3 $smsg };
+                    }
+                    'Debug' {
+                        $LevelText = 'DEBUG: ' ; $smsg = ($EchoTime + $LevelText + '(' + $Message + ')') ;
+                        write-host @pltDbg $smsg ;
+                        if (-not $NoEcho) { Write-Host $smsg }  ;                
+                    }
+                    'Verbose' {
+                        $LevelText = 'VERBOSE: ' ; $smsg = ($EchoTime + '(' + $Message + ')') ;
+                        if ($useHost) {                    
+                            $smsg = ($EchoTime + $LevelText + '(' + $Message + ')') ;
+                            $smsg += $LevelText + $Message ; 
+                            if (-not $NoEcho) {write-host @pltVerb $smsg ;} ; 
+                        }else {if (-not $NoEcho) { Write-Verbose ($smsg) } } ;          
+                    }
+                    'Prompt' {
+                        $LevelText = 'PROMPT: ' ; $smsg = $EchoTime ;
+                        $smsg += $LevelText + $Message ; 
+                        if (-not $NoEcho) { write-host @pltPrmpt $smsg ; } ; 
+                    }
+                } ;
+                "$FormattedDate $LevelText : $Message" | Out-File -FilePath $Path -Append  ;
+            } ;
+        } ; 
+        #endregion SWRITELOG ; #*------^ END SIMPLIFIED write-log  ^------
+
+        #region SSTARTLOG ; #*------v SIMPLIFIED start-log v------
+        #*------v Start-Log.ps1 v------
+        if(-not(get-command start-log -ea 0)){
+            function Start-Log {
+                [CmdletBinding()]
+                PARAM(
+                    [Parameter(Position=0,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Path to target script (defaults to `$PSCommandPath) [-Path .\path-to\script.ps1]")]
+                    # rem out validation, for module installed in AllUsers etc, we don't want to have to spec a real existing file. No bene to testing
+                    #[ValidateScript({Test-Path (split-path $_)})] 
+                    $Path,
+                    [Parameter(HelpMessage="Tag string to be used with -Path filename spec, to construct log file name [-tag 'ticket-123456]")]
+                    [string]$Tag,
+                    [Parameter(HelpMessage="Flag that suppresses the trailing timestamp value from the generated filenames[-NoTimestamp]")]
+                    [switch] $NoTimeStamp,
+                    [Parameter(HelpMessage="Flag that leads the returned filename with the Tag parameter value[-TagFirst]")]
+                    [switch] $TagFirst,
+                    [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
+                    [switch] $showDebug,
+                    [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
+                    [switch] $whatIf=$true
+                ) ;
+                #${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ;
+                #$PSParameters = New-Object -TypeName PSObject -Property $rPSBoundParameters ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ; 
+                $transcript = join-path -path (Split-Path -parent $Path) -ChildPath "logs" ;
+                if (-not (test-path -path $transcript)) { write-host "Creating missing log dir $($transcript)..." ; mkdir $transcript  ; } ;
+                #$transcript = join-path -path $transcript -childpath "$([system.io.path]::GetFilenameWithoutExtension($Path))" ; 
+                if($Tag){
+                    # clean for fso use
+                    $Tag = Remove-StringDiacritic -String $Tag ; # verb-text
+                    $Tag = Remove-StringLatinCharacters -String $Tag ; # verb-text
+                    $Tag = Remove-InvalidFileNameChars -Name $Tag ; # verb-io, (inbound Path is assumed to be filesystem safe)
+                    if($TagFirst){
+                        $smsg = "(-TagFirst:Building filenames with leading -Tag value)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        $transcript = join-path -path $transcript -childpath "$($Tag)-$([system.io.path]::GetFilenameWithoutExtension($Path))" ; 
+                        #$transcript = "$($Tag)-$($transcript)" ; 
+                    } else { 
+                        $transcript = join-path -path $transcript -childpath "$([system.io.path]::GetFilenameWithoutExtension($Path))" ; 
+                        $transcript += "-$($Tag)" ; 
+                    } ;
+                } else {
+                    $transcript = join-path -path $transcript -childpath "$([system.io.path]::GetFilenameWithoutExtension($Path))" ; 
+                }; 
+                $transcript += "-Transcript-BATCH"
+                if(-not $NoTimeStamp){ $transcript += "-$(get-date -format 'yyyyMMdd-HHmmtt')" } ; 
+                $transcript += "-trans-log.txt"  ;
+                # add log file variant as target of Write-Log:
+                $logfile = $transcript.replace("-Transcript", "-LOG").replace("-trans-log", "-log") ;
+                if(get-variable whatif -ea 0){
+                    if ($whatif) {
+                        $logfile = $logfile.replace("-BATCH", "-BATCH-WHATIF") ;
+                        $transcript = $transcript.replace("-BATCH", "-BATCH-WHATIF") ;
+                    } else {
+                        $logfile = $logfile.replace("-BATCH", "-BATCH-EXEC") ;
+                        $transcript = $transcript.replace("-BATCH", "-BATCH-EXEC") ;
+                    } ;
+                } ; 
+                $logging = $True ;
+
+                $hshRet= [ordered]@{
+                    logging=$logging ;
+                    logfile=$logfile ;
+                    transcript=$transcript ;
+                } ;
+                if($showdebug -OR $verbose){
+                    write-verbose -verbose:$true "$(($hshRet|out-string).trim())" ;  ;
+                } ;
+                Write-Output $hshRet ;
+            }
+        } ; 
+        #*------^ END Start-Log.ps1 ^------
+        #endregion SSTARTLOG ; #*------^ END SIMPLIFIED start-log ^------
+
+        #region CONNEXOPTDO ; #*------v CONNEXOPTDO v------
+        #*------v Function Connect-ExchangeServerTDO v------
+        if(-not(get-command Connect-ExchangeServerTDO -ea 0)){
+            Function Connect-ExchangeServerTDO {
+                <#
+                .SYNOPSIS
+                Connect-ExchangeServerTDO.ps1 - Dependancy-less Function that, fed an Exchange server name, or AD SiteName, and optional RoleNames array, 
+                will obtain a list of Exchange servers from AD (in the specified scope), and then run the list attempting to PowershellREmote (REMS) connect to each server, 
+                stopping at the first successful connection.
+                .NOTES
+                Version     : 3.0.3
+                Author      : Todd Kadrie
+                Website     : http://www.toddomation.com
+                Twitter     : @tostka / http://twitter.com/tostka
+                CreatedDate : 2024-05-30
+                FileName    : Connect-ExchangeServerTDO.ps1
+                License     : (none-asserted)
+                Copyright   : (none-asserted)
+                Github      : https://github.com/tostka/verb-Ex2010
+                Tags        : Powershell, ActiveDirectory, Exchange, Discovery
+                AddedCredit : Brian Farnsworth
+                AddedWebsite: https://codeandkeep.com/
+                AddedTwitter: URL
+                AddedCredit : David Paulson
+                AddedWebsite: https://techcommunity.microsoft.com/t5/exchange-team-blog/exchange-health-checker-has-a-new-home/ba-p/2306671
+                AddedTwitter: URL
+                REVISIONS
+                * 3:54 PM 11/26/2024 integrated back TLS fixes, and ExVersNum flip from June; syncd dbg & vx10 copies.
+                * 12:57 PM 6/11/2024 Validated, Ex2010 & Ex2019, hub, mail & edge roles: tested ☑️ on CMW mail role (Curly); and Jumpbox; 
+                    copied in CBH from repo copy, which has been updated/debugged compat on CMW Edge 
+                    includes local snapin detect & load for edge role (simplest EMS load option for Edge role, from David Paulson's original code; no longer published with Ex2010 compat)
+                * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
+                * 12:49 PM 6/21/2024 flipped PSS Name to Exchange$($ExchVers[dd])
+                * 11:28 AM 5/30/2024 fixed failure to recognize existing functional PSSession; Made substantial update in logic, validate works fine with other orgs, and in our local orgs.
+                * 4:02 PM 8/28/2023 debuged, updated CBH, renamed connect-ExchangeSErver -> Connect-ExchangeServerTDO (avoid name clashes, pretty common verb-noun combo).
+                * 12:36 PM 8/24/2023 init
+
+                .DESCRIPTION
+                Connect-ExchangeServerTDO.ps1 - Dependancy-less Function that, fed an Exchange server name, or AD SiteName, and optional RoleNames array, 
+                will obtain a list of Exchange servers from AD (in the specified scope), and then run the list attempting to PowershellRemote (REMS) connect to each server, 
+                stopping at the first successful connection.
+
+                Relies upon/requires get-ADExchangeServerTDO(), to return a descriptive summary of the Exchange server(s) revision etc, for connectivity logic.
+                Supports Exchange 2010 through 2019, as implemented.
+        
+                Intent, as contrasted with verb-EXOP/Ex2010 is to have no local module dependancies, when running EXOP into other connected orgs, where syncing profile & supporting modules code can be problematic. 
+                This uses native ADSI calls, which are supported by Windows itself, without need for external ActiveDirectory module etc.
+
+                The particular approach inspired by BF's demo func that accompanied his take on get-adExchangeServer(), which I hybrided with my own existing code for cred-less connectivity. 
+                I added get-OrganizationConfig testing, for connection pre/post confirmation, along with Exchange Server revision code for continutional handling of new-pssession remote powershell EMS connections.
+                Also shifted connection code into _connect-EXOP() internal func.
+                As this doesn't rely on local module presence, it doesn't have to do the usual local remote/local invocation detection you'd do for non-dehydrated on-server EMS (more consistent this way, anyway; 
+                there are only a few cmdlet outputs I'm aware of, that have fundementally broken returns dehydrated, and require local non-remote EMS use to function.
+
+                My core usage would be to paste the function into the BEGIN{} block for a given remote org process, to function as a stricly local ad-hoc function.
+                .PARAMETER name
+                FQDN of a specific Exchange server[-Name EXSERVER.DOMAIN.COM]
+                .PARAMETER discover
+                Boolean paraameter that drives auto-discovery of target Exchange servers for connection (defaults `$true)[-discover:`$false]
+                .PARAMETER credential
+                Use specific Credentials[-Credentials [credential object]
+                    .PARAMETER Site
+                Name of specific AD site to be searched for ExchangeServers (defaults to global variable `$TenOrg_ADSiteDefaultName if present)[-Site 'SITENAME']
+                .PARAMETER RoleNames
+                Array of Server 'Role' name strings to be filtered against (MBX|CAS|HUB|UM|MBX|EDGE)[-RoleNames 'HUB','CAS']
+                .PARAMETER TenOrg
+                Tenant Tag (3-letter abbrebiation - defaults to variable `$global:o365_TenOrgDefault if present)[-TenOrg 'XYZ']
+                .INPUTS
+                None. Does not accepted piped input.(.NET types, can add description)
+                .OUTPUTS
+                [system.object] Returns a system object containing a successful PSSession
+                System.Boolean
+                [| get-member the output to see what .NET obj TypeName is returned, to use here]
+                System.Array of System.Object's
+                .EXAMPLE
+                PS> $PSSession = Connect-ExchangeServerTDO -siteName SITENAME -RoleNames @('HUB','CAS') -verbose 
+                Demo's connecting to a functional Hub or CAS server in the SITENAME site with verbose outputs, the `PSSession variable will contain information about the successful connection. Makes automatic Exchangeserver discovery calls into AD (using ADSI) leveraging the separate get-ADExchangeServerTDO()
+                .EXAMPLE
+                PS> TRY{$Site=[System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().Name}CATCH{$Site=$env:COMPUTERNAME} ;
+                PS> $PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
+                Demo including support for EdgeRole, which is detected on it's lack of AD Site specification (which gets fed through to call, by setting the Site to the machine itself).
+                .LINK
+                https://codeandkeep.com/PowerShell-ActiveDirectory-Exchange-Part1/
+                .LINK
+                https://github.com/Lucifer1993/PLtools/blob/main/HealthChecker.ps1
+                .LINK
+                https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/
+                .LINK
+                https://bitbucket.org/tostka/powershell/
+                .LINK
+                https://github.com/tostka/verb-Ex2010
+                #>        
+                [CmdletBinding(DefaultParameterSetName='discover')]
+                PARAM(
+                    [Parameter(Position=0,Mandatory=$true,ParameterSetName='name',HelpMessage="FQDN of a specific Exchange server[-Name EXSERVER.DOMAIN.COM]")]
+                        [String]$name,
+                    [Parameter(Position=0,ParameterSetName='discover',HelpMessage="Boolean paraameter that drives auto-discovery of target Exchange servers for connection (defaults `$true)[-discover:`$false]")]
+                        [bool]$discover=$true,
+                    [Parameter(Position=1,HelpMessage = "Use specific Credentials[-Credentials [credential object]")]
+                        [Management.Automation.PSCredential]$credential,
+                    [Parameter(Position=1,HelpMessage="Name of specific AD site to be searched for ExchangeServers (defaults to global variable `$TenOrg_ADSiteDefaultName if present)[-Site 'SITENAME']")]
+                        [Alias('Site')]
+                        [string]$SiteName = (gv -name "$($TenOrg)_ADSiteDefaultName" -ea 0).Value,
+                    [Parameter(Position=2,HelpMessage="Array of Server 'Role' name strings to be filtered against (MBX|CAS|HUB|UM|MBX|EDGE)[-RoleNames 'HUB','CAS']")]
+                        [ValidateSet('MBX','CAS','HUB','UM','MBX','EDGE')]
+                        [string[]]$RoleNames = @('HUB','CAS'),
+                    [Parameter(Mandatory=$FALSE,HelpMessage="Tenant Tag (3-letter abbrebiation - defaults to global:o365_TenOrgDefault if present)[-TenOrg 'XYZ']")]
+                        [ValidateNotNullOrEmpty()]
+                        [string]$TenOrg = $global:o365_TenOrgDefault
+                ) ;
+                BEGIN{
+                    $Verbose = ($VerbosePreference -eq 'Continue') ;
+                    $CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
+			        write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
+			        # psv6+ already covers, test via the SslProtocol parameter presense
+			        if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
+				        $currentMaxTlsValue = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__,[Net.SecurityProtocolType]::Tls.value__) ;
+				        write-verbose "`$currentMaxTlsValue : $($currentMaxTlsValue )" ;
+				        $newerTlsTypeEnums = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $currentMaxTlsValue }
+				        if($newerTlsTypeEnums){
+					        write-verbose "Appending upgraded/missing TLS `$enums:`n$(($newerTlsTypeEnums -join ','|out-string).trim())" ;
+				        } else {
+					        write-verbose "Current TLS `$enums are up to date with max rev available on this machine" ;
+				        };
+				        $newerTlsTypeEnums | ForEach-Object {
+					        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
+				        } ;
+			        } ;
+                    $smsg = "#*------v Function _connect-ExOP v------" ;
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    function _connect-ExOP{
+                        [CmdletBinding()]
+                        PARAM(
+                            [Parameter(Position=0,Mandatory=$true,HelpMessage="Exchange server AD Summary system object[-Server EXSERVER.DOMAIN.COM]")]
+                                [system.object]$Server,
+                            [Parameter(Position=1,HelpMessage = "Use specific Credentials[-Credentials [credential object]")]
+                                [Management.Automation.PSCredential]$credential
+                        );
+                        $verbose = $($VerbosePreference -eq "Continue") ;
+                        if([double]$ExVersNum = [regex]::match($Server.version,"Version\s(\d+\.\d+)\s\(Build\s(\d+\.\d+)\)").groups[1].value){
+                            switch -regex ([string]$ExVersNum) {
+                                '15.2' { $isEx2019 = $true ; $ExVers = 'Ex2019' }
+                                '15.1' { $isEx2016 = $true ; $ExVers = 'Ex2016'}
+                                '15.0' { $isEx2013 = $true ; $ExVers = 'Ex2013'}
+                                '14.*' { $isEx2010 = $true ; $ExVers = 'Ex2010'}
+                                '8.*' { $isEx2007 = $true ; $ExVers = 'Ex2007'}
+                                '6.5' { $isEx2003 = $true ; $ExVers = 'Ex2003'}
+                                '6' {$isEx2000 = $true ; $ExVers = 'Ex2000'} ;
+                                default {
+                                    $smsg = "UNRECOGNIZED ExVersNum.Major.Minor string:$($ExVersNum)! ABORTING!" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    THROW $SMSG ;
+                                    BREAK ;
+                                }
+                            } ;
+                        }else {
+                            $smsg = "UNABLE TO RESOLVE `$ExVersNum from `$Server.version:$($Server.version)!" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            throw $smsg ;
+                            break ;
+                        } ;
+                        if($Server.RoleNames -eq 'EDGE'){
+                            if(($isLocalExchangeServer = (Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v14\Setup')) -or
+                                ($isLocalExchangeServer = (Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup')) -or
+                                $ByPassLocalExchangeServerTest)
+                            {
+                                if((Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v14\EdgeTransportRole') -or
+                                        (Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\EdgeTransportRole'))
+                                {
+                                    $smsg = "We are on Exchange Edge Transport Server"
+                                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                    $IsEdgeTransport = $true
+                                }
+                                TRY {
+                                    Get-ExchangeServer -ErrorAction Stop | Out-Null
+                                    $smsg = "Exchange PowerShell Module already loaded."
+                                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                    $passed = $true 
+                                }CATCH {
+                                    $smsg = "Failed to run Get-ExchangeServer"
+                                    if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                    if($isLocalExchangeServer){
+                                        write-host  "Loading Exchange PowerShell Module..."
+                                        TRY{
+                                            if($IsEdgeTransport){
+                                                # implement local snapins access on edge role: Only way to get access to EMS commands.
+                                                [xml]$PSSnapIns = Get-Content -Path "$env:ExchangeInstallPath\Bin\exshell.psc1" -ErrorAction Stop
+                                                ForEach($PSSnapIn in $PSSnapIns.PSConsoleFile.PSSnapIns.PSSnapIn){
+                                                    write-verbose ("Trying to add PSSnapIn: {0}" -f $PSSnapIn.Name)
+                                                    Add-PSSnapin -Name $PSSnapIn.Name -ErrorAction Stop
+                                                } ; 
+                                                Import-Module $env:ExchangeInstallPath\bin\Exchange.ps1 -ErrorAction Stop ; 
+                                                $passed = $true #We are just going to assume this passed.
+                                            }else{
+                                                Import-Module $env:ExchangeInstallPath\bin\RemoteExchange.ps1 -ErrorAction Stop
+                                                Connect-ExchangeServer -Auto -ClientApplication:ManagementShell
+                                                $passed = $true #We are just going to assume this passed.
+                                            } 
+                                        }CATCH {
+                                            $smsg = "Failed to Load Exchange PowerShell Module..." ; 
+                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                                        }                               
+                                    } ;
+                                } FINALLY {
+                                    if($LoadExchangeVariables -and $passed -and $isLocalExchangeServer){
+                                        if($ExInstall -eq $null -or $ExBin -eq $null){
+                                            if(Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v14\Setup'){
+                                                $Global:ExInstall = (Get-ItemProperty HKLM:\SOFTWARE\Microsoft\ExchangeServer\v14\Setup).MsiInstallPath
+                                            }else{
+                                                $Global:ExInstall = (Get-ItemProperty HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup).MsiInstallPath
+                                            }
+        
+                                            $Global:ExBin = $Global:ExInstall + "\Bin"
+        
+                                            $smsg = ("Set ExInstall: {0}" -f $Global:ExInstall)
+                                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                            $smsg = ("Set ExBin: {0}" -f $Global:ExBin)
+                                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                        } ; 
+                                    } ; 
+                                } ; 
+                            } else  {
+                                $smsg = "Does not appear to be an Exchange 2010 or newer server." ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
+                            }
+                            if(get-command -Name Get-OrganizationConfig -ea 0){
+                                $smsg = "Running in connected/Native EMS" ; 
+                                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                Return $true ; 
+                            } else { 
+                                TRY{
+                                    $smsg = "Initiating Edge EMS local session (exshell.psc1 & exchange.ps1)" ; 
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                    # 5;36 PM 5/30/2024 didn't work, went off to nowhere for a long time, and exited the script
+                                    #& (gcm powershell.exe).path -PSConsoleFile "$($env:ExchangeInstallPath)bin\exshell.psc1" -noexit -command ". '$($env:ExchangeInstallPath)bin\Exchange.ps1'"
+                                    <# [Adding the Transport Server to Exchange - Mark Lewis Blog](https://marklewis.blog/2020/11/19/adding-the-transport-server-to-exchange/)
+                                    To access the management console on the transport server, I opened PowerShell then ran
+                                    exshell.psc1
+                                    Followed by
+                                    exchange.ps1
+                                    At this point, I was able to create a new subscription using he following PowerShel
+                                    #>
+                                    invoke-command exshell.psc1 ; 
+                                    invoke-command exchange.ps1
+                                    if(get-command -Name Get-OrganizationConfig -ea 0){
+                                        $smsg = "Running in connected/Native EMS" ; 
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                        Return $true ;
+                                    } else { return $false };  
+                                }CATCH{
+                                    Write-Error $_ ;
+                                } ;
+                            } ; 
+                        } else {
+                            $pltNPSS=@{ConnectionURI="http://$($Server.FQDN)/powershell"; ConfigurationName='Microsoft.Exchange' ; name="Exchange$($ExVersNum.tostring())"} ;
+                            # use ExVersUnm dd instead of hardcoded (Exchange2010)
+                            if($ExVersNum -ge 15){
+                                $smsg = "EXOP.15+:Adding -Authentication Kerberos" ;
+                                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                $pltNPSS.add('Authentication',"Kerberos") ;
+                                $pltNPSS.name = $ExVers ;
+                            } ;
+                            $smsg = "Adding EMS (connecting to $($Server.FQDN))..." ;
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                            $smsg = "New-PSSession w`n$(($pltNPSS|out-string).trim())" ;
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                            $ExPSS = New-PSSession @pltNPSS  ;
+                            $ExIPSS = Import-PSSession $ExPSS -allowclobber ;
+                            $ExPSS | write-output ;
+                            $ExPSS= $ExIPSS = $null ;
+                        } ; 
+                    } ;
+                    $smsg = "#*------^ END Function _connect-ExOP ^------" ;
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    $pltGADX=@{
+                        ErrorAction='Stop';
+                    } ;
+                } ;
+                PROCESS{
+                    if($PSBoundParameters.ContainsKey('credential')){
+                        $pltGADX.Add('credential',$credential) ;
+                    }
+                    if($SiteName){
+                        $pltGADX.Add('siteName',$siteName) ;
+                    } ;
+                    if($RoleNames){
+                        $pltGADX.Add('RoleNames',$RoleNames) ;
+                    } ;
+                    TRY{
+                        if($discover){
+                            $smsg = "Getting list of Exchange Servers" ;
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                            $exchServers=get-ADExchangeServerTDO @pltGADX | sort responsetime ;
+                        }else{
+                            $exchServers=get-ADExchangeServerTDO @pltGADX | sort responsetime ;
+                        } ;
+                        $pltTW=@{
+                            'ErrorAction'='Stop';
+                        } ;
+                        $pltCXOP = @{
+                            verbose = $($VerbosePreference -eq "Continue") ;
+                        } ;
+                        if($pltGADX.credential){
+                            $pltCXOP.Add('Credential',$pltCXOP.Credential) ;
+                        } ;
+                        $prpPSS = 'Id','Name','ComputerName','ComputerType','State','ConfigurationName','Availability' ; 
+                        foreach($exServer in $exchServers){
+                            $smsg = "testing conn to:$($exServer.name.tostring())..." ; 
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            if(get-command -module (get-module |?{$_.name -like 'tmp_*'}).name -name 'get-OrganizationConfig' -ea SilentlyContinue){
+                                if($pssEXOP = Get-PSSession |  where-object { ($_.ConfigurationName -eq 'Microsoft.Exchange') -AND ( $_.runspace.ConnectionInfo.AppName -match '^/(exadmin|powershell)$') -AND ( $_.runspace.ConnectionInfo.Port -eq '80') }){
+                                    if($pssEXOP.State -ne "Opened" -OR $pssEXOP.Availability -ne "Available"){
+                                        $pssEXOP | remove-pssession ; $pssEXOP = $null ;
+                                    } ;
+                                } ; 
+                            } else {
+                                $smsg = "(mangled ExOP conn: disconnect/reconnect...)" ;
+                                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                                if($pssEXOP = Get-PSSession |  where-object { ($_.ConfigurationName -eq 'Microsoft.Exchange') -AND ( $_.runspace.ConnectionInfo.AppName -match '^/(exadmin|powershell)$') -AND ( $_.runspace.ConnectionInfo.Port -eq '80') }){
+                                    if($pssEXOP.State -ne "Opened" -OR $pssEXOP.Availability -ne "Available"){
+                                        $pssEXOP | remove-pssession ; $pssEXOP = $null ;
+                                    } ;
+                                } ; 
+                            } ;
+                            if(-not $pssEXOP){
+                                $smsg = "Connecting to: $($exServer.FQDN)" ;
+                                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                                if($NoTest){
+                                    $ExPSS =$ExPSS = _connect-ExOP @pltCXOP -Server $exServer
+                                } else {
+                                    TRY{
+                                        $smsg = "Testing Connection: $($exServer.FQDN)" ;
+                                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                                        If(test-connection $exServer.FQDN -count 1 -ea 0) {
+                                            $smsg = "confirmed pingable..." ;
+                                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                                        } else {
+                                            $smsg = "Unable to Ping $($exServer.FQDN)" ; ;
+                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                        } ;
+                                        $smsg = "Testing WinRm: $($exServer.FQDN)" ;
+                                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                                        $winrm=Test-WSMan @pltTW -ComputerName $exServer.FQDN ;
+                                        if($winrm){
+                                            $ExPSS = _connect-ExOP @pltCXOP -Server $exServer;
+                                        } else {
+                                            $smsg = "Unable to Test-WSMan $($exServer.FQDN) (skipping)" ; ;
+                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                        } ;
+                                    }CATCH{
+                                        $errMsg="Server: $($exServer.FQDN)] $($_.Exception.Message)" ;
+                                        Write-Error -Message $errMsg ;
+                                        continue ;
+                                    } ;
+                                };
+                            } else {
+                                $smsg = "$((get-date).ToString('HH:mm:ss')):Accepting first valid connection w`n$(($pssEXOP | ft -a $prpPSS|out-string).trim())" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success }
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                $ExPSS = $pssEXOP ; 
+                                break ; 
+                            }  ;
+                        } ;
+                    }CATCH{
+                        Write-Error $_ ;
+                    } ;
+                } ;
+                END{
+                    if(-not $ExPSS){
+                        $smsg = "NO SUCCESSFUL CONNECTION WAS MADE, WITH THE SPECIFIED INPUTS!" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $smsg = "(returning `$false to the pipeline...)" ;
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                        return $false
+                    } else{
+                        if($ExPSS.State -eq "Opened" -AND $ExPSS.Availability -eq "Available"){
+                            if(-not ($OrgName = ((get-OrganizationConfig).DistinguishedName.split(',') |?{$_ -like 'DC=*'}) -join '.' -replace 'DC=','')){
+                                $smsg = "Missing Exchange Connection! (no (Get-OrganizationConfig).name returned)" ;
+                                throw $smsg ;
+                                $smsg | write-warning  ;
+                            } else {
+                                $smsg = "(connected to EXOP.Org:$($orgName))" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success }
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            } ;
+                            return $ExPSS
+                        } ;
+                    } ; 
+                } ;
+            } ;
+        } ; 
+        #*------^ END Function Connect-ExchangeServerTDO ^------
+        #endregion CONNEXOPTDO ; #*------^ END CONNEXOPTDO ^------
+    
+        #region GADEXSERVERTDO ; #*------v  v------
+        #*------v Function get-ADExchangeServerTDO v------
+        if(-not(get-command get-ADExchangeServerTDO -ea 0)){
+            Function get-ADExchangeServerTDO {
+                <#
+                .SYNOPSIS
+                get-ADExchangeServerTDO.ps1 - Returns Exchangeserver summary(s) from AD records
+                .NOTES
+                Version     : 3.0.1
+                Author      : Todd Kadrie
+                Website     : http://www.toddomation.com
+                Twitter     : @tostka / http://twitter.com/tostka
+                CreatedDate : 2015-09-03
+                FileName    : get-ADExchangeServerTDO.ps1
+                License     : (none-asserted)
+                Copyright   : (none-asserted)
+                Github      : https://github.com/tostka/verb-Ex2010
+                Tags        : Powershell, ActiveDirectory, Exchange, Discovery
+                AddedCredit : Mike Pfeiffer
+                AddedWebsite: mikepfeiffer.net
+                AddedTwitter: URL
+                AddedCredit : Sammy Krosoft 
+                AddedWebsite: http://aka.ms/sammy
+                AddedTwitter: URL
+                AddedCredit : Brian Farnsworth
+                AddedWebsite: https://codeandkeep.com/
+                AddedTwitter: URL
+                REVISIONS
+                * 3:57 PM 11/26/2024 updated simple write-host,write-verbose with full pswlt support;  syncd dbg & vx10 copies.
+                * 12:57 PM 6/11/2024 Validated, Ex2010 & Ex2019, hub, mail & edge roles: tested ☑️ on CMW mail role (Curly); and Jumpbox; copied in CBH from repo copy, which has been updated/debugged compat on CMW Edge 
+                * 2:05 PM 8/28/2023 REN -> Get-ExchangeServerInSite -> get-ADExchangeServerTDO (aliased orig); to better steer profile-level options - including in cmw org, added -TenOrg, and default Site to constructed vari, targeting new profile $XXX_ADSiteDefault vari; Defaulted -Roles to HUB,CAS as well.
+                * 3:42 PM 8/24/2023 spliced together combo of my long-standing, and some of the interesting ideas BF's version had. Functional prod:
+                    - completely removed ActiveDirectory module dependancies from BF's code, and reimplemented in raw ADSI calls. Makes it fully portable, even into areas like Edge DMZ roles, where ADMS would never be installed.
+
+                * 3:17 PM 8/23/2023 post Edge testing: some logic fixes; add: -Names param to filter on server names; -Site & supporting code, to permit lookup against sites *not* local to the local machine (and bypass lookup on the local machine) ; 
+                    ren $Ex10siteDN -> $ExOPsiteDN; ren $Ex10configNC -> $ExopconfigNC
+                * 1:03 PM 8/22/2023 minor cleanup
+                * 10:31 AM 4/7/2023 added CBH expl of postfilter/sorting to draw predictable pattern 
+                * 4:36 PM 4/6/2023 validated Psv51 & Psv20 and Ex10 & 16; added -Roles & -RoleNames params, to perform role filtering within the function (rather than as an external post-filter step). 
+                For backward-compat retain historical output field 'Roles' as the msexchcurrentserverroles summary integer; 
+                use RoleNames as the text role array; 
+                    updated for psv2 compat: flipped hash key lookups into properties, found capizliation differences, (psv2 2was all lower case, wouldn't match); 
+                flipped the [pscustomobject] with new... psobj, still psv2 doesn't index the hash keys ; updated for Ex13+: Added  16  "UM"; 20  "CAS, UM"; 54  "MBX" Ex13+ ; 16385 "CAS" Ex13+ ; 16439 "CAS, HUB, MBX" Ex13+
+                Also hybrided in some good ideas from SammyKrosoft's Get-SKExchangeServers.psm1 
+                (emits Version, Site, low lvl Roles # array, and an array of Roles, for post-filtering); 
+                # 11:20 AM 4/21/2021 fixed/suppressed noisy verbose calls
+                * 12:08 PM 5/15/2020 fixed vpn issue: Try/Catch'd around recently failing $ADSite::GetComputerSite().GetDirectoryEntry().distinguishedName qry
+                * 11:22 AM 3/13/2020 Get-ExchangeServerInSite added a ping-test, to only return matches that are pingable, added -NoPing param, to permit (faster) untested bypass
+                * 6:59 PM 1/15/2020 cleanup
+                # 10:03 AM 11/16/2018 Get-ExchangeServerInSite:can't do AD-related functions when not AD authentictaed (home, pre-vpn connect). Added if/then test on status and abort balance when false.
+                * 11/18/18 BF's posted rev
+                # 12:10 PM 8/1/2017 updated example code at bottom, to accommodate variant sites
+                # 11:28 AM 3/31/2016 validated that latest round of updates are still functional
+                #1:58 PM 9/3/2015 - added pshelp and some docs
+                #April 12, 2010 - web version
+                .DESCRIPTION
+                get-ADExchangeServerTDO.ps1 - Returns Exchangeserver summary(s) from AD records
+
+                Hybrided together ideas from Brian Farnsworth's blog post
+                [PowerShell - ActiveDirectory and Exchange Servers – CodeAndKeep.Com – Code and keep calm...](https://codeandkeep.com/PowerShell-ActiveDirectory-Exchange-Part1/)
+                ... with much older concepts from  Sammy Krosoft, and much earlier Mike Pfeiffer. 
+
+                - Subbed in MP's use of ADSI for ActiveDirectory Ps mod cmds - it's much more dependancy-free; doesn't require explicit install of the AD ps module
+                ADSI support is built into windows.
+                - spliced over my addition of Roles, RoleNames, Name & NoTest params, for prefiltering and suppressing testing.
+
+
+                [briansworth · GitHub](https://github.com/briansworth)
+
+                Uses an ADSI DirectorySearcher to search the current Active Directory site for Exchange on-prem servers.
+                        Intent is to discover connection points for Powershell, wo the need to preload/pre-connect to Exchange.
+
+                        But, as a non-Exchange-Management-Shell-dependant info source on Exchange Server configs, it can be used before connection, with solely AD-available data, to check configuration spes on the subject server(s). 
+
+                        For example, this query will return sufficient data under Version to indicate which revision of Exchange is in use:
+
+
+                        Returned object (in array):
+                        Site      : {ADSITENAME}
+                        Roles     : {64}
+                        Version   : {Version 15.1 (Build 32375.7)}
+                        Name      : SERVERNAME
+                        RoleNames : EDGE
+                        FQDN      : SERVERNAME.DOMAIN.TLD
+
+                        ... includes the post-filterable Role property ($_.Role -contains 'CAS') which reflects the following
+                        installed-roles ('msExchCurrentServerRoles') on the discovered servers
+                            2   {"MBX"} # Ex10
+                            4   {"CAS"}
+                            16  {"UM"}
+                            20  {"CAS, UM" -split ","} # 
+                            32  {"HUB"}
+                            36  {"CAS, HUB" -split ","}
+                            38  {"CAS, HUB, MBX" -split ","}
+                            54  {"MBX"} # Ex13+
+                            64  {"EDGE"}
+                            16385   {"CAS"} # Ex13+
+                            16439   {"CAS, HUB, MBX"  -split ","} # Ex13+
+                .PARAMETER Roles
+                Array of msExchCurrentServerRoles 'role' integers to be filtered against (2|4|16|20|32|36|38|54|64|16385|16439)[-Roles @(38,16385)]
+                .PARAMETER RoleNames
+                Array of Server 'Role' name strings to be filtered against (MBX|CAS|HUB|UM|MBX|EDGE)[-RoleNames 'HUB','CAS']
+                .PARAMETER Server
+                Array of Server name strings to be filtered against[-Server 'SERVER1','SERVER2']
+                .PARAMETER SiteName
+                Name of specific AD SiteName to be searched for ExchangeServers (defaults to global variable `$TenOrg_ADSiteDefaultName if present)[-SiteName 'SITENAME']
+                .PARAMETER TenOrg
+                Tenant Tag (3-letter abbrebiation - defaults to variable `$global:o365_TenOrgDefault if present)[-TenOrg 'XYZ']
+                .PARAMETER NoPing
+                Switch to suppress default 'pingable' test (e.g. returns all matches, no testing)[-NoPing]
+                .INPUTS
+                None. Does not accepted piped input.(.NET types, can add description)
+                .OUTPUTS
+                None. Returns no objects or output (.NET types)
+                System.Boolean
+                [| get-member the output to see what .NET obj TypeName is returned, to use here]
+                System.Array of System.Object's
+                .EXAMPLE
+                PS> If(!($ExchangeServer)){$ExchangeServer = (get-ADExchangeServerTDO| ?{$_.RoleNames -contains 'CAS' -OR $_.RoleNames -contains 'HUB' -AND ($_.FQDN -match "^SITECODE") } | Get-Random ).FQDN
+                Return a random Hub Cas Role server in the local Site with a fqdn beginning SITECODE
+                .EXAMPLE
+                PS> $localADExchserver = get-ADExchangeServerTDO -Names $env:computername -SiteName ([System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().name)
+                Demo, if run from an Exchange server, return summary details about the local server (-SiteName isn't required, is default imputed from local server's Site, but demos explicit spec for remote sites)
+                .EXAMPLE
+                PS> $regex = '(' + [regex]($ADSiteCodeUK,$ADSiteCodeAU -join "|") + ')'
+                PS> switch -regex ($($env:computername).substring(0,3)){
+                PS>    "$($ADSiteCodeUS)" {$tExRole=36 } ;
+                PS>    "$($regex)" {$tExRole= 38 }  default { write-error "$((get-date).ToString('HH:mm:ss')):UNRECOGNIZED SERVER PREFIX!."; } ;
+                PS> } ;
+                PS> $exhubcas = (get-ADExchangeServerTDO |?{($_.roles -eq $tExRole) -AND ($_.FQDN -match "$($env:computername.substring(0,3)).*")} | Get-Random ).FQDN ;
+                Use a switch block to select different role combo targets for a given server fqdn prefix string.
+                .EXAMPLE
+                PS> $ExchangeServer = get-ADExchangeServerTDO | ?{$_.Roles -match '(4|20|32|36|38|16385|16439)'} | select -expand fqdn | get-random ; 
+                Another/Older approach filtering on the Roles integer (targeting combos with Hub or CAS in the mix)
+                .EXAMPLE
+                PS> $ret = get-ADExchangeServerTDO -Roles @(4,20,32,36,38,16385,16439) -verbose 
+                Demo use of the -Roles param, feeding it an array of Role integer values to be filtered against. In this case, the Role integers that include a CAS or HUB role.
+                .EXAMPLE
+                PS> $ret = get-ADExchangeServerTDO -RoleNames 'HUB','CAS' -verbose ;
+                Demo use of the -RoleNames param, feeding it the array 'HUB','CAS' Role name strings to be filtered against
+                PS> $ret = get-ADExchangeServerTDO -Names 'SERVERName' -verbose ;
+                Demo use of the -RoleNames param, feeding it the array 'HUB','CAS' Role name strings to be filtered against
+                .EXAMPLE
+                PS> $ExchangeServer = get-ADExchangeServerTDO | sort version,roles,name | ?{$_.rolenames -contains 'CAS'}  | select -last 1 | select -expand fqdn ;
+                Demo post sorting & filtering, to deliver a rule-based predictable pattern for server selection: 
+                Above will always pick the highest Version, 'CAS' RoleName containing, alphabetically last server name (that is pingable). 
+                And should stick to that pattern, until the servers installed change, when it will shift to the next predictable box.
+                .EXAMPLE
+                PS> $ExOPServer = get-ADExchangeServerTDO -Name LYNMS650 -SiteName Lyndale
+                PS> if([double]$ExVersNum = [regex]::match($ExOPServer.version,"Version\s(\d+\.\d+)\s\(Build\s(\d+\.\d+)\)").groups[1].value){
+                PS>     switch -regex ([string]$ExVersNum) {
+                PS>         '15\.2' { $isEx2019 = $true ; $ExVers = 'Ex2019' }
+                PS>         '15\.1' { $isEx2016 = $true ; $ExVers = 'Ex2016'}
+                PS>         '15\.0' { $isEx2013 = $true ; $ExVers = 'Ex2013'}
+                PS>         '14\..*' { $isEx2010 = $true ; $ExVers = 'Ex2010'}
+                PS>         '8\..*' { $isEx2007 = $true ; $ExVers = 'Ex2007'}
+                PS>         '6\.5' { $isEx2003 = $true ; $ExVers = 'Ex2003'}
+                PS>         '6|6\.0' {$isEx2000 = $true ; $ExVers = 'Ex2000'} ;
+                PS>         default {
+                PS>             $smsg = "UNRECOGNIZED ExchangeServer.AdminDisplayVersion.Major.Minor string:$($ExOPServer.version)! ABORTING!" ;
+                PS>             write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                PS>         }
+                PS>     } ; 
+                PS> }else {
+                PS>     $smsg = "UNABLE TO RESOLVE `$ExVersNum from `$ExOPServer.version:$($ExOPServer.version)!" ; 
+                PS>     write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)"  ; 
+                PS>     throw $smsg ; 
+                PS>     break ; 
+                PS> } ; 
+                Demo of parsing the returned Version property, into the proper Exchange Server revision.      
+                .LINK
+                https://github.com/tostka/verb-XXX
+                .LINK
+                https://bitbucket.org/tostka/powershell/
+                .LINK
+                http://mikepfeiffer.net/2010/04/find-exchange-servers-in-the-local-active-directory-site-using-powershell/
+                .LINK
+                https://github.com/SammyKrosoft/Search-AD-Using-Plain-PowerShell/blob/master/Get-SKExchangeServers.psm1
+                .LINK
+                https://github.com/tostka/verb-Ex2010
+                .LINK
+                https://codeandkeep.com/PowerShell-ActiveDirectory-Exchange-Part1/
+                #>
+                [CmdletBinding()]
+                [Alias('Get-ExchangeServerInSite')]
+                PARAM(
+                    [Parameter(Position=0,HelpMessage="Array of Server name strings to be filtered against[-Server 'SERVER1','SERVER2']")]
+                        [string[]]$Server,
+                    [Parameter(Position=1,HelpMessage="Name of specific AD site to be searched for ExchangeServers (defaults to global variable `$TenOrg_ADSiteDefaultName if present)[-SiteName 'SITENAME']")]
+                        [Alias('Site')]
+                        [string]$SiteName = (gv -name "$($TenOrg)_ADSiteDefaultName" -ea 0).Value,
+                    [Parameter(Position=2,HelpMessage="Array of Server 'Role' name strings to be filtered against (MBX|CAS|HUB|UM|MBX|EDGE)[-RoleNames 'HUB','CAS']")]
+                        [ValidateSet('MBX','CAS','HUB','UM','MBX','EDGE')]
+                        [string[]]$RoleNames = @('HUB','CAS'),
+                    [Parameter(HelpMessage="Array of msExchCurrentServerRoles 'role' integers to be filtered against (2|4|16|20|32|36|38|54|64|16385|16439)[-Roles @(38,16385)]")]
+                        [ValidateSet(2,4,16,20,32,36,38,54,64,16385,16439)]
+                        [int[]]$Roles,
+                    [Parameter(HelpMessage="Switch to suppress default 'pingable' test (e.g. returns all matches, no testing)[-NoTest]")]
+                        [Alias('NoPing')]
+                        [switch]$NoTest,
+                    [Parameter(HelpMessage="Milliseconds of max timeout to wait during port 80 test (defaults 100)[-SpeedThreshold 500]")]
+                        [int]$SpeedThreshold=100,
+                    [Parameter(Mandatory=$FALSE,HelpMessage="Tenant Tag (3-letter abbrebiation - defaults to global:o365_TenOrgDefault if present)[-TenOrg 'XYZ']")]
+                        [ValidateNotNullOrEmpty()]
+                        [string]$TenOrg = $global:o365_TenOrgDefault,
+                    [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials[-Credentials [credential object]]")]
+                        [System.Management.Automation.PSCredential]$Credential
+                ) ;
+                BEGIN{
+                    ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
+                    $Verbose = ($VerbosePreference -eq 'Continue') ;
+                    $_sBnr="#*======v $(${CmdletName}): v======" ;
+                    $smsg = $_sBnr ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ;
+                PROCESS{
+                    TRY{
+                        $configNC = ([ADSI]"LDAP://RootDse").configurationNamingContext ;
+                        $search = new-object DirectoryServices.DirectorySearcher([ADSI]"LDAP://$configNC") ;
+                        $bLocalEdge = $false ; 
+                        if($Sitename -eq $env:COMPUTERNAME){
+                            $smsg = "`$SiteName -eq `$env:COMPUTERNAME:$($SiteName):$($env:COMPUTERNAME)" ; 
+                            $smsg += "`nThis computer appears to be an EdgeRole system (non-ADConnected)" ; 
+                            $smsg += "`n(Blanking `$sitename and continuing discovery)" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                            #$bLocalEdge = $true ; 
+                            $SiteName = $null ; 
+                    
+                        } ; 
+                        If($siteName){
+                            $smsg = "Getting Site: $siteName" ;
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                            $objectClass = "objectClass=site" ;
+                            $objectName = "name=$siteName" ;
+                            $search.Filter = "(&($objectClass)($objectName))" ;
+                            $site = ($search.Findall()) ;
+                            $siteDN = ($site | select -expand properties).distinguishedname  ;
+                        } else {
+                            $smsg = "(No -Site specified, resolving site from local machine domain-connection...)" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                            else{ write-host -foregroundcolor green "$($smsg)" } ;
+                            TRY{$siteDN = [System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().GetDirectoryEntry().distinguishedName}
+                            CATCH [System.Management.Automation.MethodInvocationException]{
+                                $ErrTrapd=$Error[0] ;
+                                if(($ErrTrapd.Exception -match 'The computer is not in a site.') -AND $env:ExchangeInstallPath){
+                                    $smsg = "$($env:computername) is non-ADdomain-connected" ;
+                                    $smsg += "`nand has `$env:ExchangeInstalled populated: Likely Edge Server" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                                    else{ write-host -foregroundcolor YELLOW "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    $vers = (get-item "$($env:ExchangeInstallPath)\Bin\Setup.exe").VersionInfo.FileVersionRaw ; 
+                                    $props = @{
+                                        Name=$env:computername;
+                                        FQDN = ([System.Net.Dns]::gethostentry($env:computername)).hostname;
+                                        Version = "Version $($vers.major).$($vers.minor) (Build $($vers.Build).$($vers.Revision))" ; 
+                                        #"$($vers.major).$($vers.minor)" ; 
+                                        #$exServer.serialNumber[0];
+                                        Roles = [System.Object[]]64 ;
+                                        RoleNames = @('EDGE');
+                                        DistinguishedName =  "CN=$($env:computername),CN=Servers,CN=Exchange Administrative Group (FYDIBOHF23SPDLT),CN=Administrative Groups,CN=First Organization,CN=Microsoft Exchange,CN=Services,CN=Configuration,CN={nnnnnnnn-FAKE-GUID-nnnn-nnnnnnnnnnnn}" ;
+                                        Site = [System.Object[]]'NOSITE'
+                                        ResponseTime = if($rsp){$rsp.ResponseTime} else { 0} ;
+                                        NOTE = "This summary object, returned for a non-AD-connected EDGE server, *approximates* what would be returned on an AD-connected server" ;
+                                    } ;
+                            
+                                    $smsg = "(-NoTest:Defaulting Fast:`$true)" ;
+                                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                                    $props.add('Fast',$true) ;
+                            
+                                    return (New-Object -TypeName PsObject -Property $props) ;
+                                }elseif(-not $env:ExchangeInstallPath){
+                                    $smsg = "Non-Domain Joined machine, with NO ExchangeInstallPath e-vari: `nExchange is not installed locally: local computer resolution fails:`nPlease specify an explicit -Server, or -SiteName" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    $false | write-output ;
+                                } else {
+                                    $smsg = "$($env:computername) is both NON-Domain-joined -AND lacks an Exchange install (NO ExchangeInstallPath e-vari)`nPlease specify an explicit -Server, or -SiteName" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    $false | write-output ;
+                                };
+                            } CATCH {
+                                $siteDN =$ExOPsiteDN ;
+                                write-warning "`$siteDN lookup FAILED, deferring to hardcoded `$ExOPsiteDN string in infra file!" ;
+                            } ;
+                        } ;
+                        $smsg = "Getting Exservers in Site:$($siteDN)" ;
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                        $search = new-object DirectoryServices.DirectorySearcher([ADSI]"LDAP://$configNC") ;
+                        $objectClass = "objectClass=msExchExchangeServer" ;
+                        $version = "versionNumber>=1937801568" ;
+                        $site = "msExchServerSite=$siteDN" ;
+                        $search.Filter = "(&($objectClass)($version)($site))" ;
+                        $search.PageSize = 1000 ;
+                        [void] $search.PropertiesToLoad.Add("name") ;
+                        [void] $search.PropertiesToLoad.Add("msexchcurrentserverroles") ;
+                        [void] $search.PropertiesToLoad.Add("networkaddress") ;
+                        [void] $search.PropertiesToLoad.Add("msExchServerSite") ;
+                        [void] $search.PropertiesToLoad.Add("serialNumber") ;
+                        [void] $search.PropertiesToLoad.Add("DistinguishedName") ;
+                        $exchServers = $search.FindAll() ;
+                        $Aggr = @() ;
+                        foreach($exServer in $exchServers){
+                            $fqdn = ($exServer.Properties.networkaddress |
+                                Where-Object{$_ -match '^ncacn_ip_tcp:'}).split(':')[1] ;
+                            if($NoTest){} else {
+                                $rsp = test-connection $fqdn -count 1 -ea 0 ;
+                            } ;
+                            $props = @{
+                                Name = $exServer.Properties.name[0]
+                                FQDN=$fqdn;
+                                Version = $exServer.Properties.serialnumber
+                                Roles = $exserver.Properties.msexchcurrentserverroles
+                                RoleNames = $null ;
+                                DistinguishedName = $exserver.Properties.distinguishedname;
+                                Site = @("$($exserver.Properties.msexchserversite -Replace '^CN=|,.*$')") ;
+                                ResponseTime = if($rsp){$rsp.ResponseTime} else { 0} ;
+                            } ;
+                            $props.RoleNames = switch ($exserver.Properties.msexchcurrentserverroles){
+                                2       {"MBX"}
+                                4       {"CAS"}
+                                16      {"UM"}
+                                20      {"CAS;UM".split(';')}
+                                32      {"HUB"}
+                                36      {"CAS;HUB".split(';')}
+                                38      {"CAS;HUB;MBX".split(';')}
+                                54      {"MBX"}
+                                64      {"EDGE"}
+                                16385   {"CAS"}
+                                16439   {"CAS;HUB;MBX".split(';')}
+                            }
+                            if($NoTest){
+                                $smsg = "(-NoTest:Defaulting Fast:`$true)" ;
+                                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                                $props.add('Fast',$true) ;
+                            }else {
+                                $props.add('Fast',[boolean]($rsp.ResponseTime -le $SpeedThreshold)) ;
+                            };
+                            $Aggr += New-Object -TypeName PsObject -Property $props ;
+                        } ;
+                        $httmp = @{} ;
+                        if($Roles){
+                            [regex]$rgxRoles = ('(' + (($roles |%{[regex]::escape($_)}) -join '|') + ')') ;
+                            $matched =  @( $aggr | ?{$_.Roles -match $rgxRoles}) ;
+                            foreach($m in $matched){
+                                if($httmp[$m.name]){} else {
+                                    $httmp[$m.name] = $m ;
+                                } ;
+                            } ;
+                        } ;
+                        if($RoleNames){
+                            foreach ($RoleName in $RoleNames){
+                                $matched = @($Aggr | ?{$_.RoleNames -contains $RoleName} ) ;
+                                foreach($m in $matched){
+                                    if($httmp[$m.name]){} else {
+                                        $httmp[$m.name] = $m ;
+                                    } ;
+                                } ;
+                            } ;
+                        } ;
+                        if($Server){
+                            foreach ($Name in $Server){
+                                $matched = @($Aggr | ?{$_.Name -eq $Name} ) ;
+                                foreach($m in $matched){
+                                    if($httmp[$m.name]){} else {
+                                        $httmp[$m.name] = $m ;
+                                    } ;
+                                } ;
+                            } ;
+                        } ;
+                        if(($httmp.Values| measure).count -gt 0){
+                            $Aggr  = $httmp.Values ;
+                        } ;
+                        $smsg = "Returning $((($Aggr|measure).count|out-string).trim()) match summaries to pipeline..." ;
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                        $Aggr | write-output ;
+                    }CATCH{
+                        Write-Error $_ ;
+                    } ;
+                } ;
+                END{
+                    $smsg = "$($_sBnr.replace('=v','=^').replace('v=','^='))" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ;
+            } ;
+        }
+        #*------^ END Function get-ADExchangeServerTDO ^------ ;
+        #endregion GADEXSERVERTDO ; #*------^ END GADEXSERVERTDO ^------
+
+        #region RVARIINVALIDCHARS ; #*------v RVARIINVALIDCHARS v------
+        #*------v Function Remove-InvalidVariableNameChars v------
+        if(-not (gcm Remove-InvalidVariableNameChars -ea 0)){
+            Function Remove-InvalidVariableNameChars ([string]$Name) {
+                ($Name.tochararray() -match '[A-Za-z0-9_]') -join '' | write-output ;
+            };
+        } ;
+        #*------^ END Function Remove-InvalidVariableNameChars ^------
+        #endregion RVARIINVALIDCHARS ; #*------^ END RVARIINVALIDCHARS ^------
+
+        #endregion FUNCTIONS ; #*======^ END FUNCTIONS ^======
+
         #region START-LOG-HOLISTIC #*------v START-LOG-HOLISTIC v------
         # Single log for script/function example that accomodates detect/redirect from AllUsers scope'd installed code, and hunts a series of drive letters to find an alternate logging dir (defers to profile variables)
         #${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ;
@@ -6989,10 +7976,11 @@ function Get-EXOMessageTraceExportedTDO {
         #*------v STEERING VARIS v------
         $useO365 = $true ;
         $useEXO = $true ; 
-        $UseOP=$false ; 
-        $UseExOP=$false ;
+        $UseOP=$true ; 
+        $UseExOP=$true ;
+        $useExopNoDep = $true ; # switch to use Connect-ExchangeServerTDO, vs connect-ex2010 (creds are assumed inherent to the account)
         $useForestWide = $true ; # flag to trigger cross-domain/forest-wide code in AD & EXoP
-        $UseOPAD = $false ; 
+        $UseOPAD = $true ; 
         $UseMSOL = $false ; # should be hard disabled now in o365
         $UseAAD = $true  ; 
         $useO365 = [boolean]($useO365 -OR $useEXO -OR $UseMSOL -OR $UseAAD)
@@ -7010,13 +7998,17 @@ function Get-EXOMessageTraceExportedTDO {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         } elseif(-not($tenOrg) -and $Credential){
             $smsg = "(unconfigured `$TenOrg: asserting from credential)" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
+            if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            $TenOrg = get-TenantTag -Credential $Credential ;
+            if((get-command get-TenantTag).Parameters.keys -contains 'silent'){
+                $TenOrg = get-TenantTag -Credential $Credential -silent ;;
+            }else {
+                $TenOrg = get-TenantTag -Credential $Credential ;
+            }
         } else { 
             # if not using Credentials or a TargetTenants/TenOrg loop, default the $TenOrg on the $env:USERDOMAIN
             $smsg = "(unconfigured `$TenOrg & *NO* `$Credential: fallback asserting from `$env:USERDOMAIN)" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
+            if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             switch -regex ($env:USERDOMAIN){
                 ([regex]('(' + (( @($TORMeta.legacyDomain,$CMWMeta.legacyDomain)  |foreach-object{[regex]::escape($_)}) -join '|') + ')')).tostring() {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
@@ -7043,7 +8035,7 @@ function Get-EXOMessageTraceExportedTDO {
             $o365Cred = $null ;
             if($Credential){
                 $smsg = "`Credential:Explicit credentials specified, deferring to use..." ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                 # get-TenantCredentials() return format: (emulating)
@@ -7067,12 +8059,12 @@ function Get-EXOMessageTraceExportedTDO {
                 $pltGTCred=@{TenOrg=$TenOrg ; UserRole=$null; verbose=$($verbose)} ;
                 if($UserRole){
                     $smsg = "(`$UserRole specified:$($UserRole -join ','))" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     $pltGTCred.UserRole = $UserRole; 
                 } else { 
                     $smsg = "(No `$UserRole found, defaulting to:'CSVC','SID' " ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                     $pltGTCred.UserRole = 'CSVC','SID' ; 
@@ -7112,15 +8104,15 @@ function Get-EXOMessageTraceExportedTDO {
                 if(get-Variable -Name cred$($tenorg) -scope Script -ea 0 ){ remove-Variable -Name cred$($tenorg) -scope Script } ;
                 New-Variable -Name cred$($tenorg) -scope Script -Value $o365Cred.cred ;
                 $smsg = "Resolved $($Tenorg) `$o365cred:$($o365Cred.cred.username) (assigned to `$cred$($tenorg))" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } else {
                 $statusdelta = ";ERROR"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
                 $script:PassStatus += $statusdelta ;
                 set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatettus_$($tenorg)).value + $statusdelta) ;
                 $smsg = "Unable to resolve $($tenorg) `$o365Cred value!"
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 throw "Unable to resolve $($tenorg) `$o365Cred value!`nEXIT!"
                 Break ;
             } ;
@@ -7226,6 +8218,7 @@ function Get-EXOMessageTraceExportedTDO {
         # steer all onprem code on $XXXMeta.ExOPAccessFromToro & Ex10Server values
         #$UseOP=$true ; 
         #$UseExOP=$true ;
+        #$useExopNoDep = $true # switch to use Connect-ExchangeServerTDO, vs connect-ex2010 (creds are assumed inherent to the account) 
         #$useForestWide = $true ; # flag to trigger cross-domain/forest-wide code in AD & EXoP
         <# no onprem dep
         if((Get-Variable  -name "$($TenOrg)Meta").value.ExOPAccessFromToro -AND (Get-Variable  -name "$($TenOrg)Meta").value.Ex10Server){
@@ -7241,95 +8234,105 @@ function Get-EXOMessageTraceExportedTDO {
         } ;
         #>
         if($UseOP){
-            #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
-            # do the OP creds too
-            $OPCred=$null ;
-            # default to the onprem svc acct
-            # userrole='ESVC','SID'
-            #$pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC','SID'; verbose=$($verbose)} ;
-            # userrole='SID','ESVC'
-            $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='SID','ESVC'; verbose=$($verbose)} ;
-            $smsg = "get-HybridOPCredentials w`n$(($pltGHOpCred|out-string).trim())" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
-                # make it script scope, so we don't have to predetect & purge before using new-variable
-                if(get-Variable -Name "cred$($tenorg)OP" -scope Script -ea 0 ){ remove-Variable -Name "cred$($tenorg)OP" -scope Script } ;
-                New-Variable -Name "cred$($tenorg)OP" -scope Script -Value $OPCred ;
-                $smsg = "Resolved $($Tenorg) `$OPCred:$($OPCred.username) (assigned to `$cred$($tenorg)OP)" ;
+            if($useExopNoDep){
+                # Connect-ExchangeServerTDO use: creds are implied from the PSSession creds; assumed to have EXOP perms
+            } else {
+                #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
+                # do the OP creds too
+                $OPCred=$null ;
+                # default to the onprem svc acct
+                # userrole='ESVC','SID'
+                #$pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC','SID'; verbose=$($verbose)} ;
+                # userrole='SID','ESVC'
+                $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='SID','ESVC'; verbose=$($verbose)} ;
+                $smsg = "get-HybridOPCredentials w`n$(($pltGHOpCred|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
+                    # make it script scope, so we don't have to predetect & purge before using new-variable
+                    if(get-Variable -Name "cred$($tenorg)OP" -scope Script -ea 0 ){ remove-Variable -Name "cred$($tenorg)OP" -scope Script } ;
+                    New-Variable -Name "cred$($tenorg)OP" -scope Script -Value $OPCred ;
+                    $smsg = "Resolved $($Tenorg) `$OPCred:$($OPCred.username) (assigned to `$cred$($tenorg)OP)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } else {
+                    $statusdelta = ";ERROR"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                    $script:PassStatus += $statusdelta ;
+                    set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
+                    $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    throw "Unable to resolve $($tenorg) `$OPCred value!`nEXIT!"
+                    Break ;
+                } ;
+                $smsg= "Using OnPrem/EXOP cred:`$cred$($tenorg)OP:$((Get-Variable -name "cred$($tenorg)OP" ).value.username)" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            } else {
-                $statusdelta = ";ERROR"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
-                $script:PassStatus += $statusdelta ;
-                set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
-                $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                throw "Unable to resolve $($tenorg) `$OPCred value!`nEXIT!"
-                Break ;
-            } ;
-            $smsg= "Using OnPrem/EXOP cred:`$cred$($tenorg)OP:$((Get-Variable -name "cred$($tenorg)OP" ).value.username)" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            <### CALLS ARE IN FORM: (cred$($tenorg))
-            $pltRX10 = @{
-                Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
-                #verbose = $($verbose) ;
-                Verbose = $FALSE ; 
-            } ;
-            $1stConn = $false ; # below uses silent suppr for both x10 & xo!
-            if($1stConn){
-                $pltRX10.silent = $pltRXO.silent = $false ;
-            } else {
-                $pltRX10.silent = $pltRXO.silent =$true ;
-            } ;
-            if($pltRX10){ReConnect-Ex2010 @pltRX10 }
-            else {ReConnect-Ex2010 }
-            #$pltRx10 creds & .username can also be used for local ADMS connections
-            ###>
-            $pltRX10 = @{
-                Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
-                #verbose = $($verbose) ;
-                Verbose = $FALSE ; 
-            } ;
-            if((get-command Reconnect-Ex2010).Parameters.keys -contains 'silent'){
-                $pltRX10.add('Silent',$silent) ;
-            } ;
-
+                                                                            <### CALLS ARE IN FORM: (cred$($tenorg))
+                $pltRX10 = @{
+                    Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
+                    #verbose = $($verbose) ;
+                    Verbose = $FALSE ; 
+                } ;
+                $1stConn = $false ; # below uses silent suppr for both x10 & xo!
+                if($1stConn){
+                    $pltRX10.silent = $pltRXO.silent = $false ;
+                } else {
+                    $pltRX10.silent = $pltRXO.silent =$true ;
+                } ;
+                if($pltRX10){ReConnect-Ex2010 @pltRX10 }
+                else {ReConnect-Ex2010 }
+                #$pltRx10 creds & .username can also be used for local ADMS connections
+                ###>
+                $pltRX10 = @{
+                    Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
+                    #verbose = $($verbose) ;
+                    Verbose = $FALSE ; 
+                } ;
+                if((get-command Reconnect-Ex2010).Parameters.keys -contains 'silent'){
+                    $pltRX10.add('Silent',$false) ;
+                } ;
+            } ; 
             # defer cx10/rx10, until just before get-recipients qry
-            #endregion GENERIC_EXOP_CREDS_&_SRVR_CONN #*------^ END GENERIC EXOP CREDS & SRVR CONN BP ^------
             # connect to ExOP X10
             if($useEXOP){
-                if($pltRX10){
-                    #ReConnect-Ex2010XO @pltRX10 ;
-                    ReConnect-Ex2010 @pltRX10 ;
-                } else { Reconnect-Ex2010 ; } ;
-                #Add-PSSnapin -Name 'Microsoft.Exchange.Management.PowerShell.SnapIn'
-                #TK: add: test Exch & AD functional connections
-                TRY{
-                    if(get-command -module (get-module |?{$_.name -like 'tmp_*'}).name -name 'get-OrganizationConfig'){} else {
-                        $smsg = "(mangled Ex10 conn: dx10,rx10...)" ; 
-                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                        disconnect-ex2010 ; reconnect-ex2010 ; 
-                    } ; 
-                    if(-not ($OrgName = ((get-OrganizationConfig).DistinguishedName.split(',') |?{$_ -like 'DC=*'}) -join '.' -replace 'DC=','')){
-                        $smsg = "Missing Exchange Connection! (no (Get-OrganizationConfig).name returned)" ; 
-                        throw $smsg ; 
-                        $smsg | write-warning  ; 
-                    } ; 
-                } CATCH {
-                    $ErrTrapd=$Error[0] ;
-                    $smsg = $ErrTrapd ;
-                    $smsg += "`n";
-                    $smsg += $ErrTrapd.Exception.Message ;
-                    if ($logging) { _write-log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    CONTINUE ;
-                } ;
-            } else { 
-          
+                if($useExopNoDep){ 
+                    $smsg = "(Using ExOP:Connect-ExchangeServerTDO())" ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;           
+                    TRY{
+                        $Site=[System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().Name 
+                    }CATCH{$Site=$env:COMPUTERNAME} ;
+                    $PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
+                } else {
+                    if($pltRX10){
+                        #ReConnect-Ex2010XO @pltRX10 ;
+                        ReConnect-Ex2010 @pltRX10 ;
+                    } else { Reconnect-Ex2010 ; } ;
+                    #Add-PSSnapin -Name 'Microsoft.Exchange.Management.PowerShell.SnapIn'
+                    #TK: add: test Exch & AD functional connections
+                    TRY{
+                        if(get-command -module (get-module |?{$_.name -like 'tmp_*'}).name -name 'get-OrganizationConfig'){} else {
+                            $smsg = "(mangled Ex10 conn: dx10,rx10...)" ; 
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            disconnect-ex2010 ; reconnect-ex2010 ; 
+                        } ; 
+                        if(-not ($OrgName = ((get-OrganizationConfig).DistinguishedName.split(',') |?{$_ -like 'DC=*'}) -join '.' -replace 'DC=','')){
+                            $smsg = "Missing Exchange Connection! (no (Get-OrganizationConfig).name returned)" ; 
+                            throw $smsg ; 
+                            $smsg | write-warning  ; 
+                        } ; 
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = $ErrTrapd ;
+                        $smsg += "`n";
+                        $smsg += $ErrTrapd.Exception.Message ;
+                        if ($logging) { _write-log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        CONTINUE ;
+                    } ;
+                }
             } ; 
             if($useForestWide){
                 #region  ; #*------v OPTIONAL CODE TO ENABLE FOREST-WIDE NATIVE EXCHANGE SUPPORT v------
@@ -7347,7 +8350,9 @@ function Get-EXOMessageTraceExportedTDO {
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         }  ;  # if-E $UseOP
-
+        #endregion GENERIC_EXOP_CREDS_&_SRVR_CONN #*------^ END GENERIC EXOP CREDS & SRVR CONN BP ^------
+            
+            
         #region UseOPAD #*------v UseOPAD v------
         if($UseOP -OR $UseOPAD){
             #region GENERIC_ADMS_CONN_&_XO #*------v GENERIC ADMS CONN & XO  v------
@@ -7369,10 +8374,10 @@ function Get-EXOMessageTraceExportedTDO {
                 if($useForestWide){
                     #region  ; #*------v OPTIONAL CODE TO ENABLE FOREST-WIDE AD GC QRY SUPPORT v------
                     $smsg = "(`$useForestWide:$($useForestWide)):Enabling AD Forestwide)" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     $smsg = 'Set-AdServerSettings -ViewEntireForest `$True' ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     #TK 9:44 AM 10/6/2022 need org wide for rolegrps in parent dom (only for onprem RBAC, not EXO)
                     $GcFwide = "$((Get-ADDomainController -Discover -Service GlobalCatalog).hostname):3268" ;        
@@ -7408,17 +8413,17 @@ function Get-EXOMessageTraceExportedTDO {
             # TODO 1/15/2021
             $useEXOforGroups = $true ; 
             $smsg = "$($TenOrg):HAS NO ON-PREM ACTIVEDIRECTORY, DEFERRING ALL GROUP ACCESS & MGMT TO NATIVE EXO CMDS!" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         } ; 
         if($useForestWide -AND -not $GcFwide){
             #region  ; #*------v OPTIONAL CODE TO ENABLE FOREST-WIDE ACTIVEDIRECTORY SUPPORT: v------
             $smsg = "`$GcFwide = Get-ADDomainController -Discover -Service GlobalCatalog" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             $GcFwide = "$((Get-ADDomainController -Discover -Service GlobalCatalog).hostname):3268" ;
             $smsg = "Discovered `$GcFwide:$($GcFwide)" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             #endregion  ; #*------^ END OPTIONAL CODE TO ENABLE FOREST-WIDE ACTIVEDIRECTORY SUPPORT ^------
         } ;
@@ -7782,7 +8787,7 @@ function Get-EXOMessageTraceExportedTDO {
                 $Msgs += @($PageMsgs)  ;
             } until ($PageMsgs -eq $null) ;
             $Msgs=$Msgs| Sort Received ;
-            $smsg = "Raw sender/recipient Msgs:$(($Msgs|measure).Count)" ;
+            $smsg = "Raw sender/recipient events:$(($Msgs|measure).Count)" ;
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
 
@@ -7824,7 +8829,7 @@ function Get-EXOMessageTraceExportedTDO {
                 # reselect with local time variant
                 $Msgs = $Msgs | select $propsMTAll ; 
                 if($DoExports){
-                    $smsg = "($(($Msgs|measure).count)msgs | export-csv $($ofile))" ; 
+                    $smsg = "($(($Msgs|measure).count) events | export-csv $($ofile))" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     TRY{
@@ -7851,49 +8856,233 @@ function Get-EXOMessageTraceExportedTDO {
 
                 $hReports.add('MTMessages',$msgs) ; 
 
-                $smsg = "Status Distrib:" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                $smsg = "`n#*------v Status DISTRIB v------" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor blue "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-
                 if($Msgs){
+                    $smsg = "`n#*------v Status DISTRIB v------`n`n" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor blue "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+
                     $hReports.add('StatusHisto',($Msgs | select -expand Status | group | sort count,count -desc | select count,name)) ;
 
                     $smsg = "`n$(($hReports.StatusHisto|out-string).trim())" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    $smsg = "`n#*------^ Status DISTRIB ^------" ;
-
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    $smsg = "`n`n#*------^ Status DISTRIB ^------`n`n" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor blue "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    $smsg = "`n#*------v MOST RECENT MATCH v------" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    $smsg = "`n`n#*------v MOST RECENT MATCH v------`n`n" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
 
                     $hReports.add('MsgLast',($msgs[-1]| fl $propsMsgDump)) ;
                     $smsg = "`n$(($hReports.MsgLast |out-string).trim())";
-
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    $smsg = "`n#*------^ MOST RECENT MATCH ^------" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    $smsg = "`n`n#*------^ MOST RECENT MATCH ^------`n`n" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor white "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
 
                 } ; 
 
-                
+                if($mFails = $msgs | ?{$_.status -eq 'Failed'} | select -first $MessageTraceDetailLimit){
+                    $smsg = "Expanded analysis on first $($MessageTraceDetailLimit) Status:Failed messages..." ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
 
-                if($mFails = $msgs | ?{$_.status -eq 'Failed'}){
+                    if($mFails | ?{$_.Subject -notmatch '^Recall:\s' -AND $_.Subject -notmatch '^Automatic\sreply:\s'}){
+                        $smsg = "Other Fails detected: Opening ExoP & ADMS connections..." ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        #region CXOP ; #*------v CXOP v------
+                        $smsg = "Resolve ComputerSite..." ;
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+                        TRY{
+                            $Site=[System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().Name
+                        }CATCH{
+                            $Site=$env:COMPUTERNAME ;
+                            $smsg = "Non-AD-Connected system, setting `$Site:`$env:COMPUTERNAME" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        } ;
+                        $smsg = "Resolved ComputerSite: $($Site)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $smsg = "Discovering and connecting to a local Exchange server in local AD Site"  ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $pltNPSS=[ordered]@{
+                            siteName = $Site ;
+                            RoleNames = @('HUB','CAS') ;
+                            Verbose = ($PSBoundParameters['Verbose'] -eq $true) ;
+                        } ;
+                        $smsg = "Connect-ExchangeServerTDO w`n$(($pltNPSS|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $PSSession = Connect-ExchangeServerTDO @pltNPSS ;
+                        #endregion CXOP ; #*------^ END CXOP ^------
+                        #region loadADMS ; #*------v loadADMS v------
+                        if(-not (get-command -name get-aduser -ea 0)){
+                            $env:ADPS_LoadDefaultDrive = 0 ; $sName="ActiveDirectory"; if (!(Get-Module | where {$_.Name -eq $sName})) {Import-Module $sName -ea Stop}
+                        } ; 
+                        #endregion loadADMS ; #*------^ END loadADMS ^------
+                    } ; 
+                    
+                    $FailAggr = @() ;                                         
+                    foreach($failed in $mFails){
+                        # 'RunspaceId',
+                        # $propsMTAll = 'Organization','MessageId','Received', @{N='ReceivedLocal';E={[datetime]$_.Received.ToLocalTime()}},'SenderAddress','RecipientAddress','Subject','Status','ToIP','FromIP','Size','MessageTraceId','StartDate','EndDate','Index'
+
+                        if($host.version.major -ge 3){$FailMsgSummary=[ordered]@{Dummy = $null ;} }
+                        else {$FailMsgSummary=@{Dummy = $null ;} ;}
+                        If($FailMsgSummary.Contains("Dummy")){$FailMsgSummary.remove("Dummy")} ;
+                        $fieldsnull = 'Organization','MessageId','Received','ReceivedLocal','SenderAddress',
+                            'RecipientAddress','Subject','Status','ToIP','FromIP','Size','MessageTraceId',
+                            'StartDate','EndDate','Index','FailXoRecipientType','FailXopRecipientType',
+                            'FailDetailEvent','FailDetailDetail','ADUserTermOU' ;  ; 
+                        $fieldsnull | % { $FailMsgSummary.add($_,$null) } ;
+                        $fieldsbool = 'isFailed','ADUserDisabled'
+                            #,'isFailedOOO','isFailRecall','isFailOther','isFailOtherAcctsBlock',
+                            #'isFailSecBlock','isFailMailLoop','isFailBrokenTerm','isFailNoMailbox', ; 
+                        # 4:11 PM 11/22/2024 pulled the is*, do it by parsing the FailCode instead
+                        $fieldsbool | % { $FailMsgSummary.add($_,$false) } ;
+
+
+                        <#$FailMsgSummary=[indexed]@{
+                            Organization = $failed.Organization ; 
+                            MessageId = $failed.MessageId ; 
+                            Received = $failed.Received ; 
+                            ReceivedLocal = $failed.ReceivedLocal ; 
+                            SenderAddress = $failed.SenderAddress ; 
+                            RecipientAddress = $failed.RecipientAddress ; 
+                            Subject = $failed.Subject ; 
+                            Status = $failed.Status ; 
+                            ToIP = $failed.ToIP ; 
+                            FromIP = $failed.FromIP ; 
+                            Size = $failed.Size ; 
+                            MessageTraceId = $failed.MessageTraceId ; 
+                            StartDate = $failed.StartDate ; 
+                            EndDate = $failed.EndDate ; 
+                            Index = $failed.Index ;      
+                            isFailed = $true ; 
+                            isFailedOOO = $false ;
+                            isFailRecall = $false ;
+                            isFailOther = $false ;
+                            isFailOtherAcctsBlock = $false ; 
+                            isFailSecBlock = $false ; 
+                            isFailMailLoop = $false ;
+                            isFailBrokenTerm = $false ; 
+                            isFailNoMailbox = $false ; 
+                            FailXoRecipientType = $null ; 
+                            FailXopRecipientType = $null ;
+                            FailDetailEvent = $null ; 
+                            FailDetailDetail = $null ; 
+                            ADUserDisabled = $false ; 
+                            ADUserTermOU = $null ; 
+                        } ; 
+                        #>
+                        $FailMsgSummary.Organization = $failed.Organization ; 
+                        $FailMsgSummary.MessageId = $failed.MessageId ; 
+                        $FailMsgSummary.Received = $failed.Received ; 
+                        $FailMsgSummary.ReceivedLocal = $failed.ReceivedLocal ; 
+                        $FailMsgSummary.SenderAddress = $failed.SenderAddress ; 
+                        $FailMsgSummary.RecipientAddress = $failed.RecipientAddress ; 
+                        $FailMsgSummary.Subject = $failed.Subject ; 
+                        $FailMsgSummary.Status = $failed.Status ; 
+                        $FailMsgSummary.ToIP = $failed.ToIP ; 
+                        $FailMsgSummary.FromIP = $failed.FromIP ; 
+                        $FailMsgSummary.Size = $failed.Size ; 
+                        $FailMsgSummary.MessageTraceId = $failed.MessageTraceId ; 
+                        $FailMsgSummary.StartDate = $failed.StartDate ; 
+                        $FailMsgSummary.EndDate = $failed.EndDate ; 
+                        $FailMsgSummary.Index = $failed.Index ;      
+                        $FailMsgSummary.isFailed = $true ; 
+                        <#
+                        $FailMsgSummary.isFailedOOO = $false ;
+                        $FailMsgSummary.isFailRecall = $false ;
+                        $FailMsgSummary.isFailOther = $false ;
+                        $FailMsgSummary.isFailOtherAcctsBlock = $false ; 
+                        $FailMsgSummary.isFailSecBlock = $false ; 
+                        $FailMsgSummary.isFailMailLoop = $false ;
+                        $FailMsgSummary.isFailBrokenTerm = $false ; 
+                        $FailMsgSummary.isFailNoMailbox = $false ; 
+                        #>
+                        $FailMsgSummary.FailCode = $null ; 
+                        $FailMsgSummary.FailXoRecipientType = $null ; 
+                        $FailMsgSummary.FailXopRecipientType = $null ;
+                        $FailMsgSummary.FailDetailEvent = $null ; 
+                        $FailMsgSummary.FailDetailDetail = $null ; 
+                        $FailMsgSummary.ADUserDisabled = $false ; 
+                        $FailMsgSummary.ADUserTermOU = $null ;
+                        #$rgxFailOOOSubj = '^Automatic\sreply:\s' ; 
+                        if($failed | ?{$_.Subject -match $rgxFailOOOSubj}){
+                            $FailMsgSummary.FailCode += @('FailOOO') ; 
+                        } ; 
+                        #$rgxFailRecallSubj = '^Recall:\s' ; 
+                        if($failed | ?{$_.Subject -match $rgxFailRecallSubj}){
+                            $FailMsgSummary.FailCode += @('FailRecall') ; 
+                        } ; 
+                        #$rgxFailOtherAcctBlock = 'OtherAccts-External-Mail-Rejection' ; 
+                        #$FailOtherAcctBlockExemptionGroup = 'LYN-DL-OPExch-OtherAcctMbxs-ExternalMailOK@toro.com' ; 
+                        if($failed | ?{$_.Subject -notmatch $rgxFailRecallSubj -AND $_.Subject -notmatch $rgxFailOOOSubj}){
+                            #$FailMsgSummary.isFailOther = $true ; 
+                            $FODetail =  $failed | Get-xoMessageTraceDetail -ea STOP; 
+                            $FailMsgSummary.FailDetailEvent = $FODetail.event ; 
+                            $FailMsgSummary.FailDetailDetail = $FODetail.Detail ; 
+                            if($FODetail | ?{$_.event -eq 'Transport rule' -AND $_.Detail -match $rgxFailOtherAcctBlock}){
+                                $FailMsgSummary.FailCode += @('FailOtherAcctBlock') ; 
+                            } ; 
+                            #$rgxFailConfRmExtBlock = 'ConfRm-External-Mail-Rejection' ; 
+                            if($FODetail | ?{$_.event -eq 'Transport rule' -AND $_.Detail -match $rgxFailConfRmExtBlock}){
+                                $FailMsgSummary.FailCode += @('FailConfRmExtBlock') ; 
+                            } ; 
+                            #$rgxFailSecBlock = '^Security(\s-\s|-)' ; 
+                            if($FODetail | ?{$_.event -eq 'Transport rule' -AND $_.Detail -match $rgxFailSecBlock}){
+                                if(($FODetail.detail | select -unique ) -match "Transport\srule:\s'(.*)',"){
+                                    $TRule = $matches[0] ; 
+                                    $FailMsgSummary.FailCode += @("FailSecBlock:$($Trule)") ; 
+                                }else{
+                                    $FailMsgSummary.FailCode += @('FailSecBlock') ; 
+                                } ; 
+                            }
+                            if($FODetail | ?{$_.event -eq 'FAIL' -AND $_.Detail -match 'Hop\scount\sexceeded\s-\spossible\smail\sloop'}){
+                                $FailMsgSummary.FailCode += @('FailMailLoop') ; 
+                                $xopRcp = $xoRCP = $adu = $null ; 
+                                $xopRcp = get-recipient $failed.RecipientAddress -ea 0;
+                                $xoRCP = get-xorecipient $failed.RecipientAddress -ea 0 ; 
+                                $adu = get-aduser -id $xoRCP.alias -ea 0 ; 
+                                $FailMsgSummary.FailXoRecipientType = $xoRCP.RecipientTypeDetails  ; 
+                                $FailMsgSummary.FailXopRecipientType = $xopRcp.RecipientTypeDetails  ; 
+                                if($FailMsgSummary.FailXoRecipientType -eq 'MailUser' -AND $FailMsgSummary.FailXopRecipientType -eq 'RemoteUserMailbox'){
+                                    $FailMsgSummary.FailCode += @('FailBrokenTerm') ; 
+                                    $FailMsgSummary.FailCode += @('FailNoMailbox') ; 
+                                } ; 
+                                if($adu.DistinguishedName -match 'OU=(Disabled|TERMedUsers|TERMedUserSharedEmail),'){
+                                    $FailMsgSummary.ADUserTermOU = ($adu.DistinguishedName.split(',') | select -skip 1) -join ','  
+                                    $FailMsgSummary.FailCode += @('FailBrokenTerm','FailADUserTermOU') ; 
+                                } ;
+                                if($adu.Enabled -eq $false){
+                                    $FailMsgSummary.ADUserDisabled = $true  ; 
+                                    $FailMsgSummary.FailCode += @('FailBrokenTerm','FailADUserDisabled') ; 
+                                } ;
+                            }
+                        } ; 
+                        if($FailMsgSummary.FailCode){
+                            # reduce to single instance of each code
+                            $FailMsgSummary.FailCode = $FailMsgSummary.FailCode | select -unique ;
+                        } ; 
+                        $FailAggr +=  New-Object -TypeName PsObject -Property $FailMsgSummary
+                        #[pscustomobject]$FailMsgSummary ; 
+                    } ; 
+                    #---
+
                     $smsg = "adding:`$hReports.MsgsFail" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    $hReports.add('MsgsFail',$mFails) ; 
+                    $hReports.add('MsgsFail',$FailAggr) ; 
                     $ofileF = $ofile.replace('-EXOMsgTrc,','FAILMsgs,') ;
                     if($DoExports){
                         TRY{
-                            $mFails | export-csv -notype -path $ofileF -ea STOP ;
+                            $FailAggr | export-csv -notype -path $ofileF -ea STOP ;
                             $smsg = "export-csv'd to:`n$((resolve-path $ofileF).path)" ; 
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                             else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
@@ -7904,148 +9093,189 @@ function Get-EXOMessageTraceExportedTDO {
                             else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         } ; 
                     } ; 
-                    if($mOOO = $mFails | ?{$_.Subject -match '^Automatic\sreply:\s'}){
-                        $smsg = "adding:`$hReports.MsgsFailOOO" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                        else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                        $hReports.add('MsgsFailOOO',$mOOO) ; 
-                        $smsg = $sBnr3="`n#*~~~~~~v Status FAILED: Expected Policy Blocked External OutOfOffice v~~~~~~" ;
-                        $smsg += "`n$($mOOO| measure | select -expand count) msgs:Expected Out-of-Office Policy:(attempt to send externally)`n$(($mOOO| ft -a $prpGXMTfta |out-string).trim())" ;
-                        $smsg += "`n$($sBnr3.replace('~v','~^').replace('v~','^~'))`n"  ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                        else{ write-host -foregroundcolor blue "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    } ;
-                    if($mRecl = $mFails | ?{$_.Subject -match '^Recall:\s'}){
-                        $smsg = "adding:`$hReports.MsgsFailRecall" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                        else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                        $hReports.add('MsgsFailRecall',$mRecl) ; 
-                        $smsg = $sBnr3="`n#*~~~~~~v Status FAILED: Expected: Recalled message v~~~~~~" ;
-                        $smsg += "`n$($mRecl| measure | select -expand count) msgs:Expected Sender Recalled Message `n$(($mRecl| ft -a $prpGXMTfta |out-string).trim())" ;
-                        $smsg += "`n$($sBnr3.replace('~v','~^').replace('v~','^~'))`n"  ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                        else{ write-host -foregroundcolor blue "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    } ;
-                    if($mFailsOther = $mFails | ?{$_.Subject -notmatch '^Recall:\s' -AND $_.Subject -notmatch '^Automatic\sreply:\s'}){
-                        $smsg = "adding:`$hReports.MsgsFailOther" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                        else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                        $hReports.add('MsgsFailOther',$mFailsOther) ; 
-                        $smsg = $sBnr3="`n#*~~~~~~v Status FAILED: Other Failure message v~~~~~~" ;
-                        $smsg += "`n$(($mFailsOther | ft -a |out-string).trim())" ;
-                        $smsg += "`n$($sBnr3.replace('~v','~^').replace('v~','^~'))`n"  ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                        else{ write-host -foregroundcolor blue "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
 
-                        if($DetailedOtherFails){
-                            $aggDetailedOtherFails = @() ; 
-                            $smsg = "-DetailedOtherFails: running Get-xoMessageTraceDetail on Other Fails (to MessageTraceDetailLimit:$($MessageTraceDetailLimit))" ; 
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-                            $mfNum = 0 ; 
-                            foreach($mf in ($mFailsOther | select -first $MessageTraceDetailLimit)){
-                                $mfNum++ ; 
-                                $smsg = $sBnr4="`n#*``````v Other Fail#$($mfNum) : v``````" ; 
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H4 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                $smsg = ":`n$(($mf|out-string).trim())" ; 
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                TRY{
-                                    $FODetail =  $mf | Get-xoMessageTraceDetail -ea STOP; 
-                                    $aggDetailedOtherFails += $FODetail ; 
-                                    $smsg = "Matching: Get-xoMessageTraceDetail:`n$(($FODetail | out-string).trim())" ; 
-                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
 
-                                    if($FODetail | ?{$_.event -eq 'Transport rule' -AND $_.Detail -match 'OtherAccts-External-Mail-Rejection'}){
-                                        $smsg = $sBnr3="`n#*~~~~~~^ Status FAILED: Expected: Security Policy Block (Other Accounts OU Mailbox Mail Block) ^~~~~~~`n" ;
-                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                                    } ; 
-                                    if($FODetail | ?{$_.event -eq 'FAIL' -AND $_.Detail -match 'Hop\scount\sexceeded\s-\spossible\smail\sloop'}){
-                                        $smsg = $sBnr3="`n#*~~~~~~^ Status FAILED: Expected: Mail Loop (unresolvable incomplete offboarded user) ^~~~~~~`n" ;
-                                        $smsg += "`n (Likely license removed => deleted target mailbox, left ADUser and OnPrem Recipient objects)"
-                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    # divide up the results & report on the types
+                    $FailVariants = $hReports.MsgsFail | group failcode | select -expand name; 
 
-                                        $smsg = "Checking function of problem recipient in ExchangeOnline and ExchangeOnprem" ; 
-                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $prpFailMsg = 'ReceivedLocal','SenderAddress','RecipientAddress','Subject','Status' ; 
 
-                                        #region CXOP ; #*------v CXOP v------
-                                        $smsg = "Resolve ComputerSite..." ;
-                                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
-                                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
-                                        TRY{
-                                            $Site=[System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().Name
-                                        }CATCH{
-                                            $Site=$env:COMPUTERNAME ;
-                                            $smsg = "Non-AD-Connected system, setting `$Site:`$env:COMPUTERNAME" ;
-                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
-                                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                        } ;
-                                        $smsg = "Resolved ComputerSite: $($Site)" ;
-                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
-                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                        $smsg = "Discovering and connecting to a local Exchange server in local AD Site"  ;
-                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
-                                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                        $pltNPSS=[ordered]@{
-                                            siteName = $Site ;
-                                            RoleNames = @('HUB','CAS') ;
-                                            Verbose = ($PSBoundParameters['Verbose'] -eq $true) ;
-                                        } ;
-                                        $smsg = "Connect-ExchangeServerTDO w`n$(($pltNPSS|out-string).trim())" ;
-                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                        $PSSession = Connect-ExchangeServerTDO @pltNPSS ;
-                                        #endregion CXOP ; #*------^ END CXOP ^------
-                                        #region loadADMS ; #*------v loadADMS v------
-                                        if(-not (get-command -name get-aduser -ea 0)){
-                                            $env:ADPS_LoadDefaultDrive = 0 ; $sName="ActiveDirectory"; if (!(Get-Module | where {$_.Name -eq $sName})) {Import-Module $sName -ea Stop}
-                                        } ; 
-                                        #endregion loadADMS ; #*------^ END loadADMS ^------
+                    # do the single fails
+                    $SingleFails = $hReports.MsgsFail | ?{-not ($_.failcode -is [array])} ; 
+                    $FailVariantsSingle = $SingleFails | group failcode | select -expand name; 
+                    foreach($FV in $FailVariantsSingle){
+                        $theseFails = $SingleFails |?{$_.failcode -eq $FV} ; 
+                        #$pltWH=get-colorcombo -Rand ;
+                        #$Host.UI.RawUI.BackgroundColor = $pltWH.BackgroundColor ;
+                        #$Host.UI.RawUI.ForegroundColor = $pltWH.ForegroundColor ;
+                        $hsFailRpt = @"
 
-                                        $xopRcp = get-recipient $mf.RecipientAddress -ea 0;
-                                        $xoRCP = get-xorecipient $mf.RecipientAddress -ea 0 ; 
-                                        $adu = get-aduser -id $xoRCP.alias -ea 0 ; 
+*------v Delivery Status:Failed of type: $($FV) v------
 
-                                        if($xopRcp.RecipientTypeDetails -eq 'RemoteUserMailbox'){
-                                            $smsg = "$($xopRcp.primarysmtpaddress) onprem is NOT a functional recipient for delivery (RemoteUserMailbox:forwards all traffic to cloud)" ; 
-                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                                            if($xoRCP.RecipientTypeDetails -eq 'MailUser'){
-                                                $smsg = "$($xoRCP.primarysmtpaddress) cloud recipient is NOT a functional recipient for delivery (MailUser:forwards all traffic to OnPrem mail system)" ; 
-                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                                            }
-                                            if($adu.DistinguishedName -match ',OU=Disabled,' -OR $adu.Enabled -eq $false ){
-                                                $smsg = "CONFIRMED:Problem recipient is in DISABLED OU"
-                                                $smsg += "`nAND/OR ADUser is DISABLED" ; 
-                                                $smsg += "`n=>Improper offboard - no functional recipient in ExchangeOnline or Exchange Onprem" ;
-                                                $smsg += "`n=>Offboard process created a mail loop" ; 
-                                                $smsg += "`nADUser`n$(($adu | ft -a Enabled,DistinguishedName|out-string).trim())" ; 
-                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                                            } ; 
-                                        } ; 
-                                    } ; 
-                                } CATCH {
-                                    $ErrTrapd=$Error[0] ;
-                                    $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
-                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
-                                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                } ; 
-                            } ; 
-                            if($aggDetailedOtherFails){
-                                $smsg = "adding:`$hReports.MsgsFailOtherDetail" ; 
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                                else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                                $hReports.add('MsgsFailOtherDetail',$aggDetailedOtherFails) ; 
-                            } ; 
-                        } ; 
+$(($theseFails|ft -a $prpFailMsg  | out-string).trim())
 
-                    } ;
+$(
+    switch -regex ($FV){
+        'FailOtherAcctBlock' {
+            "`n$($FV): Blocked by Security-mandated Transport rule:$($rgxFailOtherAcctBlock)"
+            "`n -To Exempt from Block: Request SvcDesk add the mailbox to $($FailOtherAcctBlockExemptionGroup) group"
+            "`n -To suppress DDG Membership for converted SharedMailboxes (to UserMailbox, w logon): set CustomAttribute4: DL-Exclude"
+        }
+        'FailConfRmExtBlock'{
+            "`n$($FV): Blocked by Security-mandated Transport rule:$($rgxFailConfRmExtBlock)`n(Firm mandate: No exemption permitted for ResourceMailboxes)`n"
+        }
+        'FailOOO'{
+            "`n$($FV): Blocked by Security Policy: Blocked external delivery of Out-Of-Office messages`n(Global Security policy mandate: No exemption permitted)`n"
+        }
+        'FailRecall' {
+            "`n$($FV): Expected fail: Sender issued Outlook Recall of message`n"
+        }
+        'FailSecBlock' {
+            "`n$($FV): Blocked by Security-configured Transport rule`n"
+        }
+        'FailBrokenTerm|FailNoMailbox|FailMailLoop' {
+            "`n$($FV): No valid recipient found: Broken offboarded user: Email looped between environments until hop count exceeded, and Non-Delivery Notice (NDR) was issued`n"
+        }
+        'FailADUserTermOU' {
+            "`n$($FV): No valid recipient found: Broken offboarded user:ADUser is in Term OU: Email looped between environments until hop count exceeded, and Non-Delivery Notice (NDR) was issued`n"
+        }
+        'FailADUserDisabled' {
+            "`n$($FV): No valid recipient found: Broken offboarded user: ADUser is disabled: Email looped between environments until hop count exceeded, and Non-Delivery Notice (NDR) was issued`n"
+        }  
+        default{
+            "`n$($FV): Undefined error (not configured as a response in this script)`n"
+        }   
+    }
+)
+
+*------^ END Delivery Status:Failed of type: $($FV) ^------
+
+"@ ; 
+                        #write-host @pltWH $hsFailRpt ; 
+                        $smsg = $hsFailRpt ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    } ;  # loop-E
+
+                    $ArrayFails = $hReports.MsgsFail | ?{$_.failcode -is [array]} ; 
+                    $FailVariantsArray = $ArrayFails | group failcode | select -expand name; 
+                    $BadTermFailCodes = 'FailBrokenTerm','FailNoMailbox','FailADUserTermOU','FailADUserDisabled' ; 
+                    [regex]$rgxBadTerm = ('(' + (($BadTermFailCodes  |%{[regex]::escape($_)}) -join '|') + ')') ;
+                    #$pltWH=get-colorcombo -Rand ;
+                    #foreach($FV in $FailVariantsArray){
+                    foreach($Fail in $ArrayFails){
+                        # do the BadTermFails
+                        #$BadTermFails = $hReports.MsgsFail | ?{$_.failcode -match $rgxbadterm}
+                        #$OtherArrayFails = $hReports.MsgsFail | ?{$_.failcode -notmatch $rgxbadterm}
+
+                        #$(($theseFails|ft -a $prpGXMTfta | out-string).trim())       
+                        # MessageID: $($Fail.MessageID)                  
+                        $hsFailRpt = @"
+
+*------v Delivery Status:Failed : $($Fail.MessageID) v------
+
+
+$(($Fail |ft -a $prpFailMsg  | out-string).trim())
+
+$(
+    
+    if($Fail.FailDetailEvent){
+        "`nFailDetailEvent: $(($Fail.FailDetailEvent) -join ',')`n"
+    }
+    if($Fail.FailDetailDetail){
+        "`nFailDetailDetail:`n$(($Fail.FailDetailDetail | out-string).trim())`n"
+    }
+    if($Fail.FailXoRecipientType){
+        "`nCloud Recipient"
+        "`nFailXoRecipientType: $(($Fail.FailXoRecipientType | out-string).trim())"
+        switch ($Fail.FailXoRecipientType){
+            "UserMailbox" {
+                "`nis a standard functional MAILBOX: UserMailbox" ; 
+            }
+            "SharedMailbox" {
+                "`nis a standard functional MAILBOX: SharedMailbox" ; 
+            }
+            "EquipmentMailbox" {
+                "`nis a standard functional MAILBOX: EquipmentMailbox" ; 
+            }
+            "RoomMailbox" {
+                "`nis a standard functional MAILBOX: RoomMailbox" ; 
+            }
+            "MailUser" {
+                "`nMAILUSER: Generally reflects a removed license: => MS immediately deletes mailbox"
+                "`nis a NON-MAILBOX: MailUser *forwards* to matching OnPrem/external UserMailbox object" ; 
+            } ;
+            default {
+                write-warning "$((get-date).ToString('HH:mm:ss')):Unsupported RecipientType:($Fail.recipienttype). EXITING!" ;
+                Break ;
+            }
+        }
+        
+    }
+    if($fail.FailXopRecipientType){
+        "`n`nOnPrem Recipient"
+        "`nFailXopRecipientType: $(($fail.FailXopRecipientType | out-string).trim())"
+        switch ($fail.FailXopRecipientType){
+            'RemoteUserMailbox' {
+                "`nis a NON-MAILBOX: RemoteUserMailbox *forwards* to matching cloud UserMailbox object" ; 
+            }
+            'RemoteSharedMailbox' {
+                "`nis a NON-MAILBOX: RemoteSharedMailbox *forwards* to matching cloud SharedMailbox object" ; 
+            }
+            'RemoteRoomMailbox' {
+                "`nis a NON-MAILBOX: RemoteRoomMailbox *forwards* to matching cloud RoomMailbox object" ; 
+            }
+            'RemoteEquipmentMailbox' {
+                "`nis a NON-MAILBOX: RemoteEquipmentMailbox *forwards* to matching cloud EquipmentMailbox object" ; 
+            }
+            'UserMailbox' {
+                "`nis a MISCONFIGURED MAILBOX: UserMailbox objects should no longer remain OnPrem (longer than it takes to migrate them to cloud during onboarding)" ; 
+            }
+            'SharedMailbox' {
+                "`nis a MISCONFIGURED MAILBOX: SharedMailbox objects should no longer remain OnPrem (longer than it takes to migrate them to cloud during onboarding)" ; 
+            }
+            'MailUser' {
+                "`nMAILUSER WO RMBX DETECTED! - POSSIBLE NOBRAIN?"
+                "`nis a NON-MAILBOX: MailUser forwards to matching cloud UserMailbox object" ; 
+            }
+            'MailUniversalDistributionGroup' {
+                "`nis a NON-MAILBOX: MailUniversalDistributionGroup are DistrubutionGroup objects that distribute mail to a membership" ; 
+            }
+            'DynamicDistributionGroup'  {
+                "`nis a NON-MAILBOX: DynamicDistributionGroup are Dynamic DistrubutionGroup objects that distribute mail to an on-demand query-populated membership" ; 
+            }
+            'MailContact' {
+                "`nis a NON-MAILBOX: MailContact is a non-SecurityPrincipal, that forwards mail to an exteral email address" ; 
+            }
+            default{
+                "`nUnable to resolve `$fail.FailXopRecipientType: $($fail.FailXopRecipientType)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                break ;
+            }
+        }
+    }
+    if($Fail.ADUserDisabled){
+        "`nADUserDisabled: $(($Fail.ADUserDisabled | out-string).trim())"
+    }
+    if($Fail.ADUserTermOU){
+        "`nADUserTermOU: $(($Fail.ADUserTermOU | out-string).trim())"
+    }
+    if($fail.FailXopRecipientType -notmatch '^(Mailbox|SharedMailbox|RoomMailbox|EquipmentMailbox)' -AND $Fail.FailXoRecipientType -notmatch '^(Mailbox|SharedMailbox|RoomMailbox|EquipmentMailbox)'){
+        "`n`n==> EXPECTED LOOP FAILURE: BOTH CLOUD AND ONPREM RECIPIENT OBJECTS ARE _NON-MAILBOXES_ `n=> THERE IS NO WHERE TO DELIVER ANY MESSAGES TO THE ADDRESS!`n" ; 
+    } 
+)
+
+*------^ END  Delivery Status:Failed : $($Fail.MessageID)  ^------
+
+"@ ; 
+                        #write-host @pltWH $hsFailRpt ; 
+                        $smsg = $hsFailRpt ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    } ;  # loop-E
+
                 } ;
                 if(-not $NoQuarCheck -AND ($mQuars = $msgs | ?{$_.status -eq 'Quarantined'})){
                     $hReports.add('MsgsQuar',$mQuars) ;
@@ -18942,6 +20172,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 9:04 AM 11/27/2024 add SharedMbx quota support: flipped logic to pull xomailbox to pull any $hSum.xoRcp|?{$_.recipienttype -eq 'UserMailbox'... (any mailbox type), vs orig: recipienttypedetails, which would only stock UserMailbox details type.
     * 4:40 PM 10/16/2024 added code to do above, users I thot were c1 weren't, had rmbxs, so it needs further testing;  cloud first: VEN,INT,AA,HH, may not match ADU properly, but if they have AADU & AADUser.DirSyncEnabled, the .aaduser.ExtensionProperty.onPremisesDistinguishedName will point to the assoicated ADU! Need to re-resolve when missing ADU
     * 12:50 PM 10/11/2024 substantial rewrites in query code to accomodate apostrophe's in names (selective rewrap " vs ' for queries). Still not great, still doesn't necessarily work searching dname on apostrophe'd names, but it gets through the pass wo crashing (as it did previously).
     * 12:06 PM 9/23/2024 added param for regex to detect non-raw text names; ahdd running $usr input through Remove-StringDiacritic & Remove-StringLatinCharacters() ; 
@@ -21394,7 +22625,9 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             # 10:42 AM 9/9/2021 force populate the xoMailbox, ALWAYS - need for xbrain ids
             #if($hSum.xoRcp.recipienttypedetails -eq 'UserMailbox' -AND -not($hSum.xoMailbox)){
             # accomodate array xorcp
-            if(($hSum.xoRcp|?{$_.recipienttypedetails -eq 'UserMailbox'}) -AND -not($hSum.xoMailbox)){
+            #if(($hSum.xoRcp|?{$_.recipienttypedetails -eq 'UserMailbox'}) -AND -not($hSum.xoMailbox)){
+            # issue:quota on Shared: above only keys on recipienttypedetails -eq 'UserMailbox', should be *any* mailbox type, if we want quotas etc for shared/room/equipment  switch to rcptype: $hSum.xoRcp.RecipientType
+            if(($hSum.xoRcp|?{$_.recipienttype -eq 'UserMailbox'}) -AND -not($hSum.xoMailbox)){
                 #write-verbose "$((get-alias ps1GetxMbx).definition) w`n$(($pltGMailObj|out-string).trim())" ;
                 write-verbose "get-xomailbox w`n$(($pltGMailObj|out-string).trim())" ;
                 if($hSum.xoMailbox += get-xomailbox @pltGMailObj -ea 0| select -first $MaxRecips ){
@@ -25303,7 +26536,7 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test-Uri,convert-ADUserRecipientTypeRemoteSharedMailbox,convert-ADUserRecipientTypeRemoteUserMailbox,convert-exoMailboxTypeSharedMailbox,convert-exoMailboxTypeUserMailbox,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxoTOL,cxoTOR,Disconnect-EXO,get-AADlicensePlanList,get-ADUsersWithSoftDeletedxoMailboxes,get-ExoGxMTEventType,get-ExoMailboxLicenses,get-ExoMessageTraceEventType,Get-EXOMessageTraceExportedTDO,Remove-InvalidVariableNameChars,get-ExoMessageTraceSourceType,get-EXOMsgTraceDetailed,Remove-InvalidVariableNameChars,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,get-XOMailboxFolderList,Get-xoMailboxFolderPermissionsRecursive,get-XOMailboxFolderPermissionsSummary,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,Reconnect-EXO,remove-EXOLicense,Reset-xoMailboxFolderPermissionsRecursive,resolve-AppIDToCBAFriendlyName,resolve-Name,resolve-user,Resolve-xoRcps,rxoTOL,rxoTOR,test-EXOConnectionTDO,test-ExoDnsRecordTDO,test-EXOIsLicensed,test-EXOv2Connection,test-xoMailbox,_cleanup -Alias *
+Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test-Uri,convert-ADUserRecipientTypeRemoteSharedMailbox,convert-ADUserRecipientTypeRemoteUserMailbox,convert-exoMailboxTypeSharedMailbox,convert-exoMailboxTypeUserMailbox,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxoTOL,cxoTOR,Disconnect-EXO,get-AADlicensePlanList,get-ADUsersWithSoftDeletedxoMailboxes,get-ExoGxMTEventType,get-ExoMailboxLicenses,get-ExoMessageTraceEventType,Get-EXOMessageTraceExportedTDO,Remove-InvalidVariableNameChars,write-log,Start-Log,Connect-ExchangeServerTDO,_connect-ExOP,get-ADExchangeServerTDO,Remove-InvalidVariableNameChars,get-ExoMessageTraceSourceType,get-EXOMsgTraceDetailed,Remove-InvalidVariableNameChars,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,get-XOMailboxFolderList,Get-xoMailboxFolderPermissionsRecursive,get-XOMailboxFolderPermissionsSummary,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,Reconnect-EXO,remove-EXOLicense,Reset-xoMailboxFolderPermissionsRecursive,resolve-AppIDToCBAFriendlyName,resolve-Name,resolve-user,Resolve-xoRcps,rxoTOL,rxoTOR,test-EXOConnectionTDO,test-ExoDnsRecordTDO,test-EXOIsLicensed,test-EXOv2Connection,test-xoMailbox,_cleanup -Alias *
 
 
 
@@ -25311,8 +26544,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU43VlfgzRphf3pTiK83TzBlvE
-# ZMigggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUyel+GYHveTNJlK/qi0rckP+Z
+# NHKgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -25327,9 +26560,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQr3vSd
-# iTAY6n9Dl9Qfmyea3IvUpzANBgkqhkiG9w0BAQEFAASBgDGJ507/dYv5mIiOIbuJ
-# B0WJ4OrQbtgSsxDJtpEVYOPk1EGMfXRbD9fxsKa0tLm7LzHG+ih1Qny+CrPUZUXb
-# Hn2zv9GveoSAaQSA8eQy7AgHETTOw94nVEMwD4oVkE/EqcVQRAvkVwIx4Kx/LVz0
-# nnKK+LllpoADtZGjozT4KOZV
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS727nZ
+# rAC/DUtUlubRBw0kjdsYvDANBgkqhkiG9w0BAQEFAASBgE3Vm/IVDw32K4vN/QSv
+# hj1hImTpd4rHAj9sd8+gr0sKWWNYZA1Q2+gcAwgPH5hpkKTJRKTcFEEcxZP+rqFd
+# o/IBPHNAMCYVS0qPO8bIRebCrgJ+VO6rAg+oDMUEuwZFb1mRAKB1GI6VSLM6JmPf
+# dS/goRO6p6EMXITxLw83/3EQ
 # SIG # End signature block
