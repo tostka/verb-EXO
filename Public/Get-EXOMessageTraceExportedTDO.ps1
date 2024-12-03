@@ -18,6 +18,7 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 4:06 PM 12/3/2024 add: FailReason, to cover other fails with a Detail: Reason:\s string, and echo out some of the Get-xoMessageTraceDetail detail (though it should be stored in the export as well).
     * 1:45 PM 11/27/2024 minor updates, appears functional;  updated Fail echos for OtherAccount block, citing DDG exclusion setting under CA4 of UserMailbox types.
     * 4:20 PM 11/25/2024 updated from get-exomessagetraceexportedtdo(), more silent suppression, integrated dep-less ExOP conn support
         add: constants for rgxFailSecBlock, $rgxFailOOO, $rgxFailRecallSubj, $rgxFailOtherAcctBlock, $FailOtherAcctBlockExemptionGroup, $rgxFailConfRmExtBlock
@@ -2710,7 +2711,12 @@ function Get-EXOMessageTraceExportedTDO {
                                     $FailMsgSummary.ADUserDisabled = $true  ; 
                                     $FailMsgSummary.FailCode += @('FailBrokenTerm','FailADUserDisabled') ; 
                                 } ;
-                            }
+                            } ; 
+                            if($FODetail | ?{$_.event -eq 'FAIL' -AND $_.Detail -match 'Reason:\s'}){
+                                # there's a Reason:\s in the mix, try to echo it
+                                $FailMsgSummary.FailCode += @('FailReason') ; 
+                                $FailMsgSummary.FailDetailDetail = ($FODetail | ?{$_.event -eq 'FAIL' -AND $_.Detail -match 'Reason:\s'}).Detail
+                            } ; 
                         } ; 
                         if($FailMsgSummary.FailCode){
                             # reduce to single instance of each code
@@ -2742,7 +2748,7 @@ function Get-EXOMessageTraceExportedTDO {
 
 
                     # divide up the results & report on the types
-                    $FailVariants = $hReports.MsgsFail | group failcode | select -expand name; 
+                    $FailsVariants = $hReports.MsgsFail | group failcode | select -expand name; 
 
                     $prpFailMsg = 'ReceivedLocal','SenderAddress','RecipientAddress','Subject','Status' ; 
 
@@ -2788,8 +2794,13 @@ $(
         'FailADUserDisabled' {
             "`n$($FV): No valid recipient found: Broken offboarded user: ADUser is disabled: Email looped between environments until hop count exceeded, and Non-Delivery Notice (NDR) was issued`n"
         }  
+        'FailReason' {
+            "`n$($FV): Other error, with a 'Reason' specification`n"
+            $theseFails.FailDetailDetail |%{"`n$($_)"}
+        }
         default{
             "`n$($FV): Undefined error (not configured as a response in this script)`n"
+            $theseFails.FailDetailDetail |%{"`n$($_)"}
         }   
     }
 )
