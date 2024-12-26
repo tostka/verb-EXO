@@ -18,6 +18,9 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:43 PM 12/26/2024 bugfix/cmw uses r: as room dname prefix, not recog'd as dname: #updated: $rgxDName CMW uses : in their room names, so went for broader AD dname support, per AI, and web specs, added 1-256char AD restriction         $rgxDName
+        also pushed dname in the detect type switch below samaccountname (which is more specific filter) ; added 'RemoteRoomMailbox' &  'RemoteEquipmentMailbox' switch clauses on typedetails handlers; 
+        tweaked lic test to exempt shared/room/equip from isUnlicened warnings.
     * 3:44 PM 12/4/2024 updated to support non-hybrid cloud recipients, w ADC sync'd ADU->AADU; updated enviro_discover etc from latest vers
     * 9:04 AM 11/27/2024 add SharedMbx quota support: flipped logic to pull xomailbox to pull any $hSum.xoRcp|?{$_.recipienttype -eq 'UserMailbox'... (any mailbox type), vs orig: recipienttypedetails, which would only stock UserMailbox details type.
     * 4:40 PM 10/16/2024 added code to do above, users I thot were c1 weren't, had rmbxs, so it needs further testing;  cloud first: VEN,INT,AA,HH, may not match ADU properly, but if they have AADU & AADUser.DirSyncEnabled, the .aaduser.ExtensionProperty.onPremisesDistinguishedName will point to the assoicated ADU! Need to re-resolve when missing ADU
@@ -473,6 +476,8 @@ function resolve-user {
         $rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ;
         # added support for . fname lname delimiter (supports pasted in dirname of email addresses, as user)
         $rgxDName = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
+        #updated: CMW uses : in their room names, so went for broader AD dname support, per AI, and web specs, added 1-256char AD restriction
+        $rgxDName ="[a-zA-Z0-9\s$([Regex]::Escape('/\[:;|=,+*?<>') + '\]' + '\"')]{1,256}" ; 
         #"^([a-zA-Z]{2,}\s[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
         $rgxObjNameNewHires = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)_[a-z0-9]{10}"  # Name:Fname LName_f4feebafdb (appending uniqueness guid chunk)
         $rgxSamAcctNameTOR = "^\w{2,20}$" ; # up to 20k, the limit prior to win2k
@@ -1524,8 +1529,18 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     $isObjName = $true ;
                     Break ;
                 }
+                $rgxSamAcctNameTOR {
+                # $rgxSamAcctNameTOR = "^\w{2,20}$" ; # up to 20c, the limit prior to win2k
+                    $hSum.lname = $usr ;
+                    write-verbose "(detected user ($($usr)) as SamAccountName)" ;
+                    $isSamAcct  = $true ;
+                    Break ;
+                }
+                # move dname below samacct, it's a broader spec
                 $rgxDName {
-                # $rgxDName = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
+                    # $rgxDName = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
+                    #updated: CMW uses : in their room names, so went for broader AD dname support, per AI, and web specs, added 1-256char AD restriction
+                    #$rgxDName ="[a-zA-Z0-9\s$([Regex]::Escape('/\[:;|=,+*?<>') + '\]' + '\"')]{1,256}" ; 
                     if($usr.contains('.')){
                         write-verbose "(replacing period in DName)" ;
                         $usr = $usr.replace('.',' ') ;
@@ -1536,19 +1551,12 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     $isDname = $true ;
                     Break ;
                 }
-                $rgxSamAcctNameTOR {
-                # $rgxSamAcctNameTOR = "^\w{2,20}$" ; # up to 20c, the limit prior to win2k
-                    $hSum.lname = $usr ;
-                    write-verbose "(detected user ($($usr)) as SamAccountName)" ;
-                    $isSamAcct  = $true ;
-                    Break ;
-                }
                 default {
                     write-warning "$((get-date).ToString('HH:mm:ss')):No -user specified, nothing matching dname, emailaddress or samaccountname, found on clipboard. EXITING!" ;
                     #Break ;
                 } ;
             } ;
-
+            
             $sBnr="===v ($($Procd)/$($ttl)):Input: '$($usr)' | '$($hSum.fname)' | '$($hSum.lname)' v===" ;
             if($isEml){$sBnr+="(EML)"}
             elseif($isDname){$sBnr+="(DNAM)"}
@@ -1686,8 +1694,13 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         'RemoteUserMailbox' {write-host "(Rmbx)" -nonewline}
                         # 8:53 AM 10/9/2024 add to cover mbx2shared conversion results
                         'RemoteSharedMailbox' {write-host "(Rmbx *SHARED*)" -nonewline} 
+                        # 12:23 PM 12/26/2024 add resource & remote res's
+                        'RemoteRoomMailbox' {write-host "(Rmbx *ROOM*)" -nonewline} 
+                        'RemoteEquipmentMailbox' {write-host "(Rmbx *EQUIP*)" -nonewline} 
                         'UserMailbox' {write-host "(Mbx)" -nonewline}
                         'SharedMailbox' {write-host "(SMbx)" -nonewline}
+                        'RoomMailbox' {write-host "(RoomMbx)" -nonewline}
+                        'EquipmentMailbox' {write-host "(EquipMbx)" -nonewline}
                         'MailUser' {
                             $smsg = "MAILUSER WO RMBX DETECTED! - POSSIBLE NOBRAIN?"
                             write-warning $smsg
@@ -1823,8 +1836,13 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         'RemoteUserMailbox' {write-host "(Rmbx)" -nonewline}
                         # 8:53 AM 10/9/2024 add to cover mbx2shared conversion results
                         'RemoteSharedMailbox' {write-host "(Rmbx *SHARED*)" -nonewline}
+                        # 12:23 PM 12/26/2024 add resource & remote res's
+                        'RemoteRoomMailbox' {write-host "(Rmbx *ROOM*)" -nonewline}
+                        'RemoteEquipmentMailbox' {write-host "(Rmbx *EQUIP*)" -nonewline}
                         'UserMailbox' {write-host "(xMbx)" -nonewline}
                         'SharedMailbox' {write-host "(xSMbx)" -nonewline}
+                        'RoomMailbox' {write-host "(xRoomMbx)" -nonewline}
+                        'EquipmentMailbox' {write-host "(xEquipMbx)" -nonewline}
                         # no rmbx, but remote obj?
                         'MailUser' {
                             $smsg = "xMAILUSER WO MBX DETECTED! - POSSIBLE NOBRAIN?"
@@ -3058,15 +3076,19 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 $smsg += "NOBRAIN! *WO* LICENSE! (TERM?):$($hSum.ADUser.userprincipalname) NOT licensed'd &  has *NEITHER* xoMbx OR opMbx!" ;
                 $hsum.IsNoBrain  +=  $true ;
             } elseif($hsum.IsLicensed -eq $false){
-                $smsg += "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
-                
+                # 12:37 PM 12/26/2024 ACCOMOD UNlic'd non-user mbxs (normal)
+                if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){
+                    $smsg += "$($hSum.ADUser.userprincipalname) Is RecipientTypeDetails:$($hsum.xoRcp.RecipientTypeDetails) _expected unlicensed_" ;
+                } ELSE { 
+                    $smsg += "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
+                } ; 
                 $hsum.IsLicensed  +=  $false ;
             } elseif($hsum | ?{-not $_.ADUser -AND $_.AADUser -AND $_.xomailbox -AND -not $_.opMailbox -AND -not $_.opRemoteMailbox}){
                 # 3:54 PM 10/16/2024 add cloud-first VEN|INT|AA|HH detect
                 $smsg += "LICENSED AADUSER CLOUD-FIRST XOMAILBOX  (No ADUser, No OPMailbox, No OPRemoteMailbox)~" ; 
             } ELSE { } ;
 
-            if($hsum.IsSplitBrain -OR $hsum.IsNoBrain -OR -not $hsum.IsLicensed){
+            if($hsum.IsSplitBrain -OR $hsum.IsNoBrain -OR (-not $hsum.IsLicensed -AND $hsum.xoRcp.RecipientTypeDetails -NOTmatch 'SharedMailbox|RoomMailbox|EquipmentMailbox') ){
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
             } else { 
