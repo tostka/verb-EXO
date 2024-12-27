@@ -18,7 +18,11 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 1:43 PM 12/26/2024 bugfix/cmw uses r: as room dname prefix, not recog'd as dname: #updated: $rgxDName CMW uses : in their room names, so went for broader AD dname support, per AI, and web specs, added 1-256char AD restriction         $rgxDName
+    * 10:45 AM 12/27/2024 param aliass 'Quota','Perms' ; default -silent $true; updated propsADU to include desc & info ; add: $propsDG &  $propsADL7 ; rework into a loop for perm group summary dump; moved members & managedby into the grp summary; 
+        removed nonewlines on the initial OP mbx/rmbx type; tweaked unlic & disabled ww's to only fire on inapprop config (smbx v umbx)
+    * 3:43 PM 12/26/2024 add: -getPerms, runs Get-xoMailboxPermission & get-xoRecipientPermissions, outputs/returns non-SELF matches, and expands any group members in user or trustee
+         add: aduser.info field, echo into output, if pop'd; 
+        bugfix/cmw uses r: as room dname prefix, not recog'd as dname: #updated: $rgxDName CMW uses : in their room names, so went for broader AD dname support, per AI, and web specs, added 1-256char AD restriction         $rgxDName
         also pushed dname in the detect type switch below samaccountname (which is more specific filter) ; added 'RemoteRoomMailbox' &  'RemoteEquipmentMailbox' switch clauses on typedetails handlers; 
         tweaked lic test to exempt shared/room/equip from isUnlicened warnings.
     * 3:44 PM 12/4/2024 updated to support non-hybrid cloud recipients, w ADC sync'd ADU->AADU; updated enviro_discover etc from latest vers
@@ -101,6 +105,8 @@ function resolve-user {
     switch to return mobiledevice info for target XO Mailbox (not supported for onprem mailboxes)[-getMobile]
     .PARAMETER getQuotaUsage
     switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]
+    .PARAMETER getPerms
+    switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, return non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]
     .PARAMETER rgxAccentedNameChars
     Regular Expression that identifies input 'user' strings that should ahve diacriticals/latin/non-simple english characters replaced, before lookups
     .PARAMETER useEXOv2
@@ -254,6 +260,33 @@ function resolve-user {
         - xoMailbox.DelayHoldApplied 
         - xoMailbox.DelayReleaseHoldApplied 
         - checks if xoMailboxFolderStats 'DiscoveryHolds' folder has ItemsInFolder -gt 0
+    .EXAMPLE
+    PS> $999999Rpt = resolve-user fname.lname@toro.com -Ticket 99999 -getPerms -outObject ; 
+
+        # ... additional Permissions output returned
+        15:29:59: PROMPT:  LicenseGroup:(unresolved, direct-assigned other?)(AADUserMgr was blank, or unresolved)
+        xoMailboxPermission::
+        Identity                             User                          AccessRights
+        --------                             ----                          ------------
+        xx299x9x-x51x-4562-8xx8-x2x45796x2xx ABC-SEC-Email-xxxxxxxxxxxxx-G {FullAccess}
+
+        Expanded Group Membership(s)::
+        Name           RecipientType
+        ----           -------------
+        xxxxxxxx xxxxx UserMailbox
+
+        xoRecipientPermission::
+        Identity                             Trustee                              AccessControlType AccessRights Inherited
+        --------                             -------                              ----------------- ------------ ---------
+        xx299x9x-x51x-4562-8xx8-x2x45796x2xx 522x58x1-11x9-4x28-x391-1x8xxx211xxx Allow             {SendAs}
+
+
+        Expanded Group Membership(s)::
+        Name           RecipientType
+        ----           -------------
+        xxxxxxxx xxxxx UserMailbox
+
+
     .LINK
     https://github.com/tostka/verb-exo
     #>
@@ -276,9 +309,14 @@ function resolve-user {
         [Parameter(Mandatory=$False,HelpMessage="Ticket Number [-Ticket '999999']")]
             [string]$Ticket,
         [Parameter(HelpMessage="switch to return mobiledevice info for target user[-getMobile]")]
+            [Alias('Mobile')]
             [switch] $getMobile,
         [Parameter(HelpMessage="switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]")]
+            [Alias('Quota')]
             [switch]$getQuotaUsage,
+        [Parameter(HelpMessage="switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, return non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]")]
+            [Alias('Perms')]
+            [switch]$getPerms,
         [Parameter(HelpMessage="Regular Expression that identifies input 'user' strings that should ahve diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]")]
             [ValidateNotNullOrEmpty()]
             [regex]$rgxAccentedNameChars = "[^a-zA-Z0-9\s\.\(\)\{\}\/\&\$\#\@\,\`"\'\’\:\–_-]",
@@ -304,7 +342,7 @@ function resolve-user {
         [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
             [switch] $useEXOv2=$true,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
-            [switch] $silent,
+            [switch] $silent=$true,
         [Parameter(HelpMessage="switch to return a system.object summary to the pipeline[-outObject]")]
             [switch] $outObject
     ) ;
@@ -508,7 +546,8 @@ function resolve-user {
         $propsLic = @{Name='HasLic'; Expression={$_.IsLicensed }},@{Name='LicIssue'; Expression={$_.LicenseReconciliationNeeded }} ;
         $propsADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName',
             'StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone','Enabled','DistinguishedName',
-            'Description','whenCreated','whenChanged'
+            'Description','Info','whenCreated','whenChanged'
+
         #'samaccountname','UserPrincipalName','distinguishedname','Description','title','whenCreated','whenChanged','Enabled','sAMAccountType','userAccountControl' ;
         $propsADUsht = 'Enabled','Description','whenCreated','whenChanged','Title' ;
         $propsAADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName',
@@ -518,6 +557,7 @@ function resolve-user {
         $prpADU = 'DistinguishedName','GivenName','Surname','Name','UserPrincipalName','mailNickname','SamAccountName','physicalDeliveryOfficeName','msExchRecipientDisplayType','msExchRecipientTypeDetails','msExchRemoteRecipientType','msExchWhenMailboxCreated' ; 
         $propsAADUfed = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
         $propsRcpTbl = 'Alias','PrimarySmtpAddress','RecipientType','RecipientTypeDetails' ;
+        $propsDG = 'Identity','PrimarySmtpAddress','Description','RecipientType','RecipientTypeDetails','ManagedBy' ; 
         # line1-X AADU outputs
             #$propsMailx='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','IsDirSynced','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
         <# full size
@@ -542,6 +582,7 @@ function resolve-user {
         #$propsADL5 = 'ObjectType','UserType' ;
         $propsADL5 = 'whenCreated','whenChanged' ; 
         $propsADL6 = @{Name='Desc';Expression={$_.Description }} ;
+        $propsADL7 = 'Info' ;
 
         # line1-5 AADU outputs
         <# full size
@@ -614,6 +655,16 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 'ComplianceTagHoldApplied','DelayHoldApplied','DelayReleaseHoldApplied' ; 
 
             $rgxHiddn = '.*\\(Versions|SubstrateHolds|DiscoveryHolds|Yammer.*|Social\sActivity\sNotifications|Suggested\sContacts|Recipient\sCache|PersonMetadata|Audits|Calendar\sLogging|Purges)$' ; 
+
+        } ; 
+        # 2:31 PM 12/26/2024
+        # getPerms
+        if($getPerms){
+
+            # 12:54 PM 9/18/2023 adds for MbxFolderStats, Quota & LegalHold eval:
+            $prpRPerms = 'Identity','Trustee','AccessControlType','AccessRights','Inherited' ;
+
+            $prpMPerms = 'Identity','User','AccessRights'
 
         } ; 
         $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
@@ -1495,6 +1546,15 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 [string]$ofMbxFolderStats = $ofile.replace('REPORT',"folder-sizes-NONHIDDEN-NONZERO") ; 
 
             } ; 
+            # 2:35 PM 12/26/2024 getPerms
+            if($getPerms){
+                $hsum.add('xoMailboxPermission',$null) ; 
+                $hsum.add('xoRecipientPermission',$null) ; 
+                #$hsum.add('xoMailboxPermissionGroupManagedBy',$null) ; # moved into the group summary
+                $hsum.add('xoMailboxPermissionGroups',@()) ; 
+                $hsum.add('xoRecipientPermissionGroups',$null) ; 
+                #$hsum.add('xoRecipientPermissionGroupManagedBy',@()) ; 
+            }
 
             if($usr -match $rgxAccentedNameChars){
                 # 9:36 AM 9/23/2024 pre remove all diacritics & latin chars 
@@ -1691,24 +1751,24 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     $tmpRcp = $_ ; 
                     #switch ($hSum.OPRcp.recipienttypedetails){
                     switch ($tmpRcp.recipienttypedetails){
-                        'RemoteUserMailbox' {write-host "(Rmbx)" -nonewline}
+                        'RemoteUserMailbox' {write-host "(Rmbx)"}
                         # 8:53 AM 10/9/2024 add to cover mbx2shared conversion results
-                        'RemoteSharedMailbox' {write-host "(Rmbx *SHARED*)" -nonewline} 
+                        'RemoteSharedMailbox' {write-host "(Rmbx *SHARED*)"} 
                         # 12:23 PM 12/26/2024 add resource & remote res's
-                        'RemoteRoomMailbox' {write-host "(Rmbx *ROOM*)" -nonewline} 
-                        'RemoteEquipmentMailbox' {write-host "(Rmbx *EQUIP*)" -nonewline} 
-                        'UserMailbox' {write-host "(Mbx)" -nonewline}
-                        'SharedMailbox' {write-host "(SMbx)" -nonewline}
-                        'RoomMailbox' {write-host "(RoomMbx)" -nonewline}
-                        'EquipmentMailbox' {write-host "(EquipMbx)" -nonewline}
+                        'RemoteRoomMailbox' {write-host "(Rmbx *ROOM*)"} 
+                        'RemoteEquipmentMailbox' {write-host "(Rmbx *EQUIP*)"} 
+                        'UserMailbox' {write-host "(Mbx)"}
+                        'SharedMailbox' {write-host "(SMbx)"}
+                        'RoomMailbox' {write-host "(RoomMbx)"}
+                        'EquipmentMailbox' {write-host "(EquipMbx)"}
                         'MailUser' {
                             $smsg = "MAILUSER WO RMBX DETECTED! - POSSIBLE NOBRAIN?"
                             write-warning $smsg
                             #$hsum.isNoBrain = $true ;    
                         }
-                        'MailUniversalDistributionGroup' {write-host "(DG)" -nonewline}
-                        'DynamicDistributionGroup'  {write-host "(DDG)" -nonewline}
-                        'MailContact' {write-host "(MC)" -nonewline]}
+                        'MailUniversalDistributionGroup' {write-host "(DG)"}
+                        'DynamicDistributionGroup'  {write-host "(DDG)"}
+                        'MailContact' {write-host "(MC)"]}
                         default{
                             #$smsg = "Unable to resolve `$hSum.OPRcp.recipienttypedetails:$($hSum.OPRcp.recipienttypedetails)" ; 
                             $smsg = "Unable to resolve `$hSum.OPRcp.recipienttypedetails:$($tmpRcp.OPRcp.recipienttypedetails)" ; 
@@ -1721,39 +1781,9 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 }  # loop-E 
             } ; # if-E
 
-            <# 2:57 PM 10/8/2024 splice over from grcp code above
-            #write-verbose "$((get-alias ps1GetxRcp).definition) w`n$(($pltGMailObj|out-string).trim())" ;
-            write-verbose "get-xorecipient  w`n$(($pltGMailObj|out-string).trim())" ;
-            #rxo  -Verbose:$false -silent ;
-            if($hSum.xoRcp=get-xorecipient @pltGMailObj -ea 0 | select -first $MaxRecips ){
-                write-verbose "`$hSum.xoRcp found" ;
-            } elseif($isDname -and $hsum.lname) {
-                $smsg = "Failed:RETRY: detected 'LName':$($hsum.lname) for near matches..." ;
-                write-host $smsg ;
-                $lname = $hsum.lname ;
-                $fltrB = "displayname -like '*$lname*'" ;
-                write-verbose "RETRY:get-recipient -filter {$($fltr)}" ;
-                if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 -ResultSize $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
-                    write-verbose "`$hSum.xoRcp found" ;
-                } ;
-            }
-            if(-not $hsum.xoRcp){
-                #$smsg = "Failed to $((get-alias ps1GetxRcp).definition) on:$($usr)"
-                $smsg = "get-xorecipient on:$($usr)"
-                if($isDname){$smsg += " or *$($hsum.lname )*"} ;
-                write-host $smsg ;
-            } else {
-                $smsg =  "`$hSum.xoRcp:`n$(($hSum.xoRcp|out-string).trim())" ;
-                write-verbose $smsg ;
-                if($hSum.xoRcp -is [system.array]){
-                    write-warning "Multiple matching xoRcps!:$($smsg)`nTHIS WILL NOT RETURN FULL AADUSER ETC FOR BOTH OBJECTS!`nUSE TARGETED UPN ETC TO DUMP VARIANT OBJECTS!" ;
-                    $isXORcpMulti = $true ;
-                } ;
-            } ;
-            #>
             #-=-=-=-=-=-=-=-=
-            if ($script:useEXOv2) { reconnect-eXO2 @pltRXOC }
-            else { reconnect-EXO @pltRXOC } ;
+            #if ($useEXOv2) { reconnect-eXO2 @pltRXOC }
+            #else { reconnect-EXO @pltRXOC } ;
             $smsg = "get-xorecipient w`n$(($pltGMailObj|out-string).trim())`n...| ?{$_.recipienttypedetails -ne 'MailContact'}" ;
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             if($hSum.xoRcp=get-xorecipient @pltGMailObj -ea 0 | select -first $MaxRecips | ?{$_.recipienttypedetails -ne 'MailContact'}){
@@ -2038,14 +2068,6 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                             $hSum.Federator = $TORMeta.adforestname ;
                             write-host -Fore yellow $smsg ;
                         
-                            <#
-                            if($hSum.OPRemoteMailbox){
-                                $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
-                            } ;
-                            if($hSum.OPMailbox){
-                                $smsg =  "$(($hSum.OPMailbox |fl $propsMailx|out-string).trim())" ;
-                            } ;
-                            #>
                             # swap to md tbl fmt
                             if($hSum.OPRemoteMailbox){$MailRecip = $hSum.OPRemoteMailbox } ; 
                             if($hSum.OPMailbox){$MailRecip = $hSum.OPMailbox } ; 
@@ -2058,21 +2080,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                             # flip dn L4 to fl (suppress crlf)
 
                             write-host $smsg ;
-                            #if($MailRecip.ForwardingAddress){
-                            #    $smsg += "`n$(($MailRecip|select $propsMailxL5 |out-markdowntable @MDtbl|out-string).trim())" ;
-                            #} ; 
-                            <#
-                            if($hSum.OPRemoteMailbox -AND $hSum.OPRemoteMailbox.ForwardingAddress){
-                                write-host $smsg ; # write pending primary (using ww on next)
-                                #$smsg = "==FORWARDED rMBX!:`n$(($hSum.OPRemoteMailbox  |ft -a ForwardingAddress,DeliverToMailboxAndForward,ForwardingSmtpAddress|out-string).trim())" ;
-                                $smsg = "==FORWARDED rMBX!:" ; 
-                                $smsg += "`n$(($MailRecip|select $propsMailxL5 |out-markdowntable @MDtbl|out-string).trim())" ;
-                            } ;
-                            if($hSum.OPMailbox -AND $hSum.OPMailbox.ForwardingAddress){
-                                write-host $smsg ; # write pending primary (using ww on next)
-                                $smsg = "==FORWARDED opMBX!:`n$(($hSum.OPMailbox |ft -a ForwardingAddress,DeliverToMailboxAndForward,ForwardingSmtpAddress|out-string).trim())" ;
-                            } ;
-                            #>
+
                             if($hSum.OPRemoteMailbox.ForwardingAddress -OR $hSum.OPMailbox.ForwardingAddress){
                                 write-host $smsg ; # echo pending, using ww below
                                 $smsg = "==FORWARDED rMBX!:" ; 
@@ -2150,7 +2158,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                                 else{ write-verbose $smsg } ; 
                                             } ; 
                                             $hSum.xoMailboxStats  +=  Get-xoMailboxStatistics @pltGMbxStatX | select $prpStat;
-                                            $smsg = "xoMailboxStats Count:$(($hsum.xoMapiTest|measure).count)" ;
+                                            $smsg = "xoMailboxStats Count:$(($hsum.xoMailboxStats|measure).count)" ;
                                             write-host -foregroundcolor green $smsg ;
 
                                             If($hSum.xoMailbox.UseDatabaseQuotaDefaults){
@@ -2186,6 +2194,80 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                                 $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
                                                 write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
                                             } ; 
+                                        } ; 
+                                        if($getPerms){
+                                            $pltGMbxPermX=[ordered]@{
+                                                identity = $hSum.xoMailbox.exchangeguid ;
+                                                ErrorAction = 'STOP' ;
+                                            } ;
+                                            $smsg = "Get-xoMailboxPermission  w`n$(($pltGMbxPermX|out-string).trim())"
+                                            if($verbose){
+                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                                else{ write-verbose $smsg } ;
+                                            } ;
+                                            TRY{
+                                                $hSum.xoMailboxPermission  +=  Get-xoMailboxPermission @pltGMbxPermX | ?{$_.user -notmatch 'NT\sAUTHORITY\\SELF'} | select $prpMPerms;
+                                                $smsg = "xoMailboxPermission Count:$(($hsum.xoMailboxPermission|measure).count)" ;
+                                                write-host -foregroundcolor green $smsg ;
+                                                if($hSum.xoMailboxPermission){
+                                                    foreach($grp in ($hSum.xoMailboxPermission.user | 
+                                                        get-xorecipient  | ?{$_.recipienttype -eq 'MailUniversalSecurityGroup'}) ){
+                                                        $hshGrpSumm = [ordered]@{
+                                                            Identity = $grp.Identity
+                                                            PrimarySmtpAddress = $grp.PrimarySmtpAddress ;
+                                                            Description = $grp.Description ;
+                                                            RecipientType = $grp.RecipientType ;
+                                                            RecipientTypeDetails = $grp.RecipientTypeDetails ;
+                                                            ManagedBy = ($grp | get-xodistributiongroup | select -expand managedby | get-xorecipient -ea 0) ;
+                                                            Members = ($grp | get-xodistributiongroupmember | get-xorecipient  -ea 0) ;
+                                                        } ; 
+                                                        $hSum.xoMailboxPermissionGroups += [pscustomobject]$hshGrpSumm ; 
+                                                    } ;
+                                                } else {
+                                                    $smsg = "(no non-SELF Get-xoMailboxPermission returned)" ; 
+                                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                                };
+                                            } CATCH {
+                                                $ErrTrapd=$Error[0] ;
+                                                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                                                write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                                            } ;
+                                            $smsg = "Get-xoRecipientPermission  w`n$(($pltGMbxPermX|out-string).trim())"
+                                            if($verbose){
+                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                                else{ write-verbose $smsg } ;
+                                            } ;
+                                            TRY{
+                                                $hsum.xoRecipientPermission += Get-xoRecipientPermission @pltGMbxPermX | ?{$_.trustee -notmatch 'NT\sAUTHORITY\\SELF'}  | select $prpRPerms;
+                                                $smsg = "xoRecipientPermission Count:$(($hsum.xoRecipientPermission|measure).count)" ;
+                                                write-host -foregroundcolor green $smsg ;
+                                                if($hsum.xoRecipientPermission){
+                                                    foreach($grp in ($hsum.xoRecipientPermission.trustee | 
+                                                        get-xorecipient  | ?{$_.recipienttype -eq 'MailUniversalSecurityGroup'}) ){
+                                                        $hshGrpSumm = [ordered]@{
+                                                            Identity = $grp.Identity
+                                                            PrimarySmtpAddress = $grp.PrimarySmtpAddress ;
+                                                            Description = $grp.Description ;
+                                                            RecipientType = $grp.RecipientType ;
+                                                            RecipientTypeDetails = $grp.RecipientTypeDetails ;
+                                                            ManagedBy = ($grp | get-xodistributiongroup | select -expand managedby | get-xorecipient -ea 0) ;
+                                                            Members = ($grp | get-xodistributiongroupmember | get-xorecipient  -ea 0) ;
+                                                        } ; 
+                                                        $hSum.xoRecipientPermissionGroups += [pscustomobject]$hshGrpSumm ;
+                                                    } ;
+                                                } else {
+                                                    $smsg = "(no non-SELF Get-xoRecipientPermission returned)" ; 
+                                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                                };
+                                            } CATCH {
+                                                $ErrTrapd=$Error[0] ;
+                                                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                                                write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                                            } ;
                                         } ; 
                                     } ;
                                     break ;
@@ -2325,11 +2407,13 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         if($hSum.OPRemoteMailbox){
                             $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
                             #$smsg += "`n-Title:$($hSum.ADUser.Title)"
-                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                            #$smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','Info','whenCreated','whenChanged','Title' |out-string).trim())"
                         } ;
                         if($hSum.OPMailbox){
                             $smsg =  "$(($hSum.OPMailbox |fl $propsMailx|out-string).trim())" ;
-                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                            #$smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','Info','whenCreated','whenChanged','Title' |out-string).trim())"
                         } ; 
                         if( -not $hsum.OPRcp -AND $hsum.xoRcp -AND $hsum.xomailbox){ 
                             $smsg = "Cloud Mailbox is nonDirSync'd NON-HYBRID mail object!" ; 
@@ -2340,7 +2424,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                 } else { 
                                     $smsg += "`nADUser Object IS NOT dirsync'd to AzureADUser object" ; 
                                 } ; 
-                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                #$smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','Info','whenCreated','whenChanged','Title' |out-string).trim())"
                             } else {
                                 $smsg += "`nNO ADUser Object appears to be cloud-first AADUser object" ;
                             }; 
@@ -2457,13 +2542,6 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         $ino = 0 ;
                         foreach($xmob in $hsum.xoMobileDeviceStats){
                             $ino++ ;
-                            <#if($hsum.xoMobileDeviceStats -isnot [system.array]){
-                                $smsg = "xmob$($ino):$($xmob.userprincipalname)" ;
-                                write-host $smsg ;
-                            } ;
-                            write-host -foreground yellow "=get-xMob:> " -nonewline;
-                            write-host "$(($xmob.userprincipalname |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
-                            #>
                             if($hsum.xoMobileDeviceStats -is [system.array]){
                                  write-host -foreground yellow "=get-xMob$($ino):> " #-nonewline;
                             } else { 
@@ -2719,6 +2797,80 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     
                 }
             } ; 
+            if($getPerms){
+                $pltGMbxPermX=[ordered]@{
+                    identity = $hSum.xoMailbox.exchangeguid ;
+                    ErrorAction = 'STOP' ;
+                } ;
+                $smsg = "Get-xoMailboxPermission  w`n$(($pltGMbxPermX|out-string).trim())"
+                if($verbose){
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-verbose $smsg } ;
+                } ;
+                TRY{
+                    $hSum.xoMailboxPermission  +=  Get-xoMailboxPermission @pltGMbxPermX | ?{$_.user -notmatch 'NT\sAUTHORITY\\SELF'} | select $prpMPerms;
+                    $smsg = "xoMailboxPermission Count:$(($hsum.xoMailboxPermission|measure).count)" ;
+                    write-host -foregroundcolor green $smsg ;
+                    if($hSum.xoMailboxPermission){
+                        foreach($grp in ($hSum.xoMailboxPermission.user |
+                            get-xorecipient  | ?{$_.recipienttype -eq 'MailUniversalSecurityGroup'}) ){
+                            $hshGrpSumm = [ordered]@{
+                                Identity = $grp.Identity
+                                PrimarySmtpAddress = $grp.PrimarySmtpAddress ;
+                                Description = $grp.Description ;
+                                RecipientType = $grp.RecipientType ;
+                                RecipientTypeDetails = $grp.RecipientTypeDetails ;
+                                ManagedBy = ($grp | get-xodistributiongroup | select -expand managedby | get-xorecipient -ea 0) ;
+                                Members = ($grp | get-xodistributiongroupmember | get-xorecipient  -ea 0) ;
+                            } ; 
+                            $hSum.xoMailboxPermissionGroups += [pscustomobject]$hshGrpSumm ;
+                        } ;
+                    } else {
+                        $smsg = "(no non-SELF Get-xoMailboxPermission returned)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    };
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                    write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                } ;
+                $smsg = "Get-xoRecipientPermission  w`n$(($pltGMbxPermX|out-string).trim())"
+                if($verbose){
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-verbose $smsg } ;
+                } ;
+                TRY{
+                    $hsum.xoRecipientPermission += Get-xoRecipientPermission @pltGMbxPermX | ?{$_.trustee -notmatch 'NT\sAUTHORITY\\SELF'}  | select $prpRPerms;
+                    $smsg = "xoRecipientPermission Count:$(($hsum.xoRecipientPermission|measure).count)" ;
+                    write-host -foregroundcolor green $smsg ;
+                    if($hSum.xoRecipientPermission){
+                        foreach($grp in ($hsum.xoRecipientPermission.trustee |
+                            get-xorecipient  | ?{$_.recipienttype -eq 'MailUniversalSecurityGroup'}) ){
+                            $hshGrpSumm = [ordered]@{
+                                Identity = $grp.Identity
+                                PrimarySmtpAddress = $grp.PrimarySmtpAddress ;
+                                Description = $grp.Description ;
+                                RecipientType = $grp.RecipientType ;
+                                RecipientTypeDetails = $grp.RecipientTypeDetails ;
+                                ManagedBy = ($grp | get-xodistributiongroup | select -expand managedby | get-xorecipient -ea 0) ;
+                                Members = ($grp | get-xodistributiongroupmember | get-xorecipient  -ea 0) ;
+                            } ; 
+                            $hSum.xoRecipientPermissionGroups += [pscustomobject]$hshGrpSumm ;
+                        } ;
+                    } else {
+                        $smsg = "(no non-SELF Get-xoRecipientPermission returned)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    };
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                    write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                } ;
+            }
 
             #$pltgMsoUsr=@{UserPrincipalName=$null ; MaxResults= $MaxRecips; ErrorAction= 'STOP' } ;
             # maxresults is documented:
@@ -2752,7 +2904,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             thumbnailPhoto@odata.mediaEditLink                        directoryObjects/.../Microsoft.DirectoryServices.User/thumbnailPhoto
                             thumbnailPhoto@odata.mediaContentType                     image/Jpeg
                             userIdentities                                            []
-                            extension_9d88b2c96135413e88afff067058e860_employeeNumber 8621
+                            extension_9d88b2c96135413e88afff067058e860_employeeNumber 1234
                              $hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName
                             CN=XXX,OU=XXX,...
                         #>
@@ -2823,11 +2975,13 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             if($hSum.OPRemoteMailbox){
                                 $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
                                 #$smsg += "`n-Title:$($hSum.ADUser.Title)"
-                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                #$smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','Info','whenCreated','whenChanged','Title' |out-string).trim())"
                             } ;
                             if($hSum.OPMailbox){
                                 $smsg =  "$(($hSum.OPMailbox |fl $propsMailx|out-string).trim())" ;
-                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                #$smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','Info','whenCreated','whenChanged','Title' |out-string).trim())"
                             } ;
                             write-host $smsg ;
                         } ;
@@ -2855,25 +3009,19 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 } else {
                     #write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser| ft -auto ObjectId,DisplayName,UserPrincipalName,UserType |out-string).trim())" ;
                     # defer to ADUser details
-                    #"$(($hSum.ADUser |fl $propsMailx |out-markdowntable @MDtbl|out-string).trim())"
-                    <#$propsADL1 = 'UserPrincipalName','DisplayName','GivenName','Surname','Title' ;
-                    $propsADL2 = 'Company','Department','PhysicalDeliveryOfficeName' ;
-                    $propsADL3 = 'StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone' ;
-                    #>
                     write-host -foreground yellow "===`$hSum.ADUser: " #-nonewline;
                     $smsg = "$(($hSum.ADUser| select $propsADL1 |out-markdowntable @MDtbl |out-string).trim())" ;
                     $smsg += "`n$(($hSum.ADUser|select $propsADL2 |out-markdowntable @MDtbl|out-string).trim())" ;
                     $smsg += "`n$(($hSum.ADUser|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                     $smsg += "`n$(($hSum.ADUser|select $propsADL4 |out-markdowntable @MDtbl|out-string).trim())" ;
-                    <# $propsADL5 = 'whenCreated','whenChanged' ; 
-                    $propsADL6 = @{Name='Desc';Expression={$_.Description }} ;
-                    #>
                     $smsg += "`n$(($hSum.ADUser|select $propsADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
                     # stick desc on trailing line $propsADL5
                     #$smsg += "`n$(($hSum.ADUser|select $propsADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
                     # flip L5 to fl (suppress crlf wrap)
                     $smsg += "`n$(($hSum.ADUser|select $propsADL6 |Format-List|out-string).trim())" ;
-
+                    if($hsum.ADUser.Info){
+                        $smsg += "`n$(($hSum.ADUser|select $propsADL7 |Format-List|out-string).trim())" ;
+                    } ;
                     # moved DN into adl4, w enabled
                     #$smsg += "`n`$ADUser.DN:`n$(($hsum.aduser.DistinguishedName|out-string).trim())" ;
                     #$smsg += "`n$($hSum.ADUser|select Enabled,distinguishedname| convertTo-MarkdownTable -NoDashRow -Border) `$ADUser.DN:`n$(($hsum.aduser.DistinguishedName|out-string).trim())" ;
@@ -2887,17 +3035,32 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
 
                 # acct enabled/disabled: .aduser.Enbabled & .aaduser.AccountEnabled
                 if($hSum.aduser){
-                    if($hSum.aduser.Enabled){} else {
-                        $smsg = "ADUser:$($hSum.ADUser.userprincipalname) AD Account is *DISABLED!*"
-                        write-warning $smsg ;
-                    } ;
+                    if($hSum.aduser.Enabled){
+                        if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){
+                            $smsg = "ADUser:$($hSum.ADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) mbx is *ENABLED!*"
+                            write-warning $smsg ;
+                        } ;
+                    } else {
+                        if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){} else { 
+                            $smsg = "ADUser:$($hSum.ADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) is *DISABLED!*"
+                            write-warning $smsg ;
+                        } ; 
+                    } ; 
                 } ;
                 # acct enabled/disabled: .aduser.Enbabled & .aaduser.AccountEnabled
                 if($hSum.AADUser){
-                    if($hSum.aaduser.AccountEnabled){} else {
-                        $smsg = "AADUser:$($hSum.AADUser.userprincipalname) AAD Account is *DISABLED!*"
-                        write-warning $smsg ;
-                    } ;
+                    if($hSum.AADUser.Enabled){
+                        if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){
+                            $smsg = "ADUser:$($hSum.AADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) mbx is *ENABLED!*"
+                            write-warning $smsg ;
+                        } ;
+                    } else {
+                        if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){} else { 
+                            $smsg = "ADUser:$($hSum.AADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) is *DISABLED!*"
+                            write-warning $smsg ;
+                        } ; 
+                    } ; 
+
                 } ;
                 if($hSum.ADUser){$hSum.LicenseGroup  +=  $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
 
@@ -2922,13 +3085,13 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     $smsg += "`n$(($hSum.AADUserMgr|Format-List $propsAADMgrL2|out-string).trim())" ;
                     #$smsg += "`n$(($hSum.AADUserMgr|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                 } else {
-                    $smsg += "(AADUserMgr was blank, or unresolved)" ;
+                    $smsg = "(AADUserMgr was blank, or unresolved)" ;
                 } ;
                 write-host $smsg ;
 
                 if($getQuotaUsage -AND $hSum.xoMailbox){
 
-                    $smsg += "`n`nLicenses::`n$(($hsum.AADUserLics -join ', ' |out-string).trim())`n`n" ; 
+                    $smsg += "`n`nLicenses:`n$(($hsum.AADUserLics -join ', ' |out-string).trim())`n`n" ; 
                     $smsg += "`nwhich specify the following size limits:`n$(($hSum.xoEffectiveQuotas| fl |out-string).trim())`n(UseDatabaseQuotaDefaults:$($hSum.xoMailbox.UseDatabaseQuotaDefaults))" ; 
                     $smsg += "`n`nCurrent TotalMailboxSizeMB: $($hSum.xoMailboxStats.TotalMailboxSizeMB)`n`n" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
@@ -2952,7 +3115,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
 
-                    $smsg = "`n===`output to::`n$($ofMbxFolderStats)`n" ;
+                    $smsg = "`n===`output to:`n$($ofMbxFolderStats)`n" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     
@@ -3009,6 +3172,41 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     write-host $hsInfo ;   
 
                 } ; 
+
+                # 2:58 PM 12/26/2024 getPerms
+                if($getPerms -AND $hSum.xoMailbox){
+
+                    if($hSum.xoMailboxPermission){
+                        $smsg = "`n## xoMailboxPermission:`n$(($hsum.xoMailboxPermission | ft -a $prpMPerms |out-string).trim())`n" ; 
+                        if($hSum.xoMailboxPermissionGroups){
+                            $smsg += "`n### Expanded Perm Group Summaries:" ; 
+                            foreach($grp in $hSum.xoMailboxPermissionGroups){
+                                $smsg += "`n-----------" ; 
+                                $smsg += "`n$(($grp |select $propsDG[0..1] |out-markdowntable @MDtbl|out-string).trim())" ;
+                                $smsg += "`n$(($grp |select $propsDG[3..6] |out-markdowntable @MDtbl|out-string).trim())" ;
+                                $smsg += "`n$(($grp |select $propsDG[2] |fl |out-string).trim())" ;
+                                $smsg += "`n#### Members:`n$(($grp.members | ft -a $propsRcpTbl|out-string).trim())`n`n" ;
+                            } ; 
+                        } ; 
+                    } ; 
+                    if($hSum.xoRecipientPermission){
+                        $smsg += "`n## xoRecipientPermission:`n$(($hsum.xoRecipientPermission | ft -a $prpRPerms |out-string).trim())`n`n" ; 
+                        if($hSum.xoRecipientPermissionGroups){
+                            $smsg += "`n### Expanded Perm Group Summaries:" ; 
+                            foreach($grp in $hSum.xoRecipientPermissionGroups){
+                                $smsg += "`n-----------" ; 
+                                $smsg += "`n$(($grp |select $propsDG[0..1] |out-markdowntable @MDtbl|out-string).trim())" ;
+                                $smsg += "`n$(($grp |select $propsDG[3..6] |out-markdowntable @MDtbl|out-string).trim())" ;
+                                $smsg += "`n$(($grp |select $propsDG[2] |fl |out-string).trim())" ;
+                                $smsg += "`n#### Members:`n$(($grp.members | ft -a $propsRcpTbl|out-string).trim())`n`n" ;
+                            } ; 
+                        } ; 
+                    } ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                } ;
+
             } ;
 
             # do a split-brain/nobrain check
@@ -3062,11 +3260,11 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
 
             $smsg = "`n"
             if(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hsum.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
-                <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
+                #OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox
                 $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!" ;
                 $hsum.IsSplitBrain  +=  $true ;
             }elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hsum.IsLicensed) -AND $hSum.xomailbox -AND $hSum.OPMailbox){
-                <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
+                #OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#
                 $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!`nAND is *UNLICENSED!*" ;
                 $hsum.IsSplitBrain  +=  $true ;
             } elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hsum.IsLicensed -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
@@ -3122,6 +3320,9 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 if($hsum.ADUser){
                     $smsg += "`n----$($hsum.ADUser.distinguishedname)" ;
                     $smsg += "`n--ADUser.Description:$($hsum.ADUser.Description)" ;
+                    if($hsum.ADUser.Info){
+                        $smsg += "`n--ADUser.Info:$($hsum.ADUser.Info)" ;
+                    }
                     if($hsum.IsADDisabled){
                         $smsg += "`n--ADUser:$($hsum.ADUser.samaccountname) is *DISABLED* for logon (likely TERM)" ;
                     } else {
