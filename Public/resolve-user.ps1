@@ -18,6 +18,12 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 4:41 PM 1/9/2025 rebuffered in latest Server Connections, found that the 
+        assumption could use the existing PS session context for REMS, was bogus. So 
+        re-enabled the OP cred gather even for useExopNoDep conns. Also reworked 
+        connect-exchangeserverTdo() to actually use the credentials passed in, and 
+        added the missing import-module $PSS to make the session actually functional 
+        for running cmds, wo popping cred prompts. 
     * 8:53 AM 12/31/2024 cbh typo: cleared duped param Tenorg
     * 10:45 AM 12/27/2024 param aliass 'Quota','Perms' ; default -silent $true; updated propsADU to include desc & info ; add: $propsDG &  $propsADL7 ; rework into a loop for perm group summary dump; moved members & managedby into the grp summary; 
         removed nonewlines on the initial OP mbx/rmbx type; tweaked unlic & disabled ww's to only fire on inapprop config (smbx v umbx)
@@ -368,170 +374,233 @@ function resolve-user {
     ) ;
     BEGIN{
         #region CONSTANTS_AND_ENVIRO #*======v CONSTANTS_AND_ENVIRO v======
-    #region ENVIRO_DISCOVER ; #*------v ENVIRO_DISCOVER v------
-    $Verbose = ($VerbosePreference -eq 'Continue') ; 
-    # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
-    $rPSCmdlet = $PSCmdlet ; 
-    $rPSScriptRoot = $PSScriptRoot ; 
-    $rPSCommandPath = $PSCommandPath ; 
-    $rMyInvocation = $MyInvocation ; 
-    $rPSBoundParameters = $PSBoundParameters ; 
-    [array]$score = @() ; 
-    if($rPSCmdlet.MyInvocation.InvocationName){
-        if($rPSCmdlet.MyInvocation.InvocationName -match '\.ps1$'){
-            $score+= 'ExternalScript' 
-        }elseif($rPSCmdlet.MyInvocation.InvocationName  -match '^\.'){
-            write-warning "dot-sourced invocation detected!:$($rPSCmdlet.MyInvocation.InvocationName)`n(will be unable to leverage script path etc from MyInvocation objects)" ; 
-            # dot sourcing is implicit scripot exec
-            $score+= 'ExternalScript' ; 
-        } else {$score+= 'Function' };
-    } ; 
-    if($rPSCmdlet.CommandRuntime){
-        if($rPSCmdlet.CommandRuntime.tostring() -match '\.ps1$'){$score+= 'ExternalScript' } else {$score+= 'Function' }
-    } ; 
-    $score+= $rMyInvocation.MyCommand.commandtype.tostring() ; 
-    $grpSrc = $score | group-object -NoElement | sort count ;
-    if( ($grpSrc |  measure | select -expand count) -gt 1){
-        write-warning  "$score mixed results:$(($grpSrc| ft -a count,name | out-string).trim())" ;
-        if($grpSrc[-1].count -eq $grpSrc[-2].count){
-            write-warning "Deadlocked non-majority results!" ;
+        #region ENVIRO_DISCOVER ; #*------v ENVIRO_DISCOVER v------
+        $Verbose = ($VerbosePreference -eq 'Continue') ; 
+        # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
+        $rPSCmdlet = $PSCmdlet ; 
+        $rPSScriptRoot = $PSScriptRoot ; 
+        $rPSCommandPath = $PSCommandPath ; 
+        $rMyInvocation = $MyInvocation ; 
+        $rPSBoundParameters = $PSBoundParameters ; 
+        [array]$score = @() ; 
+        if($rPSCmdlet.MyInvocation.InvocationName){
+            if($rPSCmdlet.MyInvocation.InvocationName -match '\.ps1$'){
+                $score+= 'ExternalScript' 
+            }elseif($rPSCmdlet.MyInvocation.InvocationName  -match '^\.'){
+                write-warning "dot-sourced invocation detected!:$($rPSCmdlet.MyInvocation.InvocationName)`n(will be unable to leverage script path etc from MyInvocation objects)" ; 
+                # dot sourcing is implicit scripot exec
+                $score+= 'ExternalScript' ; 
+            } else {$score+= 'Function' };
+        } ; 
+        if($rPSCmdlet.CommandRuntime){
+            if($rPSCmdlet.CommandRuntime.tostring() -match '\.ps1$'){$score+= 'ExternalScript' } else {$score+= 'Function' }
+        } ; 
+        $score+= $rMyInvocation.MyCommand.commandtype.tostring() ; 
+        $grpSrc = $score | group-object -NoElement | sort count ;
+        if( ($grpSrc |  measure | select -expand count) -gt 1){
+            write-warning  "$score mixed results:$(($grpSrc| ft -a count,name | out-string).trim())" ;
+            if($grpSrc[-1].count -eq $grpSrc[-2].count){
+                write-warning "Deadlocked non-majority results!" ;
+            } else {
+                $runSource = $grpSrc | select -last 1 | select -expand name ;
+            } ;
         } else {
+            write-verbose "consistent results" ;
             $runSource = $grpSrc | select -last 1 | select -expand name ;
-        } ;
-    } else {
-        write-verbose "consistent results" ;
-        $runSource = $grpSrc | select -last 1 | select -expand name ;
-    };
-    write-verbose  "Calculated `$runSource:$($runSource)" ;
-    'score','grpSrc' | get-variable | remove-variable ; # cleanup temp varis
-    ${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ; # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
-    #region PsParams ; #*------v PsParams v------
-    $PSParameters = New-Object -TypeName PSObject -Property $rPSBoundParameters ;
-    write-verbose "`$rPSBoundParameters:`n$(($rPSBoundParameters|out-string).trim())" ;
-    # pre psv2, no $rPSBoundParameters autovari to check, so back them out:
-    if($rPSCmdlet.MyInvocation.InvocationName){
-        if($rPSCmdlet.MyInvocation.InvocationName  -match '^\.'){
-            $smsg = "detected dot-sourced invocation: Skipping `$PSCmdlet.MyInvocation.InvocationName-tied cmds..." ; 
+        };
+        write-verbose  "Calculated `$runSource:$($runSource)" ;
+        'score','grpSrc' | get-variable | remove-variable ; # cleanup temp varis
+        ${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ; # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
+        #region PsParams ; #*------v PsParams v------
+        $PSParameters = New-Object -TypeName PSObject -Property $rPSBoundParameters ;
+        # DIFFERENCES $PSParameters vs $PSBoundParameters:
+        # - $PSBoundParameters: System.Management.Automation.PSBoundParametersDictionary (native obj)
+        # test/access: ($PSBoundParameters['Verbose'] -eq $true) ; $PSBoundParameters.ContainsKey('Referrer') #hash syntax
+        # CAN use as a @PSBoundParameters splat to push through (make sure populated, can fail if wrong type of wrapping code)
+        # - $PSParameters: System.Management.Automation.PSCustomObject (created obj)
+        # test/access: ($PSParameters.verbose -eq $true) ; $PSParameters.psobject.Properties.name -contains 'SenderAddress' ; # cobj syntax
+        # CANNOT use as a @splat to push through (it's a cobj)
+        write-verbose "`$rPSBoundParameters:`n$(($rPSBoundParameters|out-string).trim())" ;
+        # pre psv2, no $rPSBoundParameters autovari to check, so back them out:
+        if($rPSCmdlet.MyInvocation.InvocationName){
+            if($rPSCmdlet.MyInvocation.InvocationName  -match '^\.'){
+                $smsg = "detected dot-sourced invocation: Skipping `$PSCmdlet.MyInvocation.InvocationName-tied cmds..." ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            } else { 
+                write-verbose 'Collect all non-default Params (works back to psv2 w CmdletBinding)'
+                $ParamsNonDefault = (Get-Command $rPSCmdlet.MyInvocation.InvocationName).parameters | Select-Object -expand keys | Where-Object{$_ -notmatch '(Verbose|Debug|ErrorAction|WarningAction|ErrorVariable|WarningVariable|OutVariable|OutBuffer)'} ;
+            } ; 
+        } else { 
+            $smsg = "(blank `$rPSCmdlet.MyInvocation.InvocationName, skipping Parameters collection)" ; 
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-        } else { 
-            write-verbose 'Collect all non-default Params (works back to psv2 w CmdletBinding)'
-            $ParamsNonDefault = (Get-Command $rPSCmdlet.MyInvocation.InvocationName).parameters | Select-Object -expand keys | Where-Object{$_ -notmatch '(Verbose|Debug|ErrorAction|WarningAction|ErrorVariable|WarningVariable|OutVariable|OutBuffer)'} ;
         } ; 
-    } else { 
-        $smsg = "(blank `$rPSCmdlet.MyInvocation.InvocationName, skipping Parameters collection)" ; 
-        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-    } ; 
-    #endregion PsParams ; #*------^ END PsParams ^------
-    <#
-    # Debugger:proxy automatic variables that aren't directly accessible when debugging ; 
-    $rPSScriptRoot = $PSScriptRoot ; 
-    $rPSCommandPath = $PSCommandPath ; 
-    $rMyInvocation = $MyInvocation ; 
-    $rPSBoundParameters = $PSBoundParameters ; 
-    #>
-    $ScriptDir = $scriptName = '' ;     
-    if($ScriptDir -eq '' -AND ( (get-variable -name rPSScriptRoot -ea 0) -AND (get-variable -name rPSScriptRoot).value.length)){
-        $ScriptDir = $rPSScriptRoot
-    } ; # populated rPSScriptRoot
-    if( (get-variable -name rPSCommandPath -ea 0) -AND (get-variable -name rPSCommandPath).value.length){
-        $ScriptName = $rPSCommandPath
-    } ; # populated rPSCommandPath
-    if($ScriptDir -eq '' -AND $runSource -eq 'ExternalScript'){$ScriptDir = (Split-Path -Path $rMyInvocation.MyCommand.Source -Parent)} # Running from File
-    # when $runSource:'Function', $rMyInvocation.MyCommand.Source is empty,but on functions also tends to pre-hit from the rPSCommandPath entFile.FullPath ;
-    if( $scriptname -match '\.psm1$' -AND $runSource -eq 'Function'){
-        write-host "MODULE-HOMED FUNCTION:Use `$CmdletName to reference the running function name for transcripts etc (under a .psm1 `$ScriptName will reflect the .psm1 file  fullname)"
-        if(-not $CmdletName){write-warning "MODULE-HOMED FUNCTION with BLANK `$CmdletNam:$($CmdletNam)" } ;
-    } # Running from .psm1 module
-    if($ScriptDir -eq '' -AND (Test-Path variable:psEditor)) {
-        write-verbose "Running from VSCode|VS" ; 
-        $ScriptDir = (Split-Path -Path $psEditor.GetEditorContext().CurrentFile.Path -Parent) ; 
-            if($ScriptName -eq ''){$ScriptName = $psEditor.GetEditorContext().CurrentFile.Path }; 
-    } ;
-    if ($ScriptDir -eq '' -AND $host.version.major -lt 3 -AND $rMyInvocation.MyCommand.Path.length -gt 0){
-        $ScriptDir = $rMyInvocation.MyCommand.Path ; 
-        write-verbose "(backrev emulating `$rPSScriptRoot, `$rPSCommandPath)"
-        $ScriptName = split-path $rMyInvocation.MyCommand.Path -leaf ;
-        $rPSScriptRoot = Split-Path $ScriptName -Parent ;
-        $rPSCommandPath = $ScriptName ;
-    } ;
-    if ($ScriptDir -eq '' -AND $rMyInvocation.MyCommand.Path.length){
-        if($ScriptName -eq ''){$ScriptName = $rMyInvocation.MyCommand.Path} ;
-        $ScriptDir = $rPSScriptRoot = Split-Path $rMyInvocation.MyCommand.Path -Parent ;
-    }
-    if ($ScriptDir -eq ''){throw "UNABLE TO POPULATE SCRIPT PATH, EVEN `$rMyInvocation IS BLANK!" } ;
-    if($ScriptName){
-        if(-not $ScriptDir ){$ScriptDir = Split-Path -Parent $ScriptName} ; 
-        $ScriptBaseName = split-path -leaf $ScriptName ;
-        $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($ScriptName) ;
-    } ; 
-    # blank $cmdlet name comming through, patch it for Scripts:
-    if(-not $CmdletName -AND $ScriptBaseName){
-        $CmdletName = $ScriptBaseName
-    }
-    # last ditch patch the values in if you've got a $ScriptName
-    if($rPSScriptRoot.Length -ne 0){}else{ 
-        if($ScriptName){$rPSScriptRoot = Split-Path $ScriptName -Parent }
-        else{ throw "Unpopulated, `$rPSScriptRoot, and no populated `$ScriptName from which to emulate the value!" } ; 
-    } ; 
-    if($rPSCommandPath.Length -ne 0){}else{ 
-        if($ScriptName){$rPSCommandPath = $ScriptName }
-        else{ throw "Unpopulated, `$rPSCommandPath, and no populated `$ScriptName from which to emulate the value!" } ; 
-    } ; 
-    if(-not ($ScriptDir -AND $ScriptBaseName -AND $ScriptNameNoExt  -AND $rPSScriptRoot  -AND $rPSCommandPath )){ 
-        throw "Invalid Invocation. Blank `$ScriptDir/`$ScriptBaseName/`ScriptNameNoExt" ; 
-        BREAK ; 
-    } ; 
-    # echo results dyn aligned:
-    $tv = 'runSource','CmdletName','ScriptName','ScriptBaseName','ScriptNameNoExt','ScriptDir','PSScriptRoot','PSCommandPath','rPSScriptRoot','rPSCommandPath' ; 
-    $tvmx = ($tv| Measure-Object -Maximum -Property Length).Maximum * -1 ; 
-    if($silent){}else{
-        #$tv | get-variable | %{  write-host -fore yellow ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; # w-h
-        $tv | get-variable | %{  write-verbose ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; # w-v
-    }
-    'tv','tvmx'|get-variable | remove-variable ; # cleanup temp varis        
+        <# recycling $rPSBoundParameters into @splat calls: (can't use $psParams, it's a cobj, not a hash!)
+        # rgx for filtering $rPSBoundParameters for params to pass on in recursive calls (excludes keys matching below)
+        $rgxBoundParamsExcl = '^(Name|RawOutput|Server|Referrer)$' ; 
+        if($rPSBoundParameters){
+                $pltRvSPFRec = [ordered]@{} ;
+                # add the specific Name for this call, and Server spec (which defaults, is generally not 
+                $pltRvSPFRec.add('Name',"$RedirectRecord" ) ;
+                $pltRvSPFRec.add('Referrer',$Name) ; 
+                $pltRvSPFRec.add('Server',$Server ) ;
+                $rPSBoundParameters.GetEnumerator() | ?{ $_.key -notmatch $rgxBoundParamsExcl} | foreach-object { $pltRvSPFRec.add($_.key,$_.value)  } ;
+                write-host "Resolve-SPFRecord w`n$(($pltRvSPFRec|out-string).trim())" ;
+                Resolve-SPFRecord @pltRvSPFRec  | write-output ;
+        } else {
+            $smsg = "unpopulated `$rPSBoundParameters!" ;
+            write-warning $smsg ;
+            throw $smsg ;
+        };     
+        #>
+        #endregion PsParams ; #*------^ END PsParams ^------
+        <#
+        # Debugger:proxy automatic variables that aren't directly accessible when debugging ; 
+        $rPSScriptRoot = $PSScriptRoot ; 
+        $rPSCommandPath = $PSCommandPath ; 
+        $rMyInvocation = $MyInvocation ; 
+        $rPSBoundParameters = $PSBoundParameters ; 
+        #>
+        $ScriptDir = $scriptName = '' ;     
+        if($ScriptDir -eq '' -AND ( (get-variable -name rPSScriptRoot -ea 0) -AND (get-variable -name rPSScriptRoot).value.length)){
+            $ScriptDir = $rPSScriptRoot
+        } ; # populated rPSScriptRoot
+        if( (get-variable -name rPSCommandPath -ea 0) -AND (get-variable -name rPSCommandPath).value.length){
+            $ScriptName = $rPSCommandPath
+        } ; # populated rPSCommandPath
+        if($ScriptDir -eq '' -AND $runSource -eq 'ExternalScript'){$ScriptDir = (Split-Path -Path $rMyInvocation.MyCommand.Source -Parent)} # Running from File
+        # when $runSource:'Function', $rMyInvocation.MyCommand.Source is empty,but on functions also tends to pre-hit from the rPSCommandPath entFile.FullPath ;
+        if( $scriptname -match '\.psm1$' -AND $runSource -eq 'Function'){
+            write-host "MODULE-HOMED FUNCTION:Use `$CmdletName to reference the running function name for transcripts etc (under a .psm1 `$ScriptName will reflect the .psm1 file  fullname)"
+            if(-not $CmdletName){write-warning "MODULE-HOMED FUNCTION with BLANK `$CmdletNam:$($CmdletNam)" } ;
+        } # Running from .psm1 module
+        if($ScriptDir -eq '' -AND (Test-Path variable:psEditor)) {
+            write-verbose "Running from VSCode|VS" ; 
+            $ScriptDir = (Split-Path -Path $psEditor.GetEditorContext().CurrentFile.Path -Parent) ; 
+                if($ScriptName -eq ''){$ScriptName = $psEditor.GetEditorContext().CurrentFile.Path }; 
+        } ;
+        if ($ScriptDir -eq '' -AND $host.version.major -lt 3 -AND $rMyInvocation.MyCommand.Path.length -gt 0){
+            $ScriptDir = $rMyInvocation.MyCommand.Path ; 
+            write-verbose "(backrev emulating `$rPSScriptRoot, `$rPSCommandPath)"
+            $ScriptName = split-path $rMyInvocation.MyCommand.Path -leaf ;
+            $rPSScriptRoot = Split-Path $ScriptName -Parent ;
+            $rPSCommandPath = $ScriptName ;
+        } ;
+        if ($ScriptDir -eq '' -AND $rMyInvocation.MyCommand.Path.length){
+            if($ScriptName -eq ''){$ScriptName = $rMyInvocation.MyCommand.Path} ;
+            $ScriptDir = $rPSScriptRoot = Split-Path $rMyInvocation.MyCommand.Path -Parent ;
+        }
+        if ($ScriptDir -eq ''){throw "UNABLE TO POPULATE SCRIPT PATH, EVEN `$rMyInvocation IS BLANK!" } ;
+        if($ScriptName){
+            if(-not $ScriptDir ){$ScriptDir = Split-Path -Parent $ScriptName} ; 
+            $ScriptBaseName = split-path -leaf $ScriptName ;
+            $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($ScriptName) ;
+        } ; 
+        # blank $cmdlet name comming through, patch it for Scripts:
+        if(-not $CmdletName -AND $ScriptBaseName){
+            $CmdletName = $ScriptBaseName
+        }
+        # last ditch patch the values in if you've got a $ScriptName
+        if($rPSScriptRoot.Length -ne 0){}else{ 
+            if($ScriptName){$rPSScriptRoot = Split-Path $ScriptName -Parent }
+            else{ throw "Unpopulated, `$rPSScriptRoot, and no populated `$ScriptName from which to emulate the value!" } ; 
+        } ; 
+        if($rPSCommandPath.Length -ne 0){}else{ 
+            if($ScriptName){$rPSCommandPath = $ScriptName }
+            else{ throw "Unpopulated, `$rPSCommandPath, and no populated `$ScriptName from which to emulate the value!" } ; 
+        } ; 
+        if(-not ($ScriptDir -AND $ScriptBaseName -AND $ScriptNameNoExt  -AND $rPSScriptRoot  -AND $rPSCommandPath )){ 
+            throw "Invalid Invocation. Blank `$ScriptDir/`$ScriptBaseName/`ScriptNameNoExt" ; 
+            BREAK ; 
+        } ; 
+        # echo results dyn aligned:
+        $tv = 'runSource','CmdletName','ScriptName','ScriptBaseName','ScriptNameNoExt','ScriptDir','PSScriptRoot','PSCommandPath','rPSScriptRoot','rPSCommandPath' ; 
+        $tvmx = ($tv| Measure-Object -Maximum -Property Length).Maximum * -1 ; 
+        if($silent){}else{
+            #$tv | get-variable | %{  write-host -fore yellow ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; # w-h
+            $tv | get-variable | %{  write-verbose ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; # w-v
+        }
+        'tv','tvmx'|get-variable | remove-variable ; # cleanup temp varis        
 
-    #endregion ENVIRO_DISCOVER ; #*------^ END ENVIRO_DISCOVER ^------
-
+        #endregion ENVIRO_DISCOVER ; #*------^ END ENVIRO_DISCOVER ^------
+        #region TLS_LATEST_FORCE ; #*------v TLS_LATEST_FORCE v------
+        $CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
+        write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
+        # psv6+ already covers, test via the SslProtocol parameter presense
+        if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
+            $currentMaxTlsValue = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__,[Net.SecurityProtocolType]::Tls.value__) ;
+            write-verbose "`$currentMaxTlsValue : $($currentMaxTlsValue )" ;
+            $newerTlsTypeEnums = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $currentMaxTlsValue }
+            if($newerTlsTypeEnums){
+                write-verbose "Appending upgraded/missing TLS `$enums:`n$(($newerTlsTypeEnums -join ','|out-string).trim())" ;
+            } else {
+                write-verbose "Current TLS `$enums are up to date with max rev available on this machine" ;
+            };
+            $newerTlsTypeEnums | ForEach-Object {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
+            } ;
+        } ;
+        #endregion TLS_LATEST_FORCE ; #*------^ END TLS_LATEST_FORCE ^------
+        #region PARAMHELP ; #*------v PARAMHELP  v------
+            # if you want no params -OR -help to run get-help, use:
+            #if ($help -OR (-not $rPSCmdlet.MyInvocation.ExpectingInput) -AND (($PSParameters| measure-object).count -eq 0)) {
+            # on blank specific param -or -help
+            #if (-not $Header -OR $HELP) {
+            # if you only want -help to run get-help
+            if ($HELP) {
+                if($MyInvocation.MyCommand.Name.length -gt 0){
+                    Get-Help -Name "$($MyInvocation.MyCommand.Name)" -full ; 
+                    # also could run using native -? == get-help [command] (avoiding as invoke-expression is stigmatized for sec)
+                    # also note -? only runs default gh output, not full or some other variant. And cmdlet -? -full etc doesn't work
+                    #Invoke-Expression -Command "$($MyInvocation.MyCommand.Name) -?"
+                }elseif($PSCommandPath.length -gt 0){
+                    Get-Help -Name "$($PSCommandPath)" -full ; 
+                }elseif($CmdletName.length -gt 0){
+                    Get-Help -Name "$($CmdletName)" -full ; 
+                } ; 
+                break ; #Exit  ; 
+            }; 
+        #endregion PARAMHELP  ; #*------^ END PARAMHELP  ^------  
         #region COMMON_CONSTANTS ; #*------v COMMON_CONSTANTS v------
     
-    if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
-    if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
-    if(-not $RetrySleep){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
-    if(-not $DirSyncInterval){$DirSyncInterval = 30 } ; # AADConnect dirsync interval
-    if(-not $ThrottleMs){$ThrottleMs = 50 ;}
-    if(-not $rgxDriveBanChars){$rgxDriveBanChars = '[;~/\\\.:]' ; } ; # ;~/\.:,
-    if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' } ; # if it's a 40char hex string -> cert thumbprint  
-    if(-not $rgxSmtpAddr){$rgxSmtpAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ; } ; # email addr/UPN
-    if(-not $rgxDomainLogon){$rgxDomainLogon = '^[a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]+$' } ; # DOMAIN\samaccountname 
-    if(-not $exoMbxGraceDays){$exoMbxGraceDays = 30} ; 
-    if(-not $XOConnectionUri ){$XOConnectionUri = 'https://outlook.office365.com'} ; 
-    if(-not $SCConnectionUri){$SCConnectionUri = 'https://ps.compliance.protection.outlook.com'} ; 
+        if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
+        if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
+        if(-not $RetrySleep){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
+        if(-not $DirSyncInterval){$DirSyncInterval = 30 } ; # AADConnect dirsync interval
+        if(-not $ThrottleMs){$ThrottleMs = 50 ;}
+        if(-not $rgxDriveBanChars){$rgxDriveBanChars = '[;~/\\\.:]' ; } ; # ;~/\.:,
+        if(-not $rgxCertThumbprint){$rgxCertThumbprint = '[0-9a-fA-F]{40}' } ; # if it's a 40char hex string -> cert thumbprint  
+        if(-not $rgxSmtpAddr){$rgxSmtpAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ; } ; # email addr/UPN
+        if(-not $rgxDomainLogon){$rgxDomainLogon = '^[a-zA-Z][a-zA-Z0-9\-\.]{0,61}[a-zA-Z]\\\w[\w\.\- ]+$' } ; # DOMAIN\samaccountname 
+        if(-not $exoMbxGraceDays){$exoMbxGraceDays = 30} ; 
+        if(-not $XOConnectionUri ){$XOConnectionUri = 'https://outlook.office365.com'} ; 
+        if(-not $SCConnectionUri){$SCConnectionUri = 'https://ps.compliance.protection.outlook.com'} ; 
 
-    write-verbose "Coerce configured but blank Resultsize to Unlimited" ; 
-    if(get-variable -name resultsize -ea 0){
-        if( ($null -eq $ResultSize) -OR ('' -eq $ResultSize) ){$ResultSize = 'unlimited' }
-        elseif($Resultsize -is [int]){} else {throw "Resultsize must be an integer or the string 'unlimited' (or blank)"} ;
-    } ; 
-    #$ComputerName = $env:COMPUTERNAME ;
-    #$NoProf = [bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); # if($NoProf){# do this};
-    # XXXMeta derived constants:
-    # - AADU Licensing group checks
-    # calc the rgxLicGrpName fr the existing $xxxmeta.rgxLicGrpDN: (get-variable tormeta).value.rgxLicGrpDN.split(',')[0].replace('^','').replace('CN=','')
-    #$rgxLicGrpName = (get-variable -name "$($tenorg)meta").value.rgxLicGrpDN.split(',')[0].replace('^','').replace('CN=','')
-    # use the dn vers LicGrouppDN = $null ; # | ?{$_ -match $tormeta.rgxLicGrpDN}
-    #$rgxLicGrpDN = (get-variable -name "$($tenorg)meta").value.rgxLicGrpDN
-    # email trigger vari, it will be semi-delimd list of mail-triggering events
-    $script:PassStatus = $null ;
-    # TenOrg or other looped-specific PassStatus (auto supported by 7pswlt)
-    #New-Variable -Name PassStatus_$($tenorg) -scope Script -Value $null ;
-    [array]$SmtpAttachment = $null ;
-    #write-verbose "start-Timer:Master" ; 
-    $swM = [Diagnostics.Stopwatch]::StartNew() ;
-    #endregion COMMON_CONSTANTS ; #*------^ END COMMON_CONSTANTS ^------
-    #region LOCAL_CONSTANTS ; #*------v LOCAL_CONSTANTS v------
+        write-verbose "Coerce configured but blank Resultsize to Unlimited" ; 
+        if(get-variable -name resultsize -ea 0){
+            if( ($null -eq $ResultSize) -OR ('' -eq $ResultSize) ){$ResultSize = 'unlimited' }
+            elseif($Resultsize -is [int]){} else {throw "Resultsize must be an integer or the string 'unlimited' (or blank)"} ;
+        } ; 
+        #$ComputerName = $env:COMPUTERNAME ;
+        #$NoProf = [bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); # if($NoProf){# do this};
+        # XXXMeta derived constants:
+        # - AADU Licensing group checks
+        # calc the rgxLicGrpName fr the existing $xxxmeta.rgxLicGrpDN: (get-variable tormeta).value.rgxLicGrpDN.split(',')[0].replace('^','').replace('CN=','')
+        #$rgxLicGrpName = (get-variable -name "$($tenorg)meta").value.rgxLicGrpDN.split(',')[0].replace('^','').replace('CN=','')
+        # use the dn vers LicGrouppDN = $null ; # | ?{$_ -match $tormeta.rgxLicGrpDN}
+        #$rgxLicGrpDN = (get-variable -name "$($tenorg)meta").value.rgxLicGrpDN
+        # email trigger vari, it will be semi-delimd list of mail-triggering events
+        $script:PassStatus = $null ;
+        # TenOrg or other looped-specific PassStatus (auto supported by 7pswlt)
+        #New-Variable -Name PassStatus_$($tenorg) -scope Script -Value $null ;
+        [array]$SmtpAttachment = $null ;
+        #write-verbose "start-Timer:Master" ; 
+        $swM = [Diagnostics.Stopwatch]::StartNew() ;
+        #endregion COMMON_CONSTANTS ; #*------^ END COMMON_CONSTANTS ^------
+
+        #region LOCAL_CONSTANTS ; #*------v LOCAL_CONSTANTS v------        
         $rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ;
         # added support for . fname lname delimiter (supports pasted in dirname of email addresses, as user)
         $rgxDName = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
@@ -691,42 +760,68 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         #endregion LOCAL_CONSTANTS ; #*------^ END LOCAL_CONSTANTS ^------        
-    #region ENCODED_CONTANTS ; #*------v ENCODED_CONTANTS v------
-    # ENCODED CONsTANTS & SUPPORT FUNCTIONS:
-    #region 2B4 ; #*------v 2B4 v------
-    if(-not (get-command 2b4 -ea 0)){function 2b4{[CmdletBinding()][Alias('convertTo-Base64String')] PARAM([Parameter(ValueFromPipeline=$true)][string[]]$str) ; PROCESS{$str|%{[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($_))}  };} ; } ; 
-    #endregion 2B4 ; #*------^ END 2B4 ^------
-    #region 2B4C ; #*------v 2B4C v------
-    # comma-quoted return
-    if(-not (get-command 2b4c -ea 0)){function 2b4c{ [CmdletBinding()][Alias('convertto-Base64StringCommaQuoted')] PARAM([Parameter(ValueFromPipeline=$true)][string[]]$str) ;BEGIN{$outs = @()} PROCESS{[array]$outs += $str | %{[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($_))} ; } END {'"' + $(($outs) -join '","') + '"' | out-string | set-clipboard } ; } ; } ; 
-    #endregion 2B4C ; #*------^ END 2B4C ^------
-    #region FB4 ; #*------v FB4 v------
-    # DEMO: $SitesNameList = 'THluZGFsZQ==','U3BlbGxicm9vaw==','QWRlbGFpZGU=' | fb4 ;
-    if(-not (get-command fb4 -ea 0)){function fb4{[CmdletBinding()][Alias('convertFrom-Base64String')] PARAM([Parameter(ValueFromPipeline=$true)][string[]]$str) ; PROCESS{$str | %{ [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }; } ; } ; }; 
-    #endregion FB4 ; #*------^ END FB4 ^------
-    # FOLLOWING CONSTANTS ARE USED FOR DEPENDANCY-LESS CONNECTIONS
-    if(-not $o365_Toroco_SIDUpn){$o365_Toroco_SIDUpn = 'cy10b2RkLmthZHJpZUB0b3JvLmNvbQ==' | fb4 } ;
-    $o365_SIDUpn = $o365_Toroco_SIDUpn ; 
-    switch($env:Userdomain){
-        'CMW'{
-            if(-not $CMW_logon_SID){$CMW_logon_SID = 'Q01XXGQtdG9kZC5rYWRyaWU=' | fb4 } ; 
-            $logon_SID = $CMW_logon_SID ; 
-        }
-        'TORO'{
-            if(-not $TOR_logon_SID){$TOR_logon_SID = 'VE9ST1xrYWRyaXRzcw==' | fb4 } ; 
-            $logon_SID = $TOR_logon_SID ; 
-        }
-        default{
-            $smsg = "$($env:userdomain):UNRECOGIZED/UNCONFIGURED USER DOMAIN STRING!" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-            THROW $SMSG 
-            BREAK ; 
-        }
-    } ; 
-    #endregion ENCODED_CONTANTS ; #*------^ END ENCODED_CONTANTS ^------
     
-    #endregion CONSTANTS_AND_ENVIRO ; #*------^ END CONSTANTS_AND_ENVIRO ^------
+        #region ENCODED_CONTANTS ; #*------v ENCODED_CONTANTS v------
+        # ENCODED CONsTANTS & SUPPORT FUNCTIONS:
+        #region 2B4 ; #*------v 2B4 v------
+        if(-not (get-command 2b4 -ea 0)){function 2b4{[CmdletBinding()][Alias('convertTo-Base64String')] PARAM([Parameter(ValueFromPipeline=$true)][string[]]$str) ; PROCESS{$str|%{[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($_))}  };} ; } ; 
+        #endregion 2B4 ; #*------^ END 2B4 ^------
+        #region 2B4C ; #*------v 2B4C v------
+        # comma-quoted return
+        if(-not (get-command 2b4c -ea 0)){function 2b4c{ [CmdletBinding()][Alias('convertto-Base64StringCommaQuoted')] PARAM([Parameter(ValueFromPipeline=$true)][string[]]$str) ;BEGIN{$outs = @()} PROCESS{[array]$outs += $str | %{[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($_))} ; } END {'"' + $(($outs) -join '","') + '"' | out-string | set-clipboard } ; } ; } ; 
+        #endregion 2B4C ; #*------^ END 2B4C ^------
+        #region FB4 ; #*------v FB4 v------
+        # DEMO: $SitesNameList = 'THluZGFsZQ==','U3BlbGxicm9vaw==','QWRlbGFpZGU=' | fb4 ;
+        if(-not (get-command fb4 -ea 0)){function fb4{[CmdletBinding()][Alias('convertFrom-Base64String')] PARAM([Parameter(ValueFromPipeline=$true)][string[]]$str) ; PROCESS{$str | %{ [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }; } ; } ; }; 
+        #endregion FB4 ; #*------^ END FB4 ^------
+        # FOLLOWING CONSTANTS ARE USED FOR DEPENDANCY-LESS CONNECTIONS
+        if(-not $o365_Toroco_SIDUpn){$o365_Toroco_SIDUpn = 'cy10b2RkLmthZHJpZUB0b3JvLmNvbQ==' | fb4 } ;
+        $o365_SIDUpn = $o365_Toroco_SIDUpn ; 
+        switch($env:Userdomain){
+            'CMW'{
+                if(-not $CMW_logon_SID){$CMW_logon_SID = 'Q01XXGQtdG9kZC5rYWRyaWU=' | fb4 } ; 
+                $logon_SID = $CMW_logon_SID ; 
+            }
+            'TORO'{
+                if(-not $TOR_logon_SID){$TOR_logon_SID = 'VE9ST1xrYWRyaXRzcw==' | fb4 } ; 
+                $logon_SID = $TOR_logon_SID ; 
+            }
+            default{
+                $smsg = "$($env:userdomain):UNRECOGIZED/UNCONFIGURED USER DOMAIN STRING!" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                THROW $SMSG 
+                BREAK ; 
+            }
+        } ; 
+        #endregion ENCODED_CONTANTS ; #*------^ END ENCODED_CONTANTS ^------
+    
+        #region WHPASSFAIL ; #*------v WHPASSFAIL v------
+        $whPASS = @{
+        Object = "$([Char]8730) PASS" ;
+        ForegroundColor = 'Green' ;
+        NoNewLine = $true ;
+        } ;
+        $whFAIL = @{
+            # light diagonal cross: ╳ U+2573 DOESN'T RENDER IN PS, use it if WinTerm
+            'Object'= if ($env:WT_SESSION) { "$([Char]8730) FAIL"} else {' X FAIL'};
+            ForegroundColor = 'RED' ;
+            NoNewLine = $true ;
+        } ;
+        <#
+        # inline pass/fail color-coded w char
+        $smsg = "Testing:THING" ; 
+        $Passed = $true ; 
+        Write-Host "$($smsg)... " -NoNewline ; 
+        if($Passed){Write-Host @whPASS} else {write-host @whFAIL} ; 
+        Write-Host " (Done)" ;
+        # out: Test:Thing... √ PASS (Done) | Test:Thing...  X FAIL (Done)
+        #>
+        $psPASS = "$([Char]8730) PASS" ; 
+        $psFAIL = if ($env:WT_SESSION) { "$([Char]8730) FAIL"} else {' X FAIL'} ;
+        #endregion WHPASSFAIL ; #*------^ END WHPASSFAIL ^------
+    
+        #endregion CONSTANTS_AND_ENVIRO ; #*------^ END CONSTANTS_AND_ENVIRO ^------
 
         #region FUNCTIONS ; #*======v FUNCTIONS v======
 
@@ -857,7 +952,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
                 # 9:58 AM 6/13/2024 populate $credential with return, if not populated (may be required for follow-on calls that pass common $Credentials through)
-                if((gv Credential) -AND $Credential -eq $null){
+                if((gv Credential) -AND $null -eq $Credential){
                     $credential = $o365Cred.Cred ;
                 }elseif($credential.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
                     $smsg = "(`$Credential is properly populated; explicit -Credential was in initial call)" ; 
@@ -1012,65 +1107,68 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         } ;
         #>
         if($UseOP){
-            if($useExopNoDep){
+            <#if($useExopNoDep){
                 # Connect-ExchangeServerTDO use: creds are implied from the PSSession creds; assumed to have EXOP perms
+                # 3:14 PM 1/9/2025 no they aren't, it still wants explicit creds to connect - I've just been doing rx10 and pre-initiating
             } else {
-                #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
-                # do the OP creds too
-                $OPCred=$null ;
-                # default to the onprem svc acct
-                # userrole='ESVC','SID'
-                #$pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC','SID'; verbose=$($verbose)} ;
-                # userrole='SID','ESVC'
-                $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='SID','ESVC'; verbose=$($verbose)} ;
-                $smsg = "get-HybridOPCredentials w`n$(($pltGHOpCred|out-string).trim())" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
-                    # make it script scope, so we don't have to predetect & purge before using new-variable
-                    if(get-Variable -Name "cred$($tenorg)OP" -scope Script -ea 0 ){ remove-Variable -Name "cred$($tenorg)OP" -scope Script } ;
-                    New-Variable -Name "cred$($tenorg)OP" -scope Script -Value $OPCred ;
-                    $smsg = "Resolved $($Tenorg) `$OPCred:$($OPCred.username) (assigned to `$cred$($tenorg)OP)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                } else {
-                    $statusdelta = ";ERROR"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
-                    $script:PassStatus += $statusdelta ;
-                    set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
-                    $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    throw "Unable to resolve $($tenorg) `$OPCred value!`nEXIT!"
-                    Break ;
-                } ;
-                $smsg= "Using OnPrem/EXOP cred:`$cred$($tenorg)OP:$((Get-Variable -name "cred$($tenorg)OP" ).value.username)" ;
+            #>
+            # useExopNoDep: at this point creds are *not* implied from the PS context creds. So have to explicitly pass in $creds on the new-Pssession etc, 
+            # so we always need the EXOP creds block, or at worst an explicit get-credential prompt to gather when can't find in enviro or profile. 
+            #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
+            # do the OP creds too
+            $OPCred=$null ;
+            # default to the onprem svc acct
+            # userrole='ESVC','SID'
+            #$pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC','SID'; verbose=$($verbose)} ;
+            # userrole='SID','ESVC'
+            $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='SID','ESVC'; verbose=$($verbose)} ;
+            $smsg = "get-HybridOPCredentials w`n$(($pltGHOpCred|out-string).trim())" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
+                # make it script scope, so we don't have to predetect & purge before using new-variable
+                if(get-Variable -Name "cred$($tenorg)OP" -scope Script -ea 0 ){ remove-Variable -Name "cred$($tenorg)OP" -scope Script } ;
+                New-Variable -Name "cred$($tenorg)OP" -scope Script -Value $OPCred ;
+                $smsg = "Resolved $($Tenorg) `$OPCred:$($OPCred.username) (assigned to `$cred$($tenorg)OP)" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                                                            <### CALLS ARE IN FORM: (cred$($tenorg))
-                $pltRX10 = @{
-                    Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
-                    #verbose = $($verbose) ;
-                    Verbose = $FALSE ; 
-                } ;
-                $1stConn = $false ; # below uses silent suppr for both x10 & xo!
-                if($1stConn){
-                    $pltRX10.silent = $pltRXO.silent = $false ;
-                } else {
-                    $pltRX10.silent = $pltRXO.silent =$true ;
-                } ;
-                if($pltRX10){ReConnect-Ex2010 @pltRX10 }
-                else {ReConnect-Ex2010 }
-                #$pltRx10 creds & .username can also be used for local ADMS connections
-                ###>
-                $pltRX10 = @{
-                    Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
-                    #verbose = $($verbose) ;
-                    Verbose = $FALSE ; 
-                } ;
-                if((get-command Reconnect-Ex2010).Parameters.keys -contains 'silent'){
-                    $pltRX10.add('Silent',$false) ;
-                } ;
-            } ; 
+            } else {
+                $statusdelta = ";ERROR"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                $script:PassStatus += $statusdelta ;
+                set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
+                $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw "Unable to resolve $($tenorg) `$OPCred value!`nEXIT!"
+                Break ;
+            } ;
+            $smsg= "Using OnPrem/EXOP cred:`$cred$($tenorg)OP:$((Get-Variable -name "cred$($tenorg)OP" ).value.username)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            <### CALLS ARE IN FORM: (cred$($tenorg))
+            $pltRX10 = @{
+                Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
+                #verbose = $($verbose) ;
+                Verbose = $FALSE ; 
+            } ;
+            $1stConn = $false ; # below uses silent suppr for both x10 & xo!
+            if($1stConn){
+                $pltRX10.silent = $pltRXO.silent = $false ;
+            } else {
+                $pltRX10.silent = $pltRXO.silent =$true ;
+            } ;
+            if($pltRX10){ReConnect-Ex2010 @pltRX10 }
+            else {ReConnect-Ex2010 }
+            #$pltRx10 creds & .username can also be used for local ADMS connections
+            ###>
+            $pltRX10 = @{
+                Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
+                #verbose = $($verbose) ;
+                Verbose = $FALSE ; 
+            } ;
+            if((get-command Reconnect-Ex2010).Parameters.keys -contains 'silent'){
+                $pltRX10.add('Silent',$false) ;
+            } ;
             # defer cx10/rx10, until just before get-recipients qry
             # connect to ExOP X10
             if($useEXOP){
@@ -1081,7 +1179,16 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     TRY{
                         $Site=[System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().Name 
                     }CATCH{$Site=$env:COMPUTERNAME} ;
-                    $PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
+                    $pltCcX10=[ordered]@{
+                        siteName = $Site ;
+                        RoleNames = @('HUB','CAS') ;
+                        verbose  = $($rPSBoundParameters['Verbose'] -eq $true)
+                        Credential = $pltRX10.Credential ; 
+                    } ;
+                    $smsg = "Connect-ExchangeServerTDO w`n$(($pltCcX10|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #$PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
+                    $PSSession = Connect-ExchangeServerTDO @pltCcX10 ; 
                 } else {
                     if($pltRX10){
                         #ReConnect-Ex2010XO @pltRX10 ;
@@ -1262,6 +1369,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         #>
         #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         #endregion SERVICE_CONNECTIONS #*======^ END SERVICE_CONNECTIONS ^======
+    
     
 
         # finally if we're using pipeline, and aggregating, we need to aggreg outside of the process{} block
@@ -2358,7 +2466,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                 write-verbose "`$hSum.txGuest:`n$(($hSum.txGuest|ft -a |out-string).trim())" ;
                                 #$Rpt += $hSum.OPRemoteMailbox.primarysmtpaddress ;
                                 write-host "$($txR.ExternalEmailAddress): matches a Guest object with UPN:$($hSum.xoUser.userPrincipalName)" ;
-                                if($hSum.txGuest.EmailAddresses -eq $null){
+                                if($null -eq $hSum.txGuest.EmailAddresses){
                                     write-warning "Guest appears to have damage from conficting replicated onprem MailContact, as it's EmailAddresses property is *blank*" ;
                                 } ;
                                 break ;
@@ -3336,14 +3444,30 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 $smsg += "LICENSED AADUSER CLOUD-FIRST XOMAILBOX  (No ADUser, No OPMailbox, No OPRemoteMailbox)~" ; 
             } ELSE { } ;
 
-            if($hsum.IsSplitBrain -OR $hsum.IsNoBrain -OR (-not $hsum.IsLicensed -AND $hsum.xoRcp.RecipientTypeDetails -NOTmatch 'SharedMailbox|RoomMailbox|EquipmentMailbox') ){
+            # conditional w-w, w-h block on status
+            #if($hsum.IsSplitBrain -OR $hsum.IsNoBrain -OR (-not $hsum.IsLicensed -AND $hsum.xoRcp.RecipientTypeDetails -NOTmatch 'SharedMailbox|RoomMailbox|EquipmentMailbox') ){
+            [boolean[]]$testArray = @(
+                $hsum.IsSplitBrain, 
+                $hsum.IsNoBrain, 
+                (-not $hsum.IsLicensed -AND $hsum.xoRcp.RecipientTypeDetails -NOTmatch 'SharedMailbox|RoomMailbox|EquipmentMailbox')
+            ) ; 
+            #write-verbose "Test: All `$true" ; 
+            #if(($testArray | Where-Object {$_ -eq $true}).Count -eq $testArray.Count){
+            #write-verbose "Test: Count `$true meets threshold" ; 
+            #$tTrues = $testArray.count -3 ; # test is 3 less than total elem count
+            #if(($testArray | Where-Object {$_ -eq $true}).Count -ge $tTrues){write-host "test:$($tTrues)/$($testArray.count) `$true: PASS" } ; 
+            write-verbose "Test: Any `$true above" ; 
+            # the $smsg is populated further up, this is just the output format on the $smsg text
+            if($testArray -contains $true){
+                # w-w
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
             } else { 
+                # w-h
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-            } ; 
+            } ;  
 
             if($hsum.IsNoBrain){
                 switch ($hSum.Federator) {
@@ -3390,7 +3514,59 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 write-warning $smsg ;
             } ;
 
-
+            # 2:34 PM 1/9/2025 test for 886258, blocked license-xoMailbox mount issue
+            [boolean[]]$testArray = @(
+                ($hsum.oprcp.recipienttypedetails -eq 'RemoteUserMailbox'),
+                ($hsum.xorcp.recipienttypedetails -eq 'Mailuser'),
+                (-not $hsum.xoMailbox),
+                $hsum.AADUser,
+                $hsum.ADUser,
+                $hsum.isDirSynced,
+                ($hsum.IsNoBrain -eq 1),
+                (-not $hsum.IsLicensed),
+                $hsum.opRemoteMailbox.exchangeguid,
+                $hsum.opRemoteMailbox.remoteroutingaddress    
+            ) ;  
+            # test variants: eval patterns of $true/$false
+            #write-verbose "Test: Count `$true meets threshold" ;
+            #$nTrues = $testArray.count -3 ; # test is 3 less than total elem count
+            #if(($testArray | Where-Object {$_ -eq $true}).Count -ge $nTrues){write-verbose "test:$($nTrues)/$($testArray.count) `$true: PASS" } ;
+            #write-verbose "Test: Any `$true above" ;
+            #if($testArray -contains $true){ # -OR clause
+            write-verbose "Test: All `$true" ; # -AND clause
+            if(($testArray | Where-Object {$_ -eq $true}).Count -eq $testArray.Count){
+                $hsAlertMsg = @"
+User has:
+- OPRmbx and no XoMailbox!
+- Dirsynced AADUser & ADUser
+- Detects as NoBrain (neither OP or xo Mailbox)
+- is not Licensed
+- And Rmbx has populated ExchangeGuid & RemoteRoutingAddress
+(against Mailbox that doesn't currently *exist*
+with email address that also doesn't currently *exist)
+If this matches Incident # 886258:
+- if Licensed, the xoMailbox will never mount
+    sits 18h+ in status: `"We are preparing a mailbox for the user.`"
+- Fix: in that condition is to:
+    1. *Remove* the OpRemoteMailbox
+    2. Permit ADC replication to replicate, and wait for xoMailbox to mount
+    3. Create a new matched OpRmbx with the RemoteMountingAddress and xoMailbox.ExchangeGuid, copied to the OpRmbx.Exchangeguid
+    4. Verify if any CA5 setting is missing/required to properly steer primarysmtpaddress
+## Detailed status:
+### get-RemoteMailbox:
+$(($hsum.opRemoteMailbox | fl 'Name','RecipientTypeDetails','RemoteRecipientType','exchangeguid','PrimarySmtpAddress','RemoteRoutingAddress' | fl |out-string).trim())
+### Cloud: get-xoRecipient:
+$(($hsum.xorcp | fl 'RecipientType','RecipientTypeDetails','PrimarySmtpAddress','Alias' |out-string).trim())
+- SMTP EmailAddresses:
+$(($hsum.xorcp | select -expand emailaddresses | ?{$_ -match 'smtp:'} | sort |out-string).trim())
+### DirSync-settings:
+opRemoteMailbox.exchangeguid.guid:`t$($hsum.opRemoteMailbox.exchangeguid.guid)
+opRemoteMailbox.RemoteRoutingAddress:`t$($hsum.opRemoteMailbox.RemoteRoutingAddress.guid)
+"@ ;        
+                $smsg = $hsAlertMsg ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;  
+            }
 
             if($outObject){
                 if($PSCmdlet.MyInvocation.ExpectingInput){
