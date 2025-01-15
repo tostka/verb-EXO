@@ -1,0 +1,602 @@
+﻿2025-01-15 16:57:45 INFO:  : #*======v VERB-dev.psm1:verb-exo v======
+2025-01-15 16:57:46 INFO:  : Run: reset-ModulePublishingDirectory -ModuleName verb-exo
+2025-01-15 16:57:46 ##  : 
+#*------v PROCESSING : verb-exo v------
+2025-01-15 16:57:46 INFO:  : Pre-purge (CHANGELOG|README)\.md$ Root dir matches from :
+2025-01-15 16:57:46 INFO:  : verb-exo resolved $ModPubPath:C:\sc\verb-exo\verb-exo\
+$ModResPath:C:\sc\verb-exo\Resource\
+2025-01-15 16:57:46 INFO:  : verb-exo resolved $ModPubPath:C:\sc\verb-exo\verb-exo\
+$ModResPath:C:\sc\verb-exo\Licenses\
+2025-01-15 16:57:46 INFO:  : verb-exo resolved $ModPubPath:C:\sc\verb-exo\verb-exo\
+$ModResPath:C:\sc\verb-exo\Docs\
+2025-01-15 16:57:46 INFO:  : ==C:\sc\verb-exo\CHANGELOG.md:
+2025-01-15 16:57:46 INFO:  : ==C:\sc\verb-exo\README.md:
+2025-01-15 16:57:46 INFO:  : ==C:\sc\verb-exo\Docs\Quick-Start-Installation-and-Example.md:
+2025-01-15 16:57:46 ##  : 
+#*------^ PROCESSING : verb-exo ^------
+2025-01-15 16:57:46 INFO:  : Run: populate-ModulePublishingDirectory -ModuleName verb-exo
+2025-01-15 16:57:46 ##  : 
+#*------v PROCESSING : verb-exo v------
+2025-01-15 16:57:46 INFO:  : Locating (CHANGELOG|README)\.md$ Root dir matches from :
+2025-01-15 16:57:46 INFO:  : verb-exo resolved $ModPubPath:C:\sc\verb-exo\verb-exo\
+$ModResPath:C:\sc\verb-exo\Resource\
+2025-01-15 16:57:46 INFO:  : verb-exo resolved $ModPubPath:C:\sc\verb-exo\verb-exo\
+$ModResPath:C:\sc\verb-exo\Licenses\
+2025-01-15 16:57:46 INFO:  : verb-exo resolved $ModPubPath:C:\sc\verb-exo\verb-exo\
+$ModResPath:C:\sc\verb-exo\Docs\
+2025-01-15 16:57:46 INFO:  : copy-item w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+path                           {C:\sc\verb-exo\CHANGELOG.md, C:\sc\verb-exo\README.md, C:\sc\verb-exo\Docs\Quick-Start-Installation-and-Example.md}        
+destination                    C:\sc\verb-exo\verb-exo\                                                                                                    
+force                          True                                                                                                                        
+erroraction                    STOP                                                                                                                        
+verbose                        False                                                                                                                       
+whatif                         False
+--$pltCI.path:
+C:\sc\verb-exo\CHANGELOG.md
+C:\sc\verb-exo\README.md
+C:\sc\verb-exo\Docs\Quick-Start-Installation-and-Example.md
+2025-01-15 16:57:46 ##  : 
+#*------^ PROCESSING : verb-exo ^------
+2025-01-15 16:57:46 INFO:  : Validate updated verb-exo\verb-exo dir contents against Manifest:
+Run: test-modulemanifest -Path C:\sc\verb-exo\verb-exo\verb-exo.psd1
+2025-01-15 16:57:46 INFO:  : NON-Republish pass detected:
+MERGE parm specified as well:`n-Merge Public|Internal|Classes include subdirs module content into updated .psm1
+-Sign updated files.
+-Uninstall/Remove existing profile module
+-Copy new module to profile
+-Confirm: Get-Module -ListAvailable
+-Check/Update existing Psd1 Version
+-Publish-Module
+-Remove existing installed profile module
+-Test Install-Module
+-Test Import-Module
+2025-01-15 16:57:46 INFO:  : -Merge specified...
+2025-01-15 16:57:46 INFO:  : ConvertTo-ModuleMergedTDO w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+ModuleName                     verb-exo                                                                                                                    
+ModuleSourcePath               {c:\sc\verb-exo\Public, c:\sc\verb-exo\Internal}                                                                            
+ModuleDestinationPath          c:\sc\verb-exo\verb-exo                                                                                                     
+RequiredVersion                8.6.0                                                                                                                       
+LogSpec                        {logging, logfile, transcript}                                                                                              
+NoAliasExport                                                                                                                                              
+ErrorAction                    Stop                                                                                                                        
+showdebug                      False                                                                                                                       
+whatif                         False
+2025-01-15 16:57:46 INFO:  : ConvertTo-ModuleMergedTDO w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+ModuleName                     verb-exo                                                                                                                    
+ModuleSourcePath               {c:\sc\verb-exo\Public, c:\sc\verb-exo\Internal}                                                                            
+ModuleDestinationPath          c:\sc\verb-exo\verb-exo                                                                                                     
+RequiredVersion                8.6.0                                                                                                                       
+LogSpec                        {logging, logfile, transcript}                                                                                              
+NoAliasExport                                                                                                                                              
+ErrorAction                    Stop                                                                                                                        
+showdebug                      False                                                                                                                       
+whatif                         False
+2025-01-15 16:57:48 INFO:  : (NON-dyn psm1 detected - purging existing non-CBH content...)
+2025-01-15 16:57:49 INFO:  : Initialize-PSModuleDirectories w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+ModuleSourcePath               {c:\sc\verb-exo\Public, c:\sc\verb-exo\Internal}                                                                            
+ModuleDestinationPath          c:\sc\verb-exo\verb-exo                                                                                                     
+ErrorAction                    Stop                                                                                                                        
+whatif                         False
+2025-01-15 16:57:49 INFO:  : 
+#*------v (1/2):C:\sc\verb-exo\Public v------
+2025-01-15 16:57:49 INFO:  : Processing 44 $ComponentScripts files through Remove-AuthenticodeSignature...
+2025-01-15 16:57:49 INFO:  : Processing (1/44):C:\sc\verb-exo\Public\add-EXOLicense.ps1...
+2025-01-15 16:57:49 INFO:  : Processing (2/44):C:\sc\verb-exo\Public\check-EXOLegalHold.ps1...
+2025-01-15 16:57:49 INFO:  : Processing (3/44):C:\sc\verb-exo\Public\Connect-EXO.ps1...
+2025-01-15 16:57:49 INFO:  : Processing (4/44):C:\sc\verb-exo\Public\convert-ADUserRecipientTypeRemoteSharedMailbox.ps1...
+2025-01-15 16:57:49 INFO:  : Processing (5/44):C:\sc\verb-exo\Public\convert-ADUserRecipientTypeRemoteUserMailbox.ps1...
+2025-01-15 16:57:49 INFO:  : Processing (6/44):C:\sc\verb-exo\Public\convert-exoMailboxTypeSharedMailbox.ps1...
+2025-01-15 16:57:49 INFO:  : Processing (7/44):C:\sc\verb-exo\Public\convert-exoMailboxTypeUserMailbox.ps1...
+2025-01-15 16:57:49 INFO:  : Processing (8/44):C:\sc\verb-exo\Public\convert-HistoricalSearchCSV.ps1...
+2025-01-15 16:57:50 INFO:  : Processing (9/44):C:\sc\verb-exo\Public\copy-XPermissionGroupToCloudOnly.ps1...
+2025-01-15 16:57:50 INFO:  : Processing (10/44):C:\sc\verb-exo\Public\cxotol.ps1...
+2025-01-15 16:57:50 INFO:  : Processing (11/44):C:\sc\verb-exo\Public\cxotor.ps1...
+2025-01-15 16:57:50 INFO:  : Processing (12/44):C:\sc\verb-exo\Public\Disconnect-EXO.ps1...
+2025-01-15 16:57:50 INFO:  : Processing (13/44):C:\sc\verb-exo\Public\get-AADlicensePlanList.ps1...
+2025-01-15 16:57:50 INFO:  : Processing (14/44):C:\sc\verb-exo\Public\get-ADUsersWithSoftDeletedxoMailboxes.ps1...
+2025-01-15 16:57:50 INFO:  : Processing (15/44):C:\sc\verb-exo\Public\get-ExoGxMTEventType.ps1...
+2025-01-15 16:57:50 INFO:  : Processing (16/44):C:\sc\verb-exo\Public\get-ExoMailboxLicenses.ps1...
+2025-01-15 16:57:50 INFO:  : Processing (17/44):C:\sc\verb-exo\Public\get-ExoMessageTraceEventType.ps1...
+2025-01-15 16:57:50 INFO:  : Processing (18/44):C:\sc\verb-exo\Public\Get-EXOMessageTraceExportedTDO.ps1...
+2025-01-15 16:57:51 INFO:  : Processing (19/44):C:\sc\verb-exo\Public\get-ExoMessageTraceSourceType.ps1...
+2025-01-15 16:57:51 INFO:  : Processing (20/44):C:\sc\verb-exo\Public\get-EXOMsgTraceDetailed.ps1...
+2025-01-15 16:57:51 INFO:  : Processing (21/44):C:\sc\verb-exo\Public\get-MailboxFolderStats.ps1...
+2025-01-15 16:57:51 INFO:  : Processing (22/44):C:\sc\verb-exo\Public\get-MsgTrace.ps1...
+2025-01-15 16:57:51 INFO:  : Processing (23/44):C:\sc\verb-exo\Public\Get-OrgNameFromUPN.ps1...
+2025-01-15 16:57:51 INFO:  : Processing (24/44):C:\sc\verb-exo\Public\get-xoHistSearch.ps1...
+2025-01-15 16:57:51 INFO:  : Processing (25/44):C:\sc\verb-exo\Public\get-XOMailboxFolderList.ps1...
+2025-01-15 16:57:51 INFO:  : Processing (26/44):C:\sc\verb-exo\Public\Get-xoMailboxFolderPermissionsRecursive.ps1...
+2025-01-15 16:57:52 INFO:  : Processing (27/44):C:\sc\verb-exo\Public\get-XOMailboxFolderPermissionsSummary.ps1...
+2025-01-15 16:57:52 INFO:  : Processing (28/44):C:\sc\verb-exo\Public\move-MailboxToXo.ps1...
+2025-01-15 16:57:52 INFO:  : Processing (29/44):C:\sc\verb-exo\Public\new-DgTor.ps1...
+2025-01-15 16:57:52 INFO:  : Processing (30/44):C:\sc\verb-exo\Public\new-xoDGFromProperty.ps1...
+2025-01-15 16:57:52 INFO:  : Processing (31/44):C:\sc\verb-exo\Public\Reconnect-EXO.ps1...
+2025-01-15 16:57:52 INFO:  : Processing (32/44):C:\sc\verb-exo\Public\remove-EXOLicense.ps1...
+2025-01-15 16:57:53 INFO:  : Processing (33/44):C:\sc\verb-exo\Public\Reset-xoMailboxFolderPermissionsRecursive.ps1...
+2025-01-15 16:57:53 INFO:  : Processing (34/44):C:\sc\verb-exo\Public\resolve-AppIDToCBAFriendlyName.ps1...
+2025-01-15 16:57:53 INFO:  : Processing (35/44):C:\sc\verb-exo\Public\resolve-Name.ps1...
+2025-01-15 16:57:53 INFO:  : Processing (36/44):C:\sc\verb-exo\Public\resolve-user.ps1...
+2025-01-15 16:57:54 INFO:  : Processing (37/44):C:\sc\verb-exo\Public\resolve-xoRcps.ps1...
+2025-01-15 16:57:54 INFO:  : Processing (38/44):C:\sc\verb-exo\Public\rxotol.ps1...
+2025-01-15 16:57:54 INFO:  : Processing (39/44):C:\sc\verb-exo\Public\rxotor.ps1...
+2025-01-15 16:57:54 INFO:  : Processing (40/44):C:\sc\verb-exo\Public\test-EXOConnectionTDO.ps1...
+2025-01-15 16:57:54 INFO:  : Processing (41/44):C:\sc\verb-exo\Public\test-ExoDnsRecordTDO.ps1...
+2025-01-15 16:57:54 INFO:  : Processing (42/44):C:\sc\verb-exo\Public\test-EXOIsLicensed.ps1...
+2025-01-15 16:57:54 INFO:  : Processing (43/44):C:\sc\verb-exo\Public\test-EXOv2Connection.ps1...
+2025-01-15 16:57:54 INFO:  : Processing (44/44):C:\sc\verb-exo\Public\test-xoMailbox.ps1...
+2025-01-15 16:57:55 INFO:  : 
+#*------v (2/2):C:\sc\verb-exo\Internal v------
+2025-01-15 16:57:55 INFO:  : Processing 0 $ComponentScripts files through Remove-AuthenticodeSignature...
+2025-01-15 16:57:55 INFO:  : (Updating Psm1 Export-ModuleMember -Function to reflect Public modules)
+2025-01-15 16:57:55 INFO:  : Adding:FooterBlock...
+2025-01-15 16:57:55 INFO:  : confirm-ModuleBuildSync w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+ModPsdPath                     c:\sc\verb-exo\verb-exo\verb-exo.psd1_TMP                                                                                   
+RequiredVersion                8.6.0                                                                                                                       
+NoTest                         True                                                                                                                        
+whatif                         False                                                                                                                       
+verbose                        False
+2025-01-15 16:57:55 INFO:  : (test-path confirms $ModPsm1 & $ModTestPs1)
+2025-01-15 16:57:55 INFO:  : Import-PowerShellDataFile w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Path                           c:\sc\verb-exo\verb-exo\verb-exo.psd1_TMP                                                                                   
+ErrorAction                    Stop                                                                                                                        
+verbose                        False
+2025-01-15 16:57:55 INFO:  : (resolved Module attributes:
+$ModuleName:	verb-exo
+$ModRoot:	c:\sc\verb-exo
+$ModPsd1:	c:\sc\verb-exo\verb-exo\verb-exo.psd1_TMP
+$ModPsm1:	c:\sc\verb-exo\verb-exo\verb-exo.psm1_TMP
+$ModTestPs1:	c:\sc\verb-exo\Tests\verb-exo.tests.ps1
+$psd1Vers:	8.6.0
+$psd1guid:	b9637e55-12be-4916-8000-a949f9426fa3)
+2025-01-15 16:57:55 INFO:  : confirm-ModulePsd1Version w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Path                           c:\sc\verb-exo\verb-exo\verb-exo.psd1_TMP                                                                                   
+RequiredVersion                8.6.0                                                                                                                       
+whatif                         False                                                                                                                       
+verbose                        False
+2025-01-15 16:57:55 INFO:  : (Version already updated to match)
+2025-01-15 16:57:55 INFO:  : $objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Version                        8.6.0                                                                                                                       
+Valid                          False
+2025-01-15 16:57:55 INFO:  : (SET:$objReport.Valid = $true ;)
+2025-01-15 16:57:55 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Version                        8.6.0                                                                                                                       
+Valid                          True
+2025-01-15 16:57:55 INFO:  : #*======^ confirm-ModulePsd1Version: c:\sc\verb-exo\verb-exo\verb-exo.psd1_TMP ^======
+2025-01-15 16:57:55 INFO:  : (confirm-ModulePsd1Version:Success)
+2025-01-15 16:57:55 INFO:  : confirm-ModulePsm1Version w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Path                           c:\sc\verb-exo\verb-exo\verb-exo.psm1_TMP                                                                                   
+RequiredVersion                8.6.0                                                                                                                       
+whatif                         False                                                                                                                       
+verbose                        False
+2025-01-15 16:57:55 WARNING:  : In:c:\sc\verb-exo\verb-exo\verb-exo.psm1_TMP
+Version present:(8.5.5)
+*does not* properly match:8.6.0
+FORCING MATCHING UPDATE!
+2025-01-15 16:57:58 INFO:  : $objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Version                        8.6.0                                                                                                                       
+Valid                          False
+2025-01-15 16:57:58 INFO:  : (SET:$objReport.Valid = $true ;)
+2025-01-15 16:57:58 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Version                        8.6.0                                                                                                                       
+Valid                          True
+2025-01-15 16:57:58 INFO:  : #*======^ confirm-ModulePsm1Version: c:\sc\verb-exo\verb-exo\verb-exo.psm1_TMP ^======
+2025-01-15 16:57:58 INFO:  : (confirm-ModulePsm1Version:Success)
+2025-01-15 16:57:58 INFO:  : (-NoTest: skipping confirm-ModuleTestPs1Guid)
+2025-01-15 16:57:58 INFO:  : $objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Manifest                       c:\sc\verb-exo\verb-exo\verb-exo.psd1_TMP                                                                                   
+Module                         c:\sc\verb-exo\verb-exo\verb-exo.psm1_TMP                                                                                   
+Pester                         (SKIPPED)                                                                                                                   
+Guid                           (SKIPPED)                                                                                                                   
+Version                        8.6.0                                                                                                                       
+Valid                          False
+2025-01-15 16:57:58 INFO:  : (SET:$objReport.Valid = $true ;)
+2025-01-15 16:57:58 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Manifest                       c:\sc\verb-exo\verb-exo\verb-exo.psd1_TMP                                                                                   
+Module                         c:\sc\verb-exo\verb-exo\verb-exo.psm1_TMP                                                                                   
+Pester                         (SKIPPED)                                                                                                                   
+Guid                           (SKIPPED)                                                                                                                   
+Version                        8.6.0                                                                                                                       
+Valid                          True
+2025-01-15 16:57:58 INFO:  : #*======^ confirm-ModuleBuildSync:  ^======
+2025-01-15 16:57:58 INFO:  : (confirm-ModuleBuildSync:Success)
+2025-01-15 16:57:58 INFO:  : Test-ModuleTMPFiles w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+ModuleNamePSM1Path             c:\sc\verb-exo\verb-exo\verb-exo.psm1_TMP                                                                                   
+verbose                        False
+2025-01-15 16:57:58 INFO:  : #*======v Test-ModuleTMPFiles: c:\sc\verb-exo\verb-exo\verb-exo.psm1_TMP v======
+2025-01-15 16:57:58 INFO:  : 
+Psm1:c:\sc\verb-exo\verb-exo\verb-exo.psm1_TMP
+Psd1:c:\sc\verb-exo\verb-exo\verb-exo.psd1_TMP
+2025-01-15 16:57:58 INFO:  : Test-ModuleManifest:PASSED
+2025-01-15 16:57:58 INFO:  : Creating Testable c:\sc\verb-exo\verb-exo\6c4273fe-beed-4b56-aef5-3e40a99e7b4e.psm1
+ to validate c:\sc\verb-exo\verb-exo\verb-exo.psm1_TMP will Import-Module
+2025-01-15 16:57:58 INFO:  : Ipmo: PASSED
+2025-01-15 16:57:59 INFO:  : (remove-module -name c:\sc\verb-exo\verb-exo\6c4273fe-beed-4b56-aef5-3e40a99e7b4e.psm1 -force)
+2025-01-15 16:57:59 INFO:  : (remove-item -path c:\sc\verb-exo\verb-exo\6c4273fe-beed-4b56-aef5-3e40a99e7b4e.psm1 -ErrorAction SilentlyContinue ; 
+2025-01-15 16:57:59 INFO:  : (remove-item -path c:\sc\verb-exo\verb-exo\6c4273fe-beed-4b56-aef5-3e40a99e7b4e.psd1 -ErrorAction SilentlyContinue ; 
+2025-01-15 16:57:59 INFO:  : $objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Manifest                       6c4273fe-beed-4b56-aef5-3e40a99e7b4e                                                                                        
+Module                         6c4273fe-beed-4b56-aef5-3e40a99e7b4e                                                                                        
+Valid                          False
+2025-01-15 16:57:59 INFO:  : (SET:$objReport.Valid = $true ;)
+2025-01-15 16:57:59 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Manifest                       6c4273fe-beed-4b56-aef5-3e40a99e7b4e                                                                                        
+Module                         6c4273fe-beed-4b56-aef5-3e40a99e7b4e                                                                                        
+Valid                          True
+2025-01-15 16:57:59 INFO:  : #*======^ Test-ModuleTMPFiles: c:\sc\verb-exo\verb-exo\verb-exo.psm1_TMP ^======
+2025-01-15 16:57:59 INFO:  : #*======^ ConvertTo-ModuleMergedTDO: ^======
+2025-01-15 16:57:59 INFO:  : (Test-ModuleManifest:PASSED)
+2025-01-15 16:57:59 INFO:  : Checking sync of Psd1 module guid to the Pester Test Script: c:\sc\verb-exo\Tests\verb-exo.tests.ps1
+2025-01-15 16:57:59 INFO:  : confirm-ModuleBuildSync w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+ModPsdPath                     C:\sc\verb-exo\verb-exo\verb-exo.psd1                                                                                       
+RequiredVersion                8.6.0                                                                                                                       
+whatif                         False                                                                                                                       
+verbose                        False
+2025-01-15 16:57:59 INFO:  : (test-path confirms $ModPsm1 & $ModTestPs1)
+2025-01-15 16:57:59 INFO:  : Import-PowerShellDataFile w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Path                           C:\sc\verb-exo\verb-exo\verb-exo.psd1                                                                                       
+ErrorAction                    Stop                                                                                                                        
+verbose                        False
+2025-01-15 16:57:59 INFO:  : (resolved Module attributes:
+$ModuleName:	verb-exo
+$ModRoot:	c:\sc\verb-exo
+$ModPsd1:	C:\sc\verb-exo\verb-exo\verb-exo.psd1
+$ModPsm1:	C:\sc\verb-exo\verb-exo\verb-exo.psm1
+$ModTestPs1:	c:\sc\verb-exo\Tests\verb-exo.tests.ps1
+$psd1Vers:	8.6.0
+$psd1guid:	b9637e55-12be-4916-8000-a949f9426fa3)
+2025-01-15 16:57:59 INFO:  : confirm-ModulePsd1Version w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Path                           C:\sc\verb-exo\verb-exo\verb-exo.psd1                                                                                       
+RequiredVersion                8.6.0                                                                                                                       
+whatif                         False                                                                                                                       
+verbose                        False
+2025-01-15 16:57:59 INFO:  : (Version already updated to match)
+2025-01-15 16:57:59 INFO:  : $objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Version                        8.6.0                                                                                                                       
+Valid                          False
+2025-01-15 16:57:59 INFO:  : (SET:$objReport.Valid = $true ;)
+2025-01-15 16:57:59 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Version                        8.6.0                                                                                                                       
+Valid                          True
+2025-01-15 16:57:59 INFO:  : #*======^ confirm-ModulePsd1Version: C:\sc\verb-exo\verb-exo\verb-exo.psd1 ^======
+2025-01-15 16:57:59 INFO:  : (confirm-ModulePsd1Version:Success)
+2025-01-15 16:57:59 INFO:  : confirm-ModulePsm1Version w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Path                           C:\sc\verb-exo\verb-exo\verb-exo.psm1                                                                                       
+RequiredVersion                8.6.0                                                                                                                       
+whatif                         False                                                                                                                       
+verbose                        False
+2025-01-15 16:57:59 INFO:  : (Version already updated to match)
+2025-01-15 16:57:59 INFO:  : $objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Version                        8.6.0                                                                                                                       
+Valid                          False
+2025-01-15 16:57:59 INFO:  : (SET:$objReport.Valid = $true ;)
+2025-01-15 16:57:59 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Version                        8.6.0                                                                                                                       
+Valid                          True
+2025-01-15 16:57:59 INFO:  : #*======^ confirm-ModulePsm1Version: C:\sc\verb-exo\verb-exo\verb-exo.psm1 ^======
+2025-01-15 16:57:59 INFO:  : (confirm-ModulePsm1Version:Success)
+2025-01-15 16:57:59 INFO:  : Checking sync of Psd1 module guid to the Pester Test Script: c:\sc\verb-exo\Tests\verb-exo.tests.ps1
+2025-01-15 16:57:59 INFO:  : confirm-ModuleTestPs1Guid w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Path                           c:\sc\verb-exo\Tests\verb-exo.tests.ps1                                                                                     
+RequiredGuid                   b9637e55-12be-4916-8000-a949f9426fa3                                                                                        
+whatif                         False                                                                                                                       
+verbose                        False
+2025-01-15 16:57:59 INFO:  : (Guid  already updated to match)
+2025-01-15 16:57:59 INFO:  : $objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Guid                           b9637e55-12be-4916-8000-a949f9426fa3                                                                                        
+Valid                          False
+2025-01-15 16:57:59 INFO:  : (SET:$objReport.Valid = $true ;)
+2025-01-15 16:57:59 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Guid                           b9637e55-12be-4916-8000-a949f9426fa3                                                                                        
+Valid                          True
+2025-01-15 16:57:59 INFO:  : (confirm-ModuleTestPs1Guid:Success)
+2025-01-15 16:57:59 INFO:  : $objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Manifest                       C:\sc\verb-exo\verb-exo\verb-exo.psd1                                                                                       
+Module                         C:\sc\verb-exo\verb-exo\verb-exo.psm1                                                                                       
+Pester                         c:\sc\verb-exo\Tests\verb-exo.tests.ps1                                                                                     
+Guid                           b9637e55-12be-4916-8000-a949f9426fa3                                                                                        
+Version                        8.6.0                                                                                                                       
+Valid                          False
+2025-01-15 16:57:59 INFO:  : (SET:$objReport.Valid = $true ;)
+2025-01-15 16:58:00 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+$objReport
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Manifest                       C:\sc\verb-exo\verb-exo\verb-exo.psd1                                                                                       
+Module                         C:\sc\verb-exo\verb-exo\verb-exo.psm1                                                                                       
+Pester                         c:\sc\verb-exo\Tests\verb-exo.tests.ps1                                                                                     
+Guid                           b9637e55-12be-4916-8000-a949f9426fa3                                                                                        
+Version                        8.6.0                                                                                                                       
+Valid                          True
+2025-01-15 16:58:00 INFO:  : #*======^ confirm-ModuleBuildSync:  ^======
+2025-01-15 16:58:00 INFO:  : (confirm-ModuleBuildSync:Success)
+2025-01-15 16:58:00 INFO:  : Signing appropriate files...
+2025-01-15 16:58:00 INFO:  : set-AuthenticodeSignatureTDO w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+file                           {C:\sc\verb-exo\rebuild-module.ps1, C:\sc\verb-exo\requirements.psd1, C:\sc\verb-exo\Tests\PPoShScriptingStyle.psd1, C:\s...
+ErrorAction                    Stop                                                                                                                        
+whatif                         False
+2025-01-15 16:58:00 INFO:  : Removing existing profile verb-exo content...
+2025-01-15 16:58:00 INFO:  : Uninstall-ModuleForce w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+ModuleName                     verb-exo                                                                                                                    
+Verbose                        False                                                                                                                       
+whatif                         False
+2025-01-15 16:58:08 INFO:  : 
+#*------v Uninstall PSGet Mod:verb-EXO:v8.5.5 v------
+2025-01-15 16:58:29 INFO:  : 
+#*------^ Uninstall PSGet Mod:verb-EXO:v8.5.5 ^------
+2025-01-15 16:58:29 INFO:  : (Processing $env:PSModulePath paths, for surviving locked copies of verb-exo to *manually* purge...)
+2025-01-15 16:58:29 INFO:  : Checking: verb-exo below: C:\Users\kadritss\Documents\WindowsPowerShell\Modules...
+2025-01-15 16:58:29 INFO:  : Checking: verb-exo below: C:\ProgramData\Boxstarter...
+2025-01-15 16:58:29 INFO:  : Checking: verb-exo below: C:\Program Files\WindowsPowerShell\Modules...
+2025-01-15 16:58:29 INFO:  : Checking: verb-exo below: C:\WINDOWS\system32\WindowsPowerShell\v1.0\Modules...
+2025-01-15 16:58:29 INFO:  : Checking: verb-exo below: C:\Program Files (x86)\AutoIt3\AutoItX...
+2025-01-15 16:58:29 INFO:  : Copying module to profile (net of .git & .vscode dirs, and backed up content)...
+2025-01-15 16:58:29 INFO:  : $srcFiles:post-filter out:
+\\(Package|Tests|logs)\\|(\.ps[dm]1_(\d+-\d+[AP]M|TMP)|-LOG-BATCH-EXEC-\d+-\d+[AP]M-log\.txt|\\(fingerprint|Psd1filelist))$
+2025-01-15 16:58:29 INFO:  : Discovered mod-copy files ($srcFiles.fullname):w
+C:\sc\verb-exo\verb-EXO\CHANGELOG.md
+C:\sc\verb-exo\verb-EXO\Quick-Start-Installation-and-Example.md
+C:\sc\verb-exo\verb-EXO\README.md
+C:\sc\verb-exo\verb-EXO\verb-EXO.psd1
+C:\sc\verb-exo\verb-EXO\verb-EXO.psm1
+2025-01-15 16:58:29 INFO:  : Non-Pre-existing:$to:C:\Users\kadritss\Documents\WindowsPowerShell\Modules\verb-exo\verb-exo
+Pre-creating before copy...
+2025-01-15 16:58:29 INFO:  : Mode   LastWriteTime        Length Name    
+----   -------------        ------ ----    
+d----- 1/15/2025 4:58:29 PM        verb-exo
+2025-01-15 16:58:29 INFO:  : -Merge:exclude $MergeBuildExcl \\(Public|Internal|External|Private)\\.*.ps1$ files from temp build copy
+2025-01-15 16:58:29 INFO:  : Recursively remove empty subdirs below C:\Users\kadritss\Documents\WindowsPowerShell\Modules\verb-exo\verb-exo...
+2025-01-15 16:58:29 INFO:  : Move/Flatten Resource etc files into root of temp Build dir...
+2025-01-15 16:58:29 INFO:  : Unable to locate a problematic temp mod dir C:\Users\kadritss\Documents\WindowsPowerShell\Modules\verb-exo\verb-exo COPY of Quick-Start-Installation-and-Example.md
+2025-01-15 16:58:29 INFO:  : Unable to locate a problematic temp mod dir C:\Users\kadritss\Documents\WindowsPowerShell\Modules\verb-exo\verb-exo COPY of CHANGELOG.md
+2025-01-15 16:58:29 INFO:  : Unable to locate a problematic temp mod dir C:\Users\kadritss\Documents\WindowsPowerShell\Modules\verb-exo\verb-exo COPY of README.md
+2025-01-15 16:58:29 INFO:  : copy/Flatten Resource etc files into source root c:\sc\verb-exo\verb-exo dir...
+2025-01-15 16:58:30 INFO:  : Resolved $ModPsdPath:
+C:\sc\verb-exo\verb-exo\verb-exo.psd1
+2025-01-15 16:58:30 INFO:  : 
+==Verifying CU:Mods\verb-exo\verb-exo\Quick-Start-Installation-and-Example.md:
+2025-01-15 16:58:30 INFO:  : 
+==Verifying CU:Mods\verb-exo\verb-exo\CHANGELOG.md:
+2025-01-15 16:58:30 INFO:  : 
+==Verifying CU:Mods\verb-exo\verb-exo\README.md:
+2025-01-15 16:58:30 INFO:  : Running pre-Publish-Module .psd1 test:
+Test-ModuleManifest -path C:\sc\verb-exo\verb-exo\verb-exo.psd1
+2025-01-15 16:58:30 INFO:  : (Test-ModuleManifest:PASSED)
+2025-01-15 16:58:30 INFO:  : (Profiling Repo: get-PSRepository -name lyncRepo...)
+2025-01-15 16:58:30 INFO:  : 
+Publish-Module w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Name                           verb-exo                                                                                                                    
+Repository                     lyncRepo                                                                                                                    
+RequiredVersion                8.6.0                                                                                                                       
+Verbose                        True                                                                                                                        
+ErrorAction                    Stop                                                                                                                        
+errorVariable                  pbmo_Err                                                                                                                    
+whatif                         False
+2025-01-15 16:58:42 WARNING:  :  FOUND $pbmo_Err: import-module HAD ERRORS! (no action, could be non-impacting)
+2025-01-15 16:58:42 WARNING:  :  Publish-Module PBMO UNDEFINED ERROR! System.Management.Automation.StopUpstreamCommandsException: System error.     at Microsoft.PowerShell.Commands.SelectObjectCommand.ProcessRecord()     at System.Management.Automation.CommandProcessor.ProcessRecord() (But PublishModule doesn't bother to return a functional Error object with an Exception, so we can't trust/parse or act on it. Just echo)
+2025-01-15 16:58:42 INFO:  : Waiting for:find-module -name verb-exo -Repository lyncRepo ...
+2025-01-15 16:58:43 INFO:  : Install-Module w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Name                           verb-exo                                                                                                                    
+Repository                     lyncRepo                                                                                                                    
+RequiredVersion                8.6.0                                                                                                                       
+scope                          CurrentUser                                                                                                                 
+force                          True                                                                                                                        
+AllowClobber                   True                                                                                                                        
+errorVariable                  ismo_Err                                                                                                                    
+ErrorAction                    Stop                                                                                                                        
+whatif                         False
+2025-01-15 16:58:51 INFO:  : Testing Module:Import-Module w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Name                           verb-exo                                                                                                                    
+ErrorAction                    Stop                                                                                                                        
+errorVariable                  ipmo_Err                                                                                                                    
+force                          True                                                                                                                        
+verbose                        True
+2025-01-15 16:58:52 INFO:  : Retrieving matching Repo .nupkg file:
+gci \\lynmsv10\lync_fs\scripts\sc\verb-exo.8.6.0.nupkgl..
+2025-01-15 16:58:52 INFO:  : Proper updated .nupkg file found:verb-exo.8.6.0.nupkg, copying to local Pkg directory.
+2025-01-15 16:58:53 INFO:  : remove-UnneededFileVariants w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Path                           c:\sc\verb-exo\Package                                                                                                      
+Include                        verb-exo*.nupkg                                                                                                             
+Pattern                                                                                                                                                    
+FilterOn                       CreationTime                                                                                                                
+Keep                           2                                                                                                                           
+KeepToday                      True                                                                                                                        
+verbose                        True                                                                                                                        
+whatif                         False
+2025-01-15 16:58:53 INFO:  : remove-UnneededFileVariants w
+Name                           Value                                                                                                                       
+----                           -----                                                                                                                       
+Path                           c:\sc\verb-exo\Tests                                                                                                        
+Include                        ScriptAnalyzer-Results-*.xml                                                                                                
+Pattern                                                                                                                                                    
+FilterOn                       CreationTime                                                                                                                
+Keep                           4                                                                                                                           
+KeepToday                      True                                                                                                                        
+verbose                        True                                                                                                                        
+whatif                         False
+2025-01-15 16:58:53 INFO:  : 
+---------------------------------------------------------------------------------
+Processing completed: verb-exo :: c:\sc\verb-exo
+- Script is currently installed (from PsRep: with scope:CurrentUser, under TORO\kadritss profile
+
+- To update other scopes/accounts on same machine, or install on other machines:
+    1. Uninstall current module copies:
+
+        Uninstall-Module -Name verb-exo) -AllVersion -whatif ;
+
+    2. Install the current version (or higher) from the Repo:lyncRepo:
+
+        install-Module -name verb-exo -Repository lyncRepo -RequiredVersion 8.6.0 -scope currentuser -whatif ;
+
+    3. Reimport the module with -force, to ensure the current installed verison is loaded:
+
+        import-Module -name verb-exo -force -verbose ;
+
+#-=-=-Stacked list for the above: CURRENTUSER=-=-=-=-=-=
+$whatif=$false ;  $tScop = 'CurrentUser' ; $tMod = 'verb-exo' ; $tVer = '8.6.0' ;
+if($env:WT_SESSION){
+    write-warning "WARNING YOU'RE INSTALLING INTO POWERSHELL7!
+THE MODULE WILL GO INTO \DOCS\POWERSHELL\MODULES
+(vs \DOCS\WINDOWSPOWERSHELL\MODULES)!" ; 
+    $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ; 
+    if ($bRet.ToUpper() -eq "YYY") {} else {WRITE-WARNING "HALTING!" ; BREAK} ; 
+} ; 
+TRY {
+    switch($tScop){
+        'CurrentUser'{$ModPath = "$(split-path $profile)\Modules\$($tmod)" }
+        'AllUsers' {$ModPath = "$($env:ProgramFiles)\WindowsPowerShell\Modules)\$($tmod)"} ; 
+    } ;
+    if($Repository = (Get-PSRepository -Name $localPSRepo -ea 'STOP').name){
+        rmo -Name $tmod -ea 0 ;
+        Uninstall-Module -Name $tmod -AllVersion -force -ea 0 -whatif:$($whatif);
+        gi -path $ModPath -ea 0 |ri -Recurse -force -verbose  -whatif:$($whatif) ;
+        if($thisVers = find-module -name $tmod -Repository $Repository -RequiredVersion $tVer){
+            $thisvers  | ft -a Name,Version,Repository ; 
+            $thisVers | install-Module -scope $tScop -Force -AllowClobber -ea 'STOP' -whatif:$($whatif) ;
+        }else {
+            throw "Unable to:find-module -name $($tmod) -Repository $($Repository) -RequiredVersion $($tVer)"
+            break ; 
+        } ; 
+        rmo -Name $tmod -force -ea 0 ;
+        ipmo -name $tmod -force -verbose -ea 'STOP'  ;
+        gmo -name $tmod | ? version -ne $tVer | rmo -Force -Verbose ; 
+        gmo -name $tmod -list ;
+    } else {
+        throw "Unable to resolve `lyncRepo to a configured local PSRepository" ;
+    } ;
+} CATCH {
+    $ErrTrapd=$Error[0] ;
+    $smsg = "
+$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+    write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+} ;
+#-=-=-=-=-=-=-=-=
+#-=-=-Stacked list for the above: ALLUSERS=-=-=-=-=-=
+$whatif=$false ; $tScop = 'AllUsers' ; $tMod = 'verb-exo' ; $tVer = '8.6.0' ;  
+if($env:WT_SESSION){
+    write-warning "WARNING YOU'RE INSTALLING INTO POWERSHELL7!
+THE MODULE WILL GO INTO \DOCS\POWERSHELL\MODULES
+(vs \DOCS\WINDOWSPOWERSHELL\MODULES)!" ; 
+    $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ; 
+    if ($bRet.ToUpper() -eq "YYY") {} else {WRITE-WARNING "HALTING!" ; BREAK} ; 
+} ; 
+TRY {
+    switch($tScop){
+        'CurrentUser'{$ModPath = "$(split-path $profile)\Modules\$($tmod)" }
+        'AllUsers' {$ModPath = "$($env:ProgramFiles)\WindowsPowerShell\Modules)\$($tmod)"} ; 
+    } ;
+    if($Repository = (Get-PSRepository -Name $localPSRepo -ea 'STOP').name){
+        rmo -Name $tmod -ea 0 ;
+        Uninstall-Module -Name $tmod -AllVersion -force -ea 0 -whatif:$($whatif);
+        gi -path $ModPath -ea 0 |ri -Recurse -force -verbose  -whatif:$($whatif) ;
+        if($thisVers = find-module -name $tmod -Repository $Repository -RequiredVersion $tVer){
+            $thisvers  | ft -a Name,Version,Repository ; 
+            $thisVers | install-Module -scope $tScop -Force -AllowClobber -ea 'STOP' -whatif:$($whatif) ;
+        }else {
+            throw "Unable to:find-module -name $($tmod) -Repository $($Repository) -RequiredVersion $($tVer)"
+            break ; 
+        } ; 
+        rmo -Name $tmod -force -ea 0 ;
+        ipmo -name $tmod -force -verbose -ea 'STOP'  ;
+        gmo -name $tmod | ? version -ne $tVer | rmo -Force -Verbose ; 
+        gmo -name $tmod -list ;
+    } else {
+        throw "Unable to resolve `lyncRepo to a configured local PSRepository" ;
+    } ;
+} CATCH {
+    $ErrTrapd=$Error[0] ;
+    $smsg = "
+$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+    write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+} ;
+#-=-=-=-=-=-=-=-=
+
+- You may also want to run the configured Pester Tests of the new script:
+
+        . c:\sc\verb-exo\Tests\verb-exo.tests.ps1
+
+Full Processing Details can be found in:
+
+c:\scripts\logs\update-NewModule-verb-exo-LOG-BATCH-EXEC-20250115-1657PM-log.txt
+
+---------------------------------------------------------------------------------
+
+2025-01-15 16:58:53 INFO:  : 
+(Most recent processing log can be found at:c:\sc\verb-exo\update-NewModule-verb-exo-LOG-BATCH-EXEC-20250115-1657PM-log.txt)
+(perm copy stored at:c:\scripts\logs\update-NewModule-verb-exo-LOG-BATCH-EXEC-20250115-1657PM-log.txt
