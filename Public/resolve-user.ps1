@@ -840,7 +840,6 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         caad ;
         #>
 
-        
         #region SERVICE_CONNECTIONS #*======v SERVICE_CONNECTIONS v======
         # PRETUNE STEERING separately *before* pasting in balance of region
         # THIS BLOCK DEPS ON VERB-* FANCY CRED/AUTH HANDLING MODULES THAT *MUST* BE INSTALLED LOCALLY TO FUNCTION
@@ -1370,8 +1369,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         #endregion SERVICE_CONNECTIONS #*======^ END SERVICE_CONNECTIONS ^======
     
-    
-
+        #region IS_PIPELINE ; #*------v IS_PIPELINE v------
         # finally if we're using pipeline, and aggregating, we need to aggreg outside of the process{} block
         if($PSCmdlet.MyInvocation.ExpectingInput){
             # pipeline instantiate an aggregator here
@@ -1388,7 +1386,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             #if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
             #else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         } ;
-
+        #endregion IS_PIPELINE ; #*------^ END IS_PIPELINE ^------
     }
     PROCESS{
         $Error.Clear() ; 
@@ -1643,6 +1641,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             } ; 
             #endregion LOGBUILD ; #*------^ END LOGBUILD ^------
 
+            #region VARI_SETUP ; #*------v VARI_SETUP v------
             #$fname = $lname = $dname = $OPRcp = $OPMailbox = $OPRemoteMailbox = $ADUser = $xoRcp = $xoMailbox = $xoUser = $xoMemberOf = $MsolUser = $LicenseGroup = $null ;
             $isEml=$isDname=$isSamAcct=$isXORcpMulti  = $false ;
 
@@ -1770,7 +1769,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     #Break ;
                 } ;
             } ;
-            
+            #endregion VARI_SETUP ; #*------^ END VARI_SETUP ^------
+
             $sBnr="===v ($($Procd)/$($ttl)):Input: '$($usr)' | '$($hSum.fname)' | '$($hSum.lname)' v===" ;
             if($isEml){$sBnr+="(EML)"}
             elseif($isDname){$sBnr+="(DNAM)"}
@@ -1780,7 +1780,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
 
             write-host -foreground yellow "get-Rmbx/xMbx: " -nonewline;
 
-
+            #region SPLAT_SETUP ; #*------v SPLAT_SETUP v------
             # $isEml=$isDname=$isSamAcct=$false ;
             $MDtbl=[ordered]@{NoDashRow=$true } ; # out-markdowntable splat
             $pltGMailObj=[ordered]@{
@@ -1817,6 +1817,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 write-verbose "processing:'filter':$($fltr)" ;
                 $pltGMailObj.add('filter',$fltr) ;
             } ;
+            #endregion SPLAT_SETUP ; #*------^ END SPLAT_SETUP ^------
 
             $error.clear() ;
 
@@ -1826,6 +1827,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             write-verbose "get-recipient w`n$(($pltGMailObj|out-string).trim())" ;
             #rx10 -Verbose:$false -silent ;
 
+            #region OPRCP_DISCOVERY ; #*------v OPRCP_DISCOVERY v------
             $smsg = "get-recipient w`n$(($pltGMailObj|out-string).trim())`n...| ?{$_.recipienttypedetails -ne 'MailContact'}" ; 
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
@@ -1887,7 +1889,9 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
    
                 } ; 
             } ; 
+            #endregion OPRCP_DISCOVERY ; #*------^ END OPRCP_DISCOVERY ^------
 
+            #region ECHO_OPRCP ; #*------v ECHO_OPRCP v------
             if(-not $hsum.OpRcp){
                 $smsg = "(Failed to OP:get-recipient on:$($usr))"
                 if($isDname){$smsg += " or *$($hsum.lname )*"}
@@ -1935,8 +1939,9 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     }
                 }  # loop-E 
             } ; # if-E
+            #endregion ECHO_OPRCP ; #*------^ END ECHO_OPRCP ^------
 
-            #-=-=-=-=-=-=-=-=
+            #region XORCP_DISCOVERY ; #*------v XORCP_DISCOVERY v------
             #if ($useEXOv2) { reconnect-eXO2 @pltRXOC }
             #else { reconnect-EXO @pltRXOC } ;
             #write-host -foreground yellow "get-xoMbx/xMbx: " -nonewline;
@@ -1998,10 +2003,9 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     } ;
                 } ;
             } ; 
-            #-=-=-=-=-=-=-=-=
+            #endregion XORCP_DISCOVERY ; #*------^ END XORCP_DISCOVERY ^------
 
-            # 9:14 AM 10/9/2024 put in the same type of user type reporting as for oprcp
-            #-=-=-=-=-=-=-=-=
+            #region ECHO_XORCP ; #*------v ECHO_XORCP v------
             if(-not $hSum.xoRcp){
                 $smsg = "(Failed to OP:get-recipient on:$($usr))"
                 if($isDname){$smsg += " or *$($hsum.lname )*"}
@@ -2055,9 +2059,11 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     }
                 }  # loop-E
             } ; # if-E
-            #-=-=-=-=-=-=-=-=
+            #endregion ECHO_XORCP ; #*------^ END ECHO_XORCP ^------
+
             # new rules, with INT/VEN AADU anchored to ADU, but xoMbx anchored solely to AADU (and not OP rcp), it's possible to completely fail onprem get-recipient, and still have a functional mailbox in cloud, that's operating properly.
 
+            #region NONUNIQUE_RCPS_ABORT ; #*------v NONUNIQUE_RCPS_ABORT v------
             $abortReport = $false ; 
             if( ($hSum.OPRcp -OR $hSum.xoRcp) -AND ( ($hSum.OPRcp -is [array]) -AND ($hSum.xoRcp -is [array]) ) ){
                 # failed to isolate both op & xo unique recip
@@ -2088,8 +2094,11 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
 
                 BREAK ; 
             } ; 
+            #endregion NONUNIQUE_RCPS_ABORT ; #*------^ END NONUNIQUE_RCPS_ABORT ^------
 
+            #region OP_V_XO_RCPEXPAND ; #*------v OP_V_XO_RCPEXPAND v------
             if($hSum.OPRcp){
+                #region OPRCP_EXPAND ; #*------v OPRCP_EXPAND v------
                 # 9:41 AM 10/9/2024 with array loops we need to accomodate, and aggregate - or it throws errors tying to get-remotemailbox -id [array]
                 # also need to += all assigns to acomodate both lookups, not just the last one
                 if($hSum.OPRcp -is [array]){
@@ -2097,7 +2106,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     $smsg += "`n(need to isolate single specific identifier from these outputs, and rerun fresh pass)" ; 
                     write-warning $smsg ; 
                 } ; 
-                 $hSum.OPRcp | ForEach-Object{
+                $hSum.OPRcp | ForEach-Object{
                     $tmpRcp = $_ ; 
                     $error.clear() ;
                     TRY {
@@ -2165,7 +2174,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                 Break ;
                             }
                         }
-                        <# get-aduser docs say REsultSetSize is documented,
+                        #region OP_GADU ; #*------v OP_GADU v------
+                        <# get-aduser docs say -REsultSetSize is documented,
                         [Get-ADUser (ActiveDirectory) | Microsoft Docs - docs.microsoft.com/](https://docs.microsoft.com/en-us/powershell/module/activedirectory/get-aduser?view=windowsserver2019-ps)
                          but use of it throws: Parameter set cannot be resolved using the specified named parameters.
                          pull it and post filter to 1...
@@ -2258,8 +2268,11 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         Continue ;
                     } ;
-                }  # loop-E
+                    #endregion OP_GADU ; #*------^ END OP_GADU ^------
+                }  # loop-E $hSum.OPRcp
+                #endregion OPRCP_EXPAND ; #*------^ END OPRCP_EXPAND ^------
             }elseif($hSum.xoRcp){
+                #region XORCP_EXPAND ; #*------v XORCP_EXPAND v------
                 foreach($txR in $hSum.xoRcp){
                     TRY {
                         switch -regex ($txR.recipienttypedetails){
@@ -2293,6 +2306,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                         } else {
                                             write-WARNING $smsg ;
                                         } ;
+                                        #region xogetMobile ; #*------v xogetMobile v------
                                         if($getMobile){
                                             # $devstats = Get-exoMobileDeviceStatistics -Mailbox UPN
                                             #$smsg = "'xoMobileDeviceStats':$((get-alias ps1GetxMobilDevStats).definition) -Mailbox $($xmbx.userprincipalname)"
@@ -2305,6 +2319,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                             $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMapiTest|measure).count)" ;
                                             write-host -foregroundcolor green $smsg ;
                                         } ; 
+                                        #endregion xogetMobile ; #*------^ END xogetMobile ^------
+                                        #region xogetQuotaUsage ; #*------v getQuotaUsage v------
                                         if($getQuotaUsage){
                                             $pltGMbxStatX=[ordered]@{
                                                 identity = $hSum.xoMailbox.exchangeguid ;
@@ -2353,6 +2369,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                                 write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
                                             } ; 
                                         } ; 
+                                        #endregion xogetQuotaUsage ; #*------^ END xogetQuotaUsage ^------
+                                        #region xogetPerms ; #*------v xogetPerms v------
                                         if($getPerms){
                                             $pltGMbxPermX=[ordered]@{
                                                 identity = $hSum.xoMailbox.exchangeguid ;
@@ -2427,6 +2445,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                                 write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
                                             } ;
                                         } ; 
+                                        #endregion xogetPerms ; #*------^ END xogetPerms ^------
                                     } ;
                                     break ;
                                 } ;
@@ -2495,8 +2514,9 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         Continue ;
                     } ;
-                }  # loop-E $txR
+                }  # loop-E $hSum.xoRcpx
                 # contacts and guests won't drop with $hSum.OPRemoteMailbox or $hSum.OPMailbox populated
+                #region XO_GADU ; #*------v XO_GADU v------
                 TRY {
                     $pltGadu=[ordered]@{Identity = $null ; Properties='*' ;errorAction='SilentlyContinue'} ;
                     if($hSum.OPRemoteMailbox ){
@@ -2606,7 +2626,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Continue ;
                 } ;
-
+                #endregion XO_GADU ; #*------^ END XO_GADU ^------
+                #endregion XORCP_EXPAND ; #*------^ END XORCP_EXPAND ^------
                 if($outObject){
 
                 } else {
@@ -2682,7 +2703,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         $hSum.xoUser += get-xouser -id $xmbx.UserPrincipalName -ResultSize $MaxRecips ;
                         write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|ft -a |out-string).trim())" ;
                     } ;
-                }
+                } ; 
+
                 if($hSum.xoMailbox){
                     $ino = 0 ;
                     foreach($xmbx in $hSum.xoMailbox){
@@ -2694,7 +2716,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         write-host -foreground yellow "=get-xMbx:> " -nonewline;
                         write-host "$(($hSum.xoMailbox |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
                     } ;
-
+                    #region xogetMobile2 ; #*------v xogetMobile2 v------
                     if($getMobile){
                         write-host -foreground yellow "===`$hsum.xoMobileDeviceStats: " #-nonewline;
                         $ino = 0 ;
@@ -2711,12 +2733,15 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         } ;
 
                     } ; 
+                    #endregion xogetMobile2 ; #*------^ END xogetMobile2 ^------
 
                 }elseif($hSum.xoMUser){
                     write-host "=get-xMUSR:>`n$(($hSum.xoMUser |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
                 }elseif($hSum.txGuest){
                     write-host "=get-AADU:>`n$(($hSum.txGuest |fl userp*,PhysicalDeliveryOfficeName,JobTitle|out-string).trim())"
                 } ;
+
+                # populate xoMemberOf
                 TRY {
                     #write-verbose "$((get-alias ps1GetxRcp).definition) -Filter {Members -eq '$($hSum.xoUser.DistinguishedName)'}`n -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup"
                     write-verbose "get-xorecipient -Filter {Members -eq '$($hSum.xoUser.DistinguishedName)'}`n -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup"
@@ -2730,6 +2755,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     Continue ;
                 } ;
             } else {
+                #region XORCP_RETRY ; #*------v XORCP_RETRY v------
                 write-warning "(no matching EXOP or EXO recipient object:$($usr))"
                 # do near Lname[0-3]* searches for comparison
                 if($hSum.lname){
@@ -2759,6 +2785,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
 
 
                 } ;
+                #endregion XORCP_RETRY ; #*------^ END XORCP_RETRY ^------
+                #region GADU_NAME ; #*------v GADU_NAME v------
                 # do ADUser search on fname/lname
                 if($hSum.lname){
                     # try as surname & givenname
@@ -2805,6 +2833,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                        } ; 
                     } ; 
                 } 
+                #endregion GADU_NAME ; #*------^ END GADU_NAME ^------
+                #region GAADU_NAME ; #*------v GAADU_NAME v------
                 # do AADUser search on fname/lname
                 if($hSum.lname){
                     # try as surname & givenname
@@ -2853,13 +2883,12 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                        } ; 
                     } ; 
                 } 
-
+                #endregion GAADU_NAME ; #*------^ END GAADU_NAME ^------
 
                 $abortReport = $true ; 
 
-
-
             } ; # don't break, doesn't continue loop
+            #endregion OP_V_XO_RCPEXPAND ; #*------^ END OP_V_XO_RCPEXPAND ^------
 
             if($abortReport ){
                 $smsg = "(multiple recipients - or no recipients, but ADUsers, or but AADUsers -  found in OnPrem And/Or Cloud, detailed reporting & output aborted)" ; 
@@ -2868,6 +2897,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 BREAK ; 
             } ; 
 
+            #region FORCE_XOMBXINFO ; #*------v FORCE_XOMBXINFO v------
             # 10:42 AM 9/9/2021 force populate the xoMailbox, ALWAYS - need for xbrain ids
             #if($hSum.xoRcp.recipienttypedetails -eq 'UserMailbox' -AND -not($hSum.xoMailbox)){
             # accomodate array xorcp
@@ -2899,6 +2929,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     $hSum.xoMapiTest  +=  $mapiResults ;
                 } ;
             } ;
+            #region xogetQuotaUsage2 ; #*------v xogetQuotaUsage2 v------
             # 3:42 PM 9/25/2023 bring in new quota support as well - it's not populated in the oprcp first test
             if($getQuotaUsage){
                 if(($hSum.xoRcp|?{$_.recipienttypedetails -match 'UserMailbox|SharedMailbox|RoomMailbox|EquipmentMailbox'}) -AND -not($hSum.xoMailboxStats)){
@@ -2955,6 +2986,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     
                 }
             } ; 
+            #endregion xogetQuotaUsage2 ; #*------^ END xogetQuotaUsage2 ^------
+            #region xogetPerms2 ; #*------v xogetPerms2 v------
             if($getPerms){
                 $pltGMbxPermX=[ordered]@{
                     identity = $hSum.xoMailbox.exchangeguid ;
@@ -3029,7 +3062,10 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
                 } ;
             }
+            #endregion xogetPerms2 ; #*------^ END xogetPerms2 ^------
+            #endregion FORCE_XOMBXINFO ; #*------^ END FORCE_XOMBXINFO ^------
 
+            #region RV_VIA_GAADU ; #*------v RV_VIA_GAADU v------
             #$pltgMsoUsr=@{UserPrincipalName=$null ; MaxResults= $MaxRecips; ErrorAction= 'STOP' } ;
             # maxresults is documented:
             # but causes a fault with no $error[0], doesn't seem to be functional param, post-filter
@@ -3042,7 +3078,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             else{} ;
 
             if($pltgAADUsr.UserPrincipalName){
-
+                #region FORCE_GAADU ; #*------v FORCE_GAADU v------
                 if(-not($hSum.AADUser)){
                     write-host -foregroundcolor yellow "=get-AADuser $($pltgAADUsr.UserPrincipalName)>:" ;
                     TRY{
@@ -3082,7 +3118,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     } ;
 
                 } ;
-
+                #endregion FORCE_GAADU ; #*------^ END FORCE_GAADU ^------
+                #region FORCE_AADU_MGR ; #*------v FORCE_AADU_MGR v------
                 if(-not($hSum.AADUserMgr) -AND $hSum.AADUser ){
                     write-host -foregroundcolor yellow "=get-AADuserManager $($hSum.AADUser.UserPrincipalName)>:" ;
                     TRY{
@@ -3104,17 +3141,19 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     } ;
 
                 } ;
+                #endregion FORCE_AADU_MGR ; #*------^ END FORCE_AADU_MGR ^------
 
                 # display user info:
+                #region OUTPUT_P1 ; #*------v OUTPUT_P1 v------
                 if(-not($hSum.ADUser)){
                     if($hSum.AADUser.DirSyncEnabled -AND $hSum.aaduser.ExtensionProperty.onPremisesDistinguishedName){
+                        #region ADU_FEDERATED ; #*------v ADU_FEDERATED v------
                         $pltGadu.Identity = $hSum.aaduser.ExtensionProperty.onPremisesDistinguishedName ; 
                         $hSum.ADUser  += Get-ADUser @pltGadu | select -first $MaxRecips ;
                         if($pltGadu.identity){
                             write-verbose "Get-ADUser w`n$(($pltGadu|out-string).trim())" ;
                             # try a nested local trycatch, against a missing result
                             Try {
-                                #Get-ADUser $DN -ErrorAction Stop ;
                                 $hSum.ADUser  += Get-ADUser @pltGadu | select -first $MaxRecips ;
                             } Catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
                                 write-warning "(no matching ADuser found:$($pltGadu.identity))" ;
@@ -3143,7 +3182,9 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             } ;
                             write-host $smsg ;
                         } ;
+                        #endregion ADU_FEDERATED ; #*------^ END ADU_FEDERATED ^------
                     } else { 
+                        #region REMOTE_ADU_FEDERATED ; #*------v REMOTE_ADU_FEDERATED v------
                         # remote fed, use AADU to proxy remote AD hybrid info:
                         write-host -foreground yellow "===`$hSum.AADUser: " #-nonewline;
                         $smsg = "$(($hSum.AADUser| select $propsAADL1 |out-markdowntable @MDtbl |out-string).trim())" ;
@@ -3155,6 +3196,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         if($hSum.Federator -ne $TORMeta.adforestname){
                             $smsg += "`n$($hSum.Federator):Remote ADUser.DN:`n$(($hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName|out-string).trim())" ;
                         }  ;
+                        #endregion REMOTE_ADU_FEDERATED ; #*------^ END REMOTE_ADU_FEDERATED ^------
                     }; 
 
                     write-host $smsg
@@ -3165,7 +3207,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     $hSum.lname  +=  $hSum.AADUser.Surname ;
 
                 } else {
-                    #write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser| ft -auto ObjectId,DisplayName,UserPrincipalName,UserType |out-string).trim())" ;
+                    #region OUTPUT_ADU_INFO ; #*------v OUTPUT_ADU_INFO v------
                     # defer to ADUser details
                     write-host -foreground yellow "===`$hSum.ADUser: " #-nonewline;
                     $smsg = "$(($hSum.ADUser| select $propsADL1 |out-markdowntable @MDtbl |out-string).trim())" ;
@@ -3189,9 +3231,11 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     $hSum.dname  +=  $hSum.ADUser.DisplayName ;
                     $hSum.fname  +=  $hSum.ADUser.GivenName ;
                     $hSum.lname  +=  $hSum.ADUser.Surname ;
+                    #endregion OUTPUT_ADU_INFO ; #*------^ END OUTPUT_ADU_INFO ^------
                 } ;
-
-                # acct enabled/disabled: .aduser.Enbabled & .aaduser.AccountEnabled
+                #endregion OUTPUT_P1 ; #*------^ END OUTPUT_P1 ^------
+                #region ENABLED_STATUS ; #*------v ENABLED_STATUS v------
+                # aduser enabled/disabled: .aduser.Enbabled
                 if($hSum.aduser){
                     if($hSum.aduser.Enabled){
                         if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){
@@ -3205,7 +3249,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         } ; 
                     } ; 
                 } ;
-                # acct enabled/disabled: .aduser.Enbabled & .aaduser.AccountEnabled
+                # AADUser enabled/disabled: .aaduser.AccountEnabled
                 if($hSum.AADUser){
                     if($hSum.AADUser.Enabled){
                         if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){
@@ -3220,10 +3264,11 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     } ; 
 
                 } ;
-                if($hSum.ADUser){$hSum.LicenseGroup  +=  $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
-
+                #endregion ENABLED_STATUS ; #*------^ END ENABLED_STATUS ^------
+                #region LIC_GRP ; #*------v LIC_GRP v------
                 if($hSum.ADUser){$hSum.LicenseGroup  +=  $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
                 elseif($hSum.xoMemberOf){$hSum.LicenseGroup  +=  $hSum.xoMemberOf.Name |?{$_ -match $rgxXLic}}
+
                 #if(-not ($hSum.LicenseGroup) -AND ($hSum.MsolUser.licenses.AccountSkuId -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup  +=  '(direct-assigned E3)'} ;
                 # $hSum.AADUser ; $aadu | Get-AzureADUserLicenseDetail  | select -exp SkuPartNumber
                 #if(-not ($hSum.LicenseGroup) -AND ( $hsum.AADUserLics  -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup  +=  '(direct-assigned E3)'} ;
@@ -3232,7 +3277,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 if($hSum.LicenseGroup){$smsg = "LicenseGroup:$($hSum.LicenseGroup)"}
                 else{$smsg = "LicenseGroup:(unresolved, direct-assigned other?)" } ;
                 write-host $smsg ;
-
+                #endregion LIC_GRP ; #*------^ END LIC_GRP ^------
+                #region OUTPUT_AADUserMgr ; #*------v OUTPUT_AADUserMgr v------
                 if($hSum.AADUserMgr){
                     #($hSum.AADUserMgr) |ft -a  $propsaadmgr
                     #$smsg += "`nAADUserMgr:`n$(($hSum.AADUserMgr|select $propsAadMgr |out-markdowntable @MDtbl|out-string).trim())" ;
@@ -3246,7 +3292,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     $smsg = "(AADUserMgr was blank, or unresolved)" ;
                 } ;
                 write-host $smsg ;
-
+                #endregion OUTPUT_AADUserMgr ; #*------^ END OUTPUT_AADUserMgr ^------
+                #region OUTPUT_QUOTA_N_SIZE ; #*------v OUTPUT_QUOTA_N_SIZE v------
                 if($getQuotaUsage -AND $hSum.xoMailbox){
 
                     $smsg += "`n`nLicenses:`n$(($hsum.AADUserLics -join ', ' |out-string).trim())`n`n" ; 
@@ -3330,8 +3377,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     write-host $hsInfo ;   
 
                 } ; 
-
-                # 2:58 PM 12/26/2024 getPerms
+                #endregion OUTPUT_QUOTA_N_SIZE ; #*------^ END OUTPUT_QUOTA_N_SIZE ^------
+                #region OUTPUT_PERMS ; #*------v OUTPUT_PERMS v------
                 if($getPerms -AND $hSum.xoMailbox){
 
                     if($hSum.xoMailboxPermission){
@@ -3364,10 +3411,10 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                 } ;
-
+                #endregion OUTPUT_PERMS ; #*------^ END OUTPUT_PERMS ^------
             } ;
-
-            # do a split-brain/nobrain check
+            #endregion RV_VIA_GAADU ; #*------^ END RV_VIA_GAADU ^------
+            
             # switch ($hSum.OPRcp.recipienttypedetails){
             <#
             AD - Users (more effective)
@@ -3397,7 +3444,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             } ;
             #>
             # ($hSum.ADUser.sAMAccountType -eq '805306368')
-
+            #region OUTPUT_ACCT_DISABLED ; #*------v OUTPUT_ACCT_DISABLED v------
             if($hsum.ADUser){
                 $hsum.IsADDisabled  +=  [boolean]($hsum.ADUser.Enabled -eq $true) ; 
              } else {
@@ -3415,7 +3462,12 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             } else {
                 write-verbose "(no AADUser found)" ;
             } ;
+            #endregion OUTPUT_ACCT_DISABLED ; #*------^ END OUTPUT_ACCT_DISABLED ^------
 
+            #region ISSUE_DETECT ; #*------v ISSUE_DETECT v------
+
+            #region SPLITBRAIN_NOBRAIN ; #*------v SPLITBRAIN_NOBRAIN v------
+            # do a split-brain/nobrain check
             $smsg = "`n"
             if(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hsum.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
                 #OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox
@@ -3468,7 +3520,9 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
             } ;  
+            #endregion SPLITBRAIN_NOBRAIN ; #*------^ END SPLITBRAIN_NOBRAIN ^------
 
+            #region NOBRAIN_DETAILS ; #*------v NOBRAIN_DETAILS v------
             if($hsum.IsNoBrain){
                 switch ($hSum.Federator) {
                     $TORMeta.adforestname {$rgxTermOU = $TORMeta.rgxTermUserOUs }
@@ -3513,7 +3567,9 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 $smsg += "`n"
                 write-warning $smsg ;
             } ;
+            #endregion NOBRAIN_DETAILS ; #*------^ END NOBRAIN_DETAILS ^------
 
+            #region RMBX_BLOCKED_XOMBX ; #*------v RMBX_BLOCKED_XOMBX v------
             # 2:34 PM 1/9/2025 test for 886258, blocked license-xoMailbox mount issue
             [boolean[]]$testArray = @(
                 ($hsum.oprcp.recipienttypedetails -eq 'RemoteUserMailbox'),
@@ -3567,7 +3623,10 @@ opRemoteMailbox.RemoteRoutingAddress:`t$($hsum.opRemoteMailbox.RemoteRoutingAddr
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;  
             }
+            #endregion RMBX_BLOCKED_XOMBX ; #*------^ END RMBX_BLOCKED_XOMBX ^------
+            #endregion ISSUE_DETECT ; #*------^ END ISSUE_DETECT ^------
 
+            #region WRITE_OUTPUT ; #*------v WRITE_OUTPUT v------
             if($outObject){
                 if($PSCmdlet.MyInvocation.ExpectingInput){
                     write-verbose "(pipeline input, skipping aggregator, dropping into pipeline)" ;
@@ -3580,8 +3639,10 @@ opRemoteMailbox.RemoteRoutingAddress:`t$($hsum.opRemoteMailbox.RemoteRoutingAddr
                 $Rpt += New-Object PSObject -Property $hSum ;
                 $Rpt | export-clixml -Path $ofile -Depth 100 ;
             } ;
+            #endregion WRITE_OUTPUT ; #*------^ END WRITE_OUTPUT ^------
             write-host -foregroundcolor green $sBnr.replace('=v','=^').replace('v=','^=') ;
-        } ;
+
+        } ; # loop-E $users
         #endregion PIPELINE_PROCESSINGLOOP ; #*------^ END PIPELINE_PROCESSINGLOOP ^------
 
     } # PROC-E
