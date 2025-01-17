@@ -18,6 +18,8 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:40 PM 1/16/2025 UPDATED cbh WITH DETAILED PARAM DESC & OUTPUT SAMPLES ; 
+         fixed missing -getMobile support in the force trailing pass; fixed mis applied $hSum.xoMapiStats for proper metrics
     * 4:41 PM 1/9/2025 rebuffered in latest Server Connections, found that the 
         assumption could use the existing PS session context for REMS, was bogus. So 
         re-enabled the OP cred gather even for useExopNoDep conns. Also reworked 
@@ -88,12 +90,58 @@ function resolve-user {
     .DESCRIPTION
     resolve-user.ps1 - Resolve specified array of -users (displayname, emailaddress, samaccountname) to mail asset, lic & ticket descriptors
 
+    Typical summary block written to console (write-host, not pipeline):
+
+        10:06:45:===v (1/1):Input: 'lynctest14@DOMAIN.COM' | 'lynctest14' | '' v===(EML)
+        get-Rmbx/xMbx: (Rmbx *SHARED*)
+        (xSMbx)(TOR USER, fed:SUB.DOMAIN.COM)
+        SamAccountName | WindowsEmailAddress
+        lynctest14     | lynctest14@DOMAIN.COM
+        Office | RecipientTypeDetails | RemoteRecipientType     | IsDirSynced
+               | RemoteSharedMailbox  | Migrated, SharedMailbox |
+        ExternalDirectoryObjectId | CustomAttribute5 | EmailAddressPolicyEnabled
+                                  |                  | True
+        Outlook (xoMAPI) Access Test Result:Success
+        =get-AADuser lynctest14@DOMAIN.COM>:
+        =get-AADuserManager lynctest14@DOMAIN.COM>:
+        ===$hSum.ADUser:
+        UPN                 | DName       | FName | LName       | Title
+        lynctest14@DOMAIN.COM | lync test14 |       | lync test14 |
+        Company | Dept | Ofc
+                |      |
+        Street | City | State | Zip | Phone | Mobile
+               |      |       |     |       |
+        Enabled | DN
+        False   | CN=lync test14,OU=users,OU=SITE,DC=sd,DC=sub,DC=domain,DC=com
+        whenCreated           | whenChanged
+        5/13/2015 11:32:01 AM | 12/19/2024 3:18:41 PM
+        Desc :
+        LicenseGroup:(unresolved, direct-assigned other?)
+        (AADUserMgr was blank, or unresolved)
+        10:06:49: INFO:
+        lynctest14@DOMAIN.COM Is RecipientTypeDetails:SharedMailbox _expected unlicensed_
+        ===^ (1/1):Input: 'lynctest14@DOMAIN.COM' | 'lynctest14' | '' ^===(EML)
+
+
     Key parameter options: 
 
     -getMobile parameter, to return details on xo MobileDevices in use with the EXO mailbox
+        Note: 
+            - adds inline output:
+                xoMobileDeviceStats Count:2
+            - adds outobject property:
+            $results.xoMobileDeviceStats: 
+
+        PS> $results.xoMobileDeviceStats | ft -a
+
+        FirstSyncTime         LastPolicyUpdateTime  LastSyncAttemptTime  LastSuccessSync      DeviceType  DeviceID                         DeviceUserAgent       DeviceWipeSentTime DeviceWipeRequestTime DeviceWipeAckTime
+        -------------         --------------------  -------------------  ---------------      ----------  --------                         ---------------       ------------------ --------------------- -----------------
+        1/24/2022 8:58:54 PM                                                                  WindowsMail XXXnnXAnnAAnnnnXnnnnnnnXn0nnAn0n MSFT-WIN-3/10.0.17134
+        8/17/2023 10:50:16 PM 1/16/2025 10:08:42 AM 1/16/2025 5:45:14 PM 1/16/2025 5:45:14 PM Outlook     nXnXXn0XnnnXn0nnAAXA0XnnX0XnnnnX Outlook-Android/2.0
+
 
     -getQuotaUsage parameter, returns details on xo MailboxFolderStatistics and effective Quota, 
-        used with users with mailbox size issues (and/or LegalHold symptoms)
+        Used with users with mailbox size issues (and/or LegalHold symptoms)
 
         Note: use of -getQuotaUsage also does an extensive check for LegalHold signs in the mailbox. including reporting on:
             - xoMailbox.LitigationHoldEnabled
@@ -102,6 +150,113 @@ function resolve-user {
             - xoMailbox.DelayHoldApplied 
             - xoMailbox.DelayReleaseHoldApplied 
             - checks if xoMailboxFolderStats 'DiscoveryHolds' folder has ItemsInFolder -gt 0
+
+    - getPerms parameter, returns Get-xoMailboxPermission & 
+        Get-xoRecipientPermission, non-SELF grants, and membership of any grant 
+        groups (XO-only)
+
+        - Adds added inline output (per grant and nested group w membership)
+
+            ## xoMailboxPermission:
+            Identity   User                       AccessRights
+            --------   ----                       ------------
+            XAXXxxxxxx ABC-SEC-Email-XAXXxxxxxx-G {FullAccess}
+
+            ### Expanded Perm Group Summaries:
+            -----------
+            Identity                   | PrimarySmtpAddress
+            ABC-XXX-Xxaxx-XAXXxxxxxx-G | ABC-XXX-Xxaxx-XAXXxxxxxx-G@DOMAIN.COM
+            RecipientType              | RecipientTypeDetails       | ManagedBy
+            MailUniversalSecurityGroup | MailUniversalSecurityGroup | Xxxaxxx Xaxax
+            Description :
+            #### Members:
+            Alias   PrimarySmtpAddress       RecipientType RecipientTypeDetails
+            -----   ------------------       ------------- --------------------
+            xaxaxxx Xxxaxxx.Xaxax@DOMAIN.COM   UserMailbox   UserMailbox
+            ..
+
+
+            ## xoRecipientPermission:
+            Identity   Trustee                    AccessControlType AccessRights Inherited
+            --------   -------                    ----------------- ------------ ---------
+            XAXXxxxxxx ABC-XXX-Xxaxx-XAXXxxxxxx-G Allow             {SendAs}
+
+
+            ### Expanded Perm Group Summaries:
+            -----------
+            Identity                   | PrimarySmtpAddress
+            ABC-XXX-Xxaxx-XAXXxxxxxx-G | ABC-XXX-Xxaxx-XAXXxxxxxx-G@DOMAIN.COM
+            RecipientType              | RecipientTypeDetails       | ManagedBy
+            MailUniversalSecurityGroup | MailUniversalSecurityGroup | Xxxaxxx Xaxax
+            Description :
+            #### Members:
+            Alias   PrimarySmtpAddress       RecipientType RecipientTypeDetails
+            -----   ------------------       ------------- --------------------
+            xaxaxxx Xxxaxxx.Xaxax@DOMAIN.COM   UserMailbox   UserMailbox
+            ...
+
+
+    - outObject parameter causes it to return a system.object summary to the pipeline. 
+        Can be captured in a variable when calling, for further analysis of the components of the resolved user/mailbox object:
+
+         $results = resolve-user -outObject -users 'USERLOGON@DOMAIN.COM'  ;  
+
+         By default, the returned object includes the following properties & full object copies (if found and resolvable):
+
+            dname           : lynctest14@DOMAIN.COMlync test14
+            fname           : lynctest14
+            lname           : lync test14
+            OPRcp           : SD.SUB.DOMAIN.COM/ABC/USERS/lync test14
+            xoRcp           : lync test14_0650dc758f
+            OPMailbox       :
+            OPRemoteMailbox : lync test14
+            ADUser          : CN=lync test14,OU=users,OU=SITE,DC=sd,DC=sub,DC=domain,DC=com
+            Federator       : SUB.DOMAIN.COM
+            xoMailbox       : lync test14
+            xoMUser         :
+            xoUser          :
+            xoMemberOf      :
+            txGuest         :
+            OPMapiTest      :
+            xoMapiTest      : {Microsoft.Exchange.Monitoring.MapiTransactionOutcome}
+            MsolUser        :
+            AADUser         : class User {}
+            AADUserMgr      :
+            AADUserLics     :
+            LicenseGroup    :
+            isDirSynced     : True
+            isNoBrain       : False
+            isSplitBrain    : False
+            IsLicensed      : 0
+            IsDisabledOU    : False
+            IsADDisabled    : 0
+            IsAADDisabled   : 0
+
+    The following items above are substantial copies of the original cloud or OnPrem objects:
+
+        OPRcp           : OnPrem recipient details
+        xoRcp           : Cloud recipient details
+        OPMailbox       : OnPrem mailbox details (if present)
+        OPRemoteMailbox : OnPrem RemoteMailbox details
+        ADUser          : OnPrem ActiveDirectory ADUser object details
+        xoMailbox       : Cloud mailbox details 
+        xoMUser         : Cloud MailUser object details 
+        xoUser          : Cloud Exchange Online 'User' object details
+        txGuest         : Cloud Guest details
+        OPMapiTest      : Results of OnPrem mailbox access tests
+        xoMapiTest      : Results of cloud mailbox access tests
+        MsolUser        : Cloud MsolUser object details
+        AADUser         : Cloud AzureADUser object details
+        AADUserMgr      : Cloud subject user's 'ManagedBy' AzureADUser object details
+
+        Each can be accessed, if -outObject was used and the output assigned to a variable, as a dotted-property of the variable ($variable.property):
+
+            PS> $$results.xomailbox
+
+                Name                   Alias      ServerName    ProhibitSendQuota
+                ----                   -----      ----------    -----------------
+                lync test14_0650dc758f lynctest14 xxnxx0nxxnnnn 10 GB (10,737,418,240 bytes)
+
 
     .PARAMETER users
     Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)[-users 'xxx','yyy']
@@ -114,7 +269,7 @@ function resolve-user {
     .PARAMETER getPerms
     switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]
     .PARAMETER rgxAccentedNameChars
-    users
+    Regular Expression that identifies input 'user' strings that should have diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]
     .PARAMETER TenOrg
     TenantTag value, indicating Tenants to connect to[-TenOrg 'ABC']
     .PARAMETER Credential
@@ -177,15 +332,12 @@ function resolve-user {
     Example (from ahk 7uluo! macro parser output) that creates a variable based on ticketnumber & email address (with underscores for alphanums), from the output, and then exports the variable content to xml. 
     Assigns to an immediately parsable inmem variable, along with the canned .xml that can be reloaded in future, or attached to a ticket.
     .EXAMPLE
-    PS> resolve-user -users 'John Public' -getmobile
-    Example that includes the -getMobile parameter, to return details on xo MobileDevices in use with the EXO mailbox
-    .EXAMPLE
-    PS> $999999Rpt = resolve-user fname.lname@toro.com -Ticket 99999 -getQuotaUsage -outObject ; 
+    PS> $999999Rpt = resolve-user fname.lname@DOMAIN.COM -Ticket 99999 -getQuotaUsage -outObject ; 
 
-        10:39:53:===v (1/1):Input: 'FNAME.LNAME@toro.com' | 'FNAME' | 'LNAME' v===(EML)
-        get-Rmbx/xMbx: (Rmbx)(TOR USER, fed:ad.toro.com)
+        10:39:53:===v (1/1):Input: 'FNAME.LNAME@DOMAIN.COM' | 'FNAME' | 'LNAME' v===(EML)
+        get-Rmbx/xMbx: (Rmbx)(TOR USER, fed:SUB.DOMAIN.COM)
         SamAccountName | WindowsEmailAddress
-        LNAMEFI         | FNAME.LNAME@toro.com
+        LNAMEFI         | FNAME.LNAME@DOMAIN.COM
         Office | RecipientTypeDetails | RemoteRecipientType | IsDirSynced
                 | RemoteUserMailbox    | Migrated            |
         ExternalDirectoryObjectId | CustomAttribute5 | EmailAddressPolicyEnabled
@@ -193,28 +345,28 @@ function resolve-user {
         Outlook (xoMAPI) Access Test Result:Success
         xoMailboxStats Count:1
         10:39:56: INFO:  (-getQuotaUsage:running lengthy Get-xoMailboxFolderStatistics...)
-        =get-AADuser FNAME.LNAME@toro.com>:
-        =get-AADuserManager FNAME.LNAME@toro.com>:
+        =get-AADuser FNAME.LNAME@DOMAIN.COM>:
+        =get-AADuserManager FNAME.LNAME@DOMAIN.COM>:
         ===$hSum.ADUser: 
         UPN                 | DName      | FName | LName | Title                             
-        FNAME.LNAME@toro.com | FNAME LNAME | FNAME | LNAME  | Supervisor II, Distribution Center
+        FNAME.LNAME@DOMAIN.COM | FNAME LNAME | FNAME | LNAME  | Supervisor II, Distribution Center
         Company | Dept                            | Ofc          
                 | Operations Distribution El Paso | El Paso-D, TX
         Street | City | State | Zip | Phone           | Mobile
                 |      |       |     | +1 915 231 7404 |
         Enabled | DN                                                          
-        True    | CN=FNAME LNAME,OU=Users,OU=ELP,DC=global,DC=ad,DC=toro,DC=com
+        True    | CN=FNAME LNAME,OU=Users,OU=ELP,DC=SD,DC=sub,DC=domain,DC=com
         whenCreated          | whenChanged         
         8/18/2017 4:13:54 PM | 2/23/2024 8:23:33 AM
         Desc : 8/21/17 FT for FNAME LNAME 146294 -bk
         LicenseGroup:(direct-assigned E3)
         ===$hSum.AADUserMgr: 
         UserPrincipalName       | Mail                   
-        FNAME.LNAME@toro.com | FNAME.LNAME@toro.com
-        OpOU : OU=Users,OU=ELP,DC=global,DC=ad,DC=toro,DC=com
+        FNAME.LNAME@DOMAIN.COM | FNAME.LNAME@DOMAIN.COM
+        OpOU : OU=Users,OU=ELP,DC=SD,DC=sub,DC=domain,DC=com
         10:40:06: PROMPT:  UserPrincipalName       | Mail                   
-        FNAME.LNAME@toro.com | FNAME.LNAME@toro.com
-        OpOU : OU=Users,OU=ELP,DC=global,DC=ad,DC=toro,DC=com
+        FNAME.LNAME@DOMAIN.COM | FNAME.LNAME@DOMAIN.COM
+        OpOU : OU=Users,OU=ELP,DC=SD,DC=sub,DC=domain,DC=com
 
         Licenses::
         MCOEV, FLOW_FREE, MCOPSTNC, ENTERPRISEPACK, POWER_BI_STANDARD, EMS, Microsoft_Teams_Audio_Conferencing_select_dial_out
@@ -239,7 +391,7 @@ function resolve-user {
         annnnnnn-nbne-nnnn-anne-necncannbnnn\Top of Information Store        1     0                                      Root
         10:40:06: INFO:  
         ===output to::
-        D:\scripts\logs\823795-FNAME.LNAME@toro.com-folder-sizes-NONHIDDEN-NONZERO-run20240227-1039AM.xml
+        D:\scripts\logs\823795-FNAME.LNAME@DOMAIN.COM-folder-sizes-NONHIDDEN-NONZERO-run20240227-1039AM.xml
 
         10:40:09: WARNING:  
         10:40:09: WARNING:  
@@ -275,7 +427,7 @@ function resolve-user {
         - xoMailbox.DelayReleaseHoldApplied 
         - checks if xoMailboxFolderStats 'DiscoveryHolds' folder has ItemsInFolder -gt 0
     .EXAMPLE
-    PS> $999999Rpt = resolve-user fname.lname@toro.com -Ticket 99999 -getPerms -outObject ; 
+    PS> $999999Rpt = resolve-user fname.lname@DOMAIN.COM -Ticket 99999 -getPerms -outObject ; 
 
         # [... additional Permissions output returned]
         10:42:56: PROMPT:
@@ -287,7 +439,7 @@ function resolve-user {
         ### Expanded Perm Group Summaries:
         -----------
         Identity                             | PrimarySmtpAddress
-        522x58x1-11x9-4x28-x391-1x8xxx211xxx | ABC-SEC-Email-xxxxxxxxxxxxx-G@toro.com
+        522x58x1-11x9-4x28-x391-1x8xxx211xxx | ABC-SEC-Email-xxxxxxxxxxxxx-G@DOMAIN.COM
         RecipientType              | RecipientTypeDetails       | ManagedBy
         MailUniversalSecurityGroup | MailUniversalSecurityGroup | Christie Moore
         Description :
@@ -304,7 +456,7 @@ function resolve-user {
         ### Expanded Perm Group Summaries:
         -----------
         Identity                             | PrimarySmtpAddress
-        522x58x1-11x9-4x28-x391-1x8xxx211xxx | ABC-SEC-Email-xxxxxxxxxxxxx-G@toro.com
+        522x58x1-11x9-4x28-x391-1x8xxx211xxx | ABC-SEC-Email-xxxxxxxxxxxxx-G@DOMAIN.COM
         RecipientType              | RecipientTypeDetails       | ManagedBy
         MailUniversalSecurityGroup | MailUniversalSecurityGroup | Christie Moore
         Description :
@@ -312,22 +464,33 @@ function resolve-user {
         Alias   PrimarySmtpAddress        RecipientType RecipientTypeDetails
         -----   ------------------        ------------- --------------------
         xxxxxxx xxxxxxxx.xxxxx@DOMAIN.COM UserMailbox   UserMailbox
+    .EXAMPLE
+    PS> $999999Rpt = resolve-user fname.lname@DOMAIN.COM -Ticket 99999 -getMobile -outObject ;
+        
+            .EXAMPLE
+    PS> $results = resolve-user -users 'John Public' -getmobile -outobject ; 
+        
+        ...
+        xoMobileDeviceStats Count:2
+        ...
 
+        $results.xoMobileDeviceStats: 
+
+        FirstSyncTime         LastPolicyUpdateTime  LastSyncAttemptTime  LastSuccessSync      DeviceType  DeviceID                         DeviceUserAgent       DeviceWipeSentTime DeviceWipeRequestTime DeviceWipeAckTime
+        -------------         --------------------  -------------------  ---------------      ----------  --------                         ---------------       ------------------ --------------------- -----------------
+        8/17/2023 10:50:16 PM 1/16/2025 10:08:42 AM 1/16/2025 5:45:14 PM 1/16/2025 5:45:14 PM Outlook     nXnXXn0XnnnXn0nnAAXA0XnnX0XnnnnX Outlook-Android/2.0
+    
+    Demo with the -getMobile parameter, to return details on xo MobileDevices in use with the EXO mailbox. Demos default output 'xoMobileDeviceStats Count' echo, and detailed xoMobileDeviceStats object output
     .LINK
     https://github.com/tostka/verb-exo
     #>
 
-    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
-    # 12:19 PM 9/26/2023 pull verb-exo ref "
     #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-IO, verb-logging
     ##Requires -RunasAdministrator
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.DOMAIN\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
     [Alias('ulu')]
     PARAM(
-        #[Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)")]
-        # failing to map pipeline to $users, reduce to Value from Pipeline
         [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)[-users 'xxx','yyy']")]
             #[ValidateNotNullOrEmpty()] # pulls string from clipboard if not populated
             [Alias('UserPrincipalName', 'Samaccountname','DisplayName','Name')]
@@ -341,7 +504,7 @@ function resolve-user {
             [Alias('Quota')]
             [switch]$getQuotaUsage,
         [Parameter(HelpMessage="switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]")]
-            [Alias('Perms')]
+            [Alias('Perms','getPermissions')]
             [switch]$getPerms,
         [Parameter(HelpMessage="Regular Expression that identifies input 'user' strings that should have diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]")]
             [ValidateNotNullOrEmpty()]
@@ -611,13 +774,14 @@ function resolve-user {
         $rgxSamAcctNameTOR = "^\w{2,20}$" ; # up to 20k, the limit prior to win2k
         #$rgxSamAcctName = "^[^\/\\\[\]:;|=,+?<>@?]+$" # no char limit ;
         $MaxRecips = 25 ; # max number of objects to permit on a return resultsize/,ResultSetSize, to prevent empty set return of everything in the addressspace
-        #$rgxADDistNameGAT = ",DC=global,DC=ad,DC=toro,DC=com" ; 
-        $rgxADDistNameAT = ",DC=ad,DC=toro,DC=com" ; 
+        # interpolate from TORMETA
+        $rgxADDistNameGAT = ",$(($TORMeta.UnreplicatedOU -split ',' | select -skip 1 ) -join ',')" 
+        $rgxADDistNameAT = ",$(($TORMeta.UnreplicatedOU -split ',' | select -skip 2 ) -join ',')"
         #$DNDOM = @() ; 
         #$TORMeta.adforestname.split('.') | %{$dndom += "DC=$($_)"} ;
         #$rgxADDistNameAT = [regex]::Escape($DNDOM -join ',') ; 
 
-        # props dyn filtering: write-host "=get-xMbx:>`n$(($hSum.xoMailbox |fl ($xMprops |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
+        # props dyn filtering: write-host "=get-xMbx:>`n$(($hSum.xoMailbox |fl ($xMprops |?{$_     -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
         # $propsMailx: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
         # 11:01 AM 12/27/2021 add forwarding settings (critical to bounce/block tracking for RM)
         #$propsMailx='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','IsDirSynced','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
@@ -2308,15 +2472,15 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                         } ;
                                         #region xogetMobile ; #*------v xogetMobile v------
                                         if($getMobile){
-                                            # $devstats = Get-exoMobileDeviceStatistics -Mailbox UPN
-                                            #$smsg = "'xoMobileDeviceStats':$((get-alias ps1GetxMobilDevStats).definition) -Mailbox $($xmbx.userprincipalname)"
-                                            $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.userprincipalname)"
+                                            $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
                                             if($verbose){
                                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                                                 else{ write-verbose $smsg } ; 
                                             } ; 
-                                            $hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ; 
-                                            $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMapiTest|measure).count)" ;
+                                            #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ; 
+                                            # wasn't getting data back: shift to the .xomailbox.ExchangeGuid.guid, it's 100% going to hit and return data 
+                                            $hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.ExchangeGuid.guid -ea STOP ; 
+                                            $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
                                             write-host -foregroundcolor green $smsg ;
                                         } ; 
                                         #endregion xogetMobile ; #*------^ END xogetMobile ^------
@@ -2446,7 +2610,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                             } ;
                                         } ; 
                                         #endregion xogetPerms ; #*------^ END xogetPerms ^------
-                                    } ;
+                                    } ; # foreach($xmbx in $hSum.xoMailbox)
                                     break ;
                                 } ;
                             }
@@ -2929,6 +3093,20 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     $hSum.xoMapiTest  +=  $mapiResults ;
                 } ;
             } ;
+            #region xogetMobile ; #*------v xogetMobile v------
+            if($getMobile){
+                $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
+                if($verbose){
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-verbose $smsg } ; 
+                } ; 
+                #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ; 
+                # wasn't getting data back: shift to the .xomailbox.ExchangeGuid.guid, it's 100% going to hit and return data 
+                $hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP ; 
+                $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
+                write-host -foregroundcolor green $smsg ;
+            } ; 
+            #endregion xogetMobile ; #*------^ END xogetMobile ^------
             #region xogetQuotaUsage2 ; #*------v xogetQuotaUsage2 v------
             # 3:42 PM 9/25/2023 bring in new quota support as well - it's not populated in the oprcp first test
             if($getQuotaUsage){
@@ -2943,7 +3121,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         else{ write-verbose $smsg } ; 
                     } ; 
                     $hSum.xoMailboxStats  +=  Get-xoMailboxStatistics @pltGMbxStatX | select $prpStat;
-                    $smsg = "xoMailboxStats Count:$(($hsum.xoMapiTest|measure).count)" ;
+                    $smsg = "xoMailboxStats Count:$(($hSum.xoMailboxStats|measure).count)" ;
                     write-host -foregroundcolor green $smsg ;
 
                     If($hSum.xoMailbox.UseDatabaseQuotaDefaults){
