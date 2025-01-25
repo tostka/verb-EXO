@@ -12,6 +12,7 @@ function convert-ADUserRecipientTypeRemoteSharedMailbox{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    * 5:22 PM 1/25/2025 dc access issues to BCC, had to add retry code & get-gcfast -exclude to autorecover on ad calls
     * 10:12 AM 5/18/2023 add: adv func beg/proc blocks: full pipeline support ; ren'd mid proc block vari added explicit loop
     * 8:46 AM 5/17/2023 add to vXO; ren'd to convert-ADUserRecipientTypeRemoteSharedMailbox (rmvd _ internal prefix), and aliased orig name(convert-ADUserRecipientType), strongly typed $ADUser as [Microsoft.ActiveDirectory.Management.ADUser]
     * 1:06 PM 8/25/2021 ren convertADUser -> convert-ADUserRecipientType
@@ -26,6 +27,8 @@ function convert-ADUserRecipientTypeRemoteSharedMailbox{
 
     .PARAMETER  ADUser
     ADUser object [-ADUser `$ADVariable]
+    .PARAMETER domaincontroller
+    Option to hardcode a specific DC [-domaincontroller xxxx]
     .PARAMETER Whatif
     Parameter to run a Test no-change pass, and log results [-Whatif switch]
     .PARAMETER ShowDebug
@@ -48,12 +51,20 @@ function convert-ADUserRecipientTypeRemoteSharedMailbox{
         [Parameter(Position=0,Mandatory=$True,ValueFromPipeline=$true,HelpMessage="ADUser object [-ADUser `$ADVariable]")]
             [ValidateNotNullOrEmpty()]
             [Microsoft.ActiveDirectory.Management.ADUser]$ADUser,
+        [Parameter(HelpMessage="Option to hardcode a specific DC [-domaincontroller xxxx]")]
+            [string]$domaincontroller,
         [Parameter(HelpMessage="Debugging Flag [-showDebug]")]
             [switch] $showDebug,
         [Parameter(HelpMessage="Whatif Flag  [-whatIf]")]
             [switch] $whatIf
     ) # PARAM BLOCK END
-    BEGIN {} ;  # BEGIN-E
+    BEGIN {
+        if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
+        if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
+        if(-not $RetrySleep){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
+        if(-not $DirSyncInterval){$DirSyncInterval = 30 } ; # AADConnect dirsync interval
+
+    } ;  # BEGIN-E
     PROCESS {
             foreach($ADU in $ADUser) {
             $error.clear() ;
@@ -89,7 +100,53 @@ function convert-ADUserRecipientTypeRemoteSharedMailbox{
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug
                             else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-                            Set-ADUser @pltSADU ;
+                            $Exit = 0 ;
+                            Do {
+                                Try {
+                                    Set-ADUser @pltSADU ;
+                                    $Exit = $DoRetries ;
+                                } catch [Microsoft.ActiveDirectory.Management.ADServerDownException] {
+                                    $ErrorTrapped=$Error[0] ;
+                                    $smsg = "Failed to exec cmd because: $($ErrorTrapped.Exception.Message )" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    # re-quire a new DC
+                                    $badDC = $domaincontroller ;
+                                    $smsg = "PROBLEM CONTACTING $($badDC)!:Resource unavailable: $($ErrorTrapped.Exception.Message)" ;
+                                    $smsg += "get-GCFast() an alterate DC (-exclude $($badDC))" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    if($domaincontroller = get-gcfast -Exclude $badDC -Verbose){
+                                        $script:domaincontroller = $domaincontroller  ;
+                                        write-warning "Changing DomainController:($($badDC)->$($domaincontroller)):Waiting 20seconds, for ReplSync..." ;
+                                        start-sleep -Seconds 20 ;
+                                        Continue ;
+                                    } else {
+                                        $smsg = "UNABLE TO ACQUIRE A NEW ALTERNATE DC! ABORTING" ;
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                        THROW $SMSG ;
+                                    } ;  ;
+                                } Catch {
+                                    $ErrorTrapped=$Error[0] ;
+                                    $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } CATCH[$($ErrorTrapped.Exception.GetType().FullName)]{" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug
+                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    #Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                                    Start-Sleep -Seconds $RetrySleep ;
+                                    $Exit ++ ;
+                                    $smsg = "Failed to exec cmd because: $($ErrorTrapped)" ;
+                                    $smsg += "`nTry #: $Exit" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    If ($Exit -eq $DoRetries) {
+                                        $smsg =  "Unable to exec cmd!" ;
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    } ;
+                                    Continue ;
+                                }  ;
+                            } Until ($Exit -eq $DoRetries) ;
                             if(!$whatif){
                                 $smsg= "POST:ADUser`n$((Get-adUser -id $ADU.samaccountname -prop $adprops -server $domaincontroller|fl $adprops | out-string).trim())`n" ;;
                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
