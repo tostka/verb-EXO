@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 8.5.4.0
+  Version     : 8.7.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -925,12 +925,13 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 12:34 PM 10/29/2024 splicing back updates from Invoke-SCMailboxFolderContentPurge.ps1, incl abil to do prefixless (so have to pull the -prefix as a driver), checking Connect-IPPSSession it's still cited as "cmdlet in the Exchange Online PowerShell module to connect to Security & Compliance PowerShell using modern authentication ": SC is the ideal conn
     * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
     * 3:11 PM 7/15/2024 needed to change CHKPREREQ to check for presence of prop, not that it had a value (which fails as $false); hadn't cleared $MetaProps = ...,'DOESNTEXIST' ; confirmed cxo working non-based
     * 1:43 PM 7/9/2024 passes hybrid xo/s&c, with variant prefixes (other than hard-req that prefix cc indicates an s&c conn).
     * 4:13 PM 7/8/2024 passes dbg xo; END block validation code using test-exoConnectionTDO()+resolve-AppIDToCBAFriendlyName() is now functional
     * 3:33 PM 7/3/2024 updated, rewrote tests & END block to rely on test-EXOConnectionTDO, and new resolve-AppIDToCBAFriendlyName(); Initial tests are working. 
-    * 2:55 PM 6/27/2024 back to cc support: "# build in hybrid xo & ccms support, switch on the prefix spec" -prefix cc triggers it.
+    * 2:55 PM 6/27/2024 back to cc support: "# build in hybrid xo & Prvw support, switch on the prefix spec" -prefix cc triggers it.
         rem'd no-longer needed legacy EOM specs -ExchangeEnvironmentName,-UseMultithreading, -PageSize, $rgxEXoPrunspaceConnectionInfoAppName,$EXoPrunspaceConnectionInfoPort,$rgxExoPsHostName,$rgxEXOv1gmoDescription,$EXOv1gmoprivatedataImplicitRemoting,$rgxEXOv2gmoDescription,$EXOv2gmoprivatedataImplicitRemoting,$rgxExoPsessionstatemoduleDescription,$EXOv2StateOK,$EXOv2AvailabilityOK,$EXOv2RunStateBad,$EXOv1GmoFilter
         wip updated for functionalized verb-AAD:Update-AADAppRegistrationKeyCertificate(); need to debug the S&C conn, haven't revisited since initial hybrid coding attempt ; odd, it lost the cxo alias def (added back, did I lose a rev in the mix?) CBA certs expired, error in connect-ExchangeOnline doesn't cite the expiration, just crashes out. So added code to precheck local cert NotAfter, and premptively feed problem cert into Update-AADAppRegistrationKeyCertificate 
         (not debugged yet; need to reroll the certs & creds)
@@ -1018,11 +1019,15 @@ Function Connect-EXO {
     .DESCRIPTION
     Connect-EXO - Establish connection to Exchange Online (via EXO V2 graph-api module)
     .PARAMETER  Prefix
-    [verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-Prefix tag]
+    [verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection (defaults to xo, assert -Prefix:`$null to suppress any prefix use) [-Prefix tag]
     .PARAMETER Credential
     Credential to use for this connection [-credential [credential obj variable]
     .PARAMETER UserPrincipalName
     User Principal Name or email address of the user
+    .PARAMETER connectPurview
+    Switch to connect to Security & Compliance ('Purview') Powershell via Connect-IPPSSession[-connectPurview]
+    .PARAMETER SCDefaultPrefix
+    Default Prefix/ModulePrefix to be used for connections to Security & Compliance ('Purview') Powershell via Connect-IPPSSession[-SCDefaultPrefix 'cc']
     .PARAMETER UserRole
     Credential Optional User Role spec for credential discovery (wo -Credential)(SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]
     .PARAMETER TenOrg
@@ -1086,16 +1091,21 @@ Function Connect-EXO {
     .LINK
     #>
     [CmdletBinding(DefaultParameterSetName='UPN')]
-    [Alias('cxo','cxo2','Connect-EXO2' )]
+    [Alias('cxo','cxo2','Connect-EXO2','Connect-Purview','Connect-SC' )]
     PARAM(
         # try pulling all the ParameterSetName's - just need to get through it now. - no got through it with a defaultparametersetname (avoids 
-        [Parameter(HelpMessage = "[verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection [-Prefix tag]")]
+        [Parameter(HelpMessage = "[verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection (defaults to xo, assert -Prefix:`$null to suppress any prefix use) [-Prefix tag]")]
             [string]$Prefix = 'xo',
         [Parameter(ParameterSetName = 'Cred', HelpMessage = "Credential to use for this connection [-credential [credential obj variable]")]
             [System.Management.Automation.PSCredential]$Credential,
             # = $global:credo365TORSID, # defer to TenOrg & UserRole resolution
         [Parameter(ParameterSetName = 'UPN',HelpMessage = "User Principal Name or email address of the user[-UserPrincipalName logon@domain.com]")]
             [string]$UserPrincipalName,
+        [Parameter(HelpMessage = "Switch to connect to Security & Compliance ('Purview') Powershell via Connect-IPPSSession[-connectPurview]")]
+            [Alias('ConnectSC')]
+            [switch]$connectPurview,
+        [Parameter(HelpMessage = "Default Prefix/ModulePrefix to be used for connections to Security & Compliance ('Purview') Powershell via Connect-IPPSSession[-SCDefaultPrefix 'cc']")]
+            [string] $SCDefaultPrefix = 'sc',
         [Parameter(Mandatory = $false, HelpMessage = "Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]")]
             # sourced from get-admincred():#182: $targetRoles = 'SID', 'CSID', 'ESVC','CSVC','UID','ESvcCBA','CSvcCBA','SIDCBA' ; 
             #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
@@ -1106,7 +1116,7 @@ Function Connect-EXO {
                 return $true ; 
             })]
             [string[]]$UserRole = @('SIDCBA','SID','CSVC'),
-            # CCMS: [string[]]$UserRole = @('SID'),
+            # Prvw: [string[]]$UserRole = @('SID'),
         [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
             [ValidateNotNullOrEmpty()]
             #[ValidatePattern("^\w{3}$")]
@@ -1122,7 +1132,6 @@ Function Connect-EXO {
                 + FullyQualifiedErrorId : TypeNotFound
             #>
             #$ExchangeEnvironmentName = 'O365Default',
-            
         [Parameter(HelpMessage = "MinimumVersion required for ExchangeOnlineManagement module (defaults to '2.0.5')[-MinimumVersion '2.0.6']")]
             [version] $MinimumVersion = '2.0.5',
         [Parameter(HelpMessage = "MinimumVersion required for Non-WinRM connections (of ExchangeOnlineManagement module (defaults to '3.0.0')[-MinimumVersion '2.0.6']")]
@@ -1139,7 +1148,15 @@ Function Connect-EXO {
             [switch] $showDebug
     ) ;
     BEGIN {
+        # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
+        $rPSCmdlet = $PSCmdlet ; 
+        $rPSScriptRoot = $PSScriptRoot ; 
+        $rPSCommandPath = $PSCommandPath ; 
+        $rMyInvocation = $MyInvocation ; 
+        $rPSBoundParameters = $PSBoundParameters ; 
         $verbose = ($VerbosePreference -eq "Continue") ;
+        ${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ;
+        $PSParameters = New-Object -TypeName PSObject -Property $rPSBoundParameters ;
 		$CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
         write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
         # psv6+ already covers, test via the SslProtocol parameter presense
@@ -1219,9 +1236,9 @@ Function Connect-EXO {
         #if(-not (gv EXOv2RunStateBad -ea 0 )){ $EXOv2RunStateBad = 'Broken'} ;
         #if(-not (gv EXOv1GmoFilter -ea 0 )){$EXOv1GmoFilter = 'tmp_*' } ; 
         if(-not (gv EXOv2GmoNoWinRMFilter -ea 0 )){$EXOv2GmoNoWinRMFilter = 'tmpEXO_*' };
-        # add get-connectioninformation.ConnectionURI targeting rgxs for CCMS vs EXO
+        # add get-connectioninformation.ConnectionURI targeting rgxs for Prvw vs EXO
         if(-not $rgxConnectionUriEXO){$rgxConnectionUriEXO = 'https://outlook\.office365\.com'} ; 
-        if(-not $rgxConnectionUriEXO){$rgxConnectionUriCCMS = 'https://ps\.compliance\.protection\.outlook\.com'} ; 
+        if(-not $rgxConnectionUriPrvw){$rgxConnectionUriPrvw = 'https://ps\.compliance\.protection\.outlook\.com'} ; 
         $sTitleBarTag = @("EXO2") ;
         #*------^ END PSS & GMO VARIS ^------
 
@@ -1243,26 +1260,63 @@ Function Connect-EXO {
         } ;
         #*======^ END FUNCTIONS ^======
 
-        
-        # disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
-        if (-not $Prefix) {
-            $Prefix = 'xo' ; # 4:31 PM 7/29/2020 MS has RESERVED use of the 'exo' prefix [facepalm]
-            #$Prefix = 'cc' ; # ccms variant
-            $smsg = "(asserting Prefix:$($Prefix)" ;
-            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        } ;
-        if (($Prefix) -and ($Prefix -eq 'EXO')) {
-            throw "Prefix 'EXO' is a reserved Prefix, please use a different prefix."
+        if($rMyInvocation.Line -match 'Connect-(Purview|SC)' ){
+            $smsg = "Connect-EXO() invoked using Connect-Purview Alias:" ; 
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            $smsg = "Set:-ConnectPurview:`$true" ; 
+            if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            $ConnectPurview = $true ; 
+            if($null -eq $Prefix){
+                $smsg = "-prefix:`$null detected, skipping default prefix assignement" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success    
+            }elseif($Prefix -eq 'xo'){
+                $smsg = "Set:-Prefix:`$($SCDefaultPrefix)" ; 
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                $Prefix = $SCDefaultPrefix
+            }elseif(-not $Prefix){
+                $smsg = "Set:-Prefix:`$($SCDefaultPrefix)" ; 
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            } ; 
         }
+        if(-not $ConnectPurview -AND -not ($null -eq $Prefix)){
+            # disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
+            if (-not $Prefix) {
+                $Prefix = 'xo' ; # 4:31 PM 7/29/2020 MS has RESERVED use of the 'exo' prefix [facepalm]
+                #$Prefix = 'cc' ; # Prvw variant
+                $smsg = "(asserting default Prefix:$($Prefix)" ;
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } ;
+            if (($Prefix) -and ($Prefix -eq 'EXO')) {
+                throw "Prefix 'EXO' is a reserved Prefix, please use a different prefix."
+            }
+        } ; 
+        <#
         if($Prefix -eq 'cc'){
-            # build in hybrid xo & ccms support, switch on the prefix spec
-            $useCCMSConn = $true ; 
+            # build in hybrid xo & Prvw support, switch on the prefix spec
+            $usePrvwConn = $true ; 
         }; 
-        if($useCCMSConn){
+        if($usePrvwConn){
             # respec userrole
             $UserRole = @('SID') ; 
-            $sTitleBarTag = @("CCMS") ;
+            $sTitleBarTag = @("Prvw") ;
+        } ; 
+        #>
+
+        if($ConnectPurview){
+            # respec userrole
+            $UserRole = @('SID') ; 
+            $sTitleBarTag = @("Prvw") 
         } ; 
 
         <#
@@ -1277,14 +1331,48 @@ Function Connect-EXO {
         } ; 
         #>
 
+        #if(-not $rgxConnectionUriEXO){$rgxConnectionUriEXO = 'https://outlook\.office365\.com'} ; 
+        #if(-not $rgxConnectionUriPrvw){$rgxConnectionUriPrvw = 'https://ps\.compliance\.protection\.outlook\.com'} ; 
         if(-not $isBased){
             # default to most basic rudimentary connection
-            $Status = Get-ConnectionInformation -ErrorAction SilentlyContinue
-            If (-not ($Status)) {
-              #Connect-ExchangeOnline -SkipLoadingCmdletHelp
-              Connect-ExchangeOnline -SkipLoadingCmdletHelp -ShowBanner:$false ; 
-            }
-        }else {
+            $connections = Get-ConnectionInformation -ErrorAction SilentlyContinue
+            if($connections|?{$_.ConnectionUri -match $rgxConnectionUriEXO -AND $_.TokenStatus -ne 'Expired'  -AND $_.ModulePrefix -eq $Prefix}){
+                $smsg = "EXO connected" ; 
+                if($Prefix){
+                    $smsg += " w Prefix:$($Prefix)" ; 
+                }else{
+                    $smsg += " w *no* Prefix" ; 
+                } ; 
+                $smsg += "/non-Expired Token" ;
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            }elseif($connections|?{$_.ConnectionUri -eq $rgxConnectionUriPrvw -AND $_.TokenStatus -ne 'Expired'  -AND $_.ModulePrefix -eq $Prefix}){
+                $smsg = 'Purview S&C connected' ; 
+                if($Prefix){
+                    $smsg += " w Prefix:$($Prefix)" ; 
+                }else{
+                    $smsg += " w *no* Prefix" ; 
+                } ; 
+                $smsg += "/non-Expired Token" ;
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            #}elseIf (-not ($connections)) {
+            } else {
+                if($ConnectPurview){
+                    write-host 'Purview S&C disconnected or Expired Token';
+                    Import-Module $EOMmodname -ErrorAction stop ;
+                    Connect-IPPSSession  -ErrorAction stop ;
+                } else {
+                    #Connect-ExchangeOnline -SkipLoadingCmdletHelp
+                    #Connect-ExchangeOnline -SkipLoadingCmdletHelp -ShowBanner:$false ; 
+                    write-host 'EXO disconnected or Expired Token';
+                    Import-Module $EOMmodname -ErrorAction stop ;
+                    Connect-ExchangeOnline -SkipLoadingCmdletHelp
+                } ; 
+            } ; 
+        } else {
 
             # transplat fr rxo ---
             if(-not $Credential){
@@ -1304,7 +1392,7 @@ Function Connect-EXO {
                         default {throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; exit ; } ;
                     } ;  
                     $smsg = "Imputed `$TenOrg from logged on USERDOMAIN:$($TenOrg)" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                 } ; 
@@ -1328,7 +1416,6 @@ Function Connect-EXO {
                 } else { 
                     $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-
                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                     break ; 
                 } ; 
@@ -1348,7 +1435,7 @@ Function Connect-EXO {
                 erroraction = 'STOP' ;
             } ;
             if((gcm connect-EXO).Parameters.keys -contains 'silent'){
-                $pltCXO.add('Silent',$false) ;
+                $pltCXO.add('Silent',$silent) ;
             } ;
 
             $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ; 
@@ -1416,7 +1503,7 @@ Function Connect-EXO {
     PROCESS {
         if($isBased){
 
-            $bExistingEXOGood = $bExistingCCMSGood = $false ;
+            $bExistingEXOGood = $bExistingPrvwGood = $false ;
             $certUname = $null ; 
 
             # Keep track of error count at beginning.
@@ -1471,7 +1558,7 @@ Function Connect-EXO {
             ApplicationPrivateData : {SupportedVersions, ImplicitRemoting, PSVersionTable}
             Runspace               : System.Management.Automation.RemoteRunspace
 
-            -CCMS session via Connect-IPPSSession
+            -Prvw session via Connect-IPPSSession
             ConfigurationName : Microsoft.Exchange
             ComputerName      : nam02b.ps.compliance.protection.outlook.com
             Name              : ExchangeOnlineInternalSession_1
@@ -1512,12 +1599,16 @@ Function Connect-EXO {
             if($Prefix){
                 $pltTXO.add('Prefix',$Prefix) ; 
             } ; 
+            if($ConnectPurview -AND ( (get-command test-EXOConnectionTDO).Parameters.Keys -contains 'ConnectPurview') ){
+                $pltTXO.add('ConnectPurview',$ConnectPurview) ; 
+            } ; 
+
             $smsg = "test-EXOConnectionTDO w`n$(($pltTXO|out-string).trim())" ; 
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
-            $bExistingEXOGood = $bExistingCCMSGood = $false ;
-           if($oRet = test-EXOConnectionTDO @pltTXO ){
+            $bExistingEXOGood = $bExistingPrvwGood = $false ;
+            if($oRet = test-EXOConnectionTDO @pltTXO ){
                 foreach($xSess in $oRet){
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){
                         $Tenantdomain = convert-TenantIdToDomainName -TenantId $xSess.TenantID ;
@@ -1541,7 +1632,7 @@ Function Connect-EXO {
                         }
                         elseif($xSess.isSC){
                             $smsg += "Sec & Compl PS " 
-                            $bExistingCCMSGood = $true ;
+                            $bExistingPrvwGood = $true ;
                         }else{
                             $smsg += "DISCONNECTED!" ; 
                         } ; 
@@ -1557,13 +1648,25 @@ Function Connect-EXO {
                                 $smsg += " ($($xSess.Organization.split('.')[0]))" ;
                             } ; 
                         } ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
 
                         
                     } else {
-                        $smsg = "Not currently connected (TokenStatus:$($xSess.connection.TokenStatus))" ;
+                        # 3:17 PM 10/29/2024 disconnect them if borked!
+                        $pltDXOC=[ordered]@{
+                            ConnectionId = $xSess.ConnectionId ; 
+                            Confirm = $false ; 
+                            erroraction = 'STOP' ;
+                            whatif = $($whatif) ;
+                        } ;
+                        $smsg = "Clear broken Connection: Disconnect-ExchangeOnline w`n$(($pltDXOC|out-string).trim())" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        Disconnect-ExchangeOnline @pltDXOC ;
+
+                        $smsg = "Connection Was not currently connected (TokenStatus:$($xSess.connection.TokenStatus))" ;
                         $smsg += "`nPreviously: "
                         if($xSess.isXO){
                             $smsg += "XO EOM PS " ; 
@@ -1571,10 +1674,10 @@ Function Connect-EXO {
                         }
                         elseif($xSess.isSC){
                             $smsg += "Sec & Compl PS " 
-                            $bExistingCCMSGood = $false ;
+                            $bExistingPrvwGood = $false ;
                         }else{
                             $smsg += "DISCONNECTED!" ;
-                            $bExistingEXOGood = $bExistingCCMSGood = $false ;
+                            $bExistingEXOGood = $bExistingPrvwGood = $false ;
                         } ;
                         if($xSess.isCBA){
                             $smsg += " using CBA:" ;
@@ -1590,17 +1693,17 @@ Function Connect-EXO {
                         } else {
                             $smsg += " (neither Organization nor TenantID is populated)" ;
                         } ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                     } ;
                 } ;   # loop-E
             } ; 
         
-            #$bExistingCCMSGood
+            #$bExistingPrvwGood
             #if ($bExistingEXOGood -eq $false) {
-            # $UseConnEXO indicates it's a MinNoWinRMVersino, not necc xo-only conn; $useCCMSConn indicates it's a prefix cc/CCMS connection, solely
-            if( ($useCCMSConn -AND ($bExistingCCMSGood -eq $false)) -OR (-not($useCCMSConn) -AND $bExistingEXOGood -eq $false) ){
+            # $UseConnEXO indicates it's a MinNoWinRMVersino, not necc xo-only conn; $usePrvwConn indicates it's a prefix cc/Prvw connection, solely
+            if( ($usePrvwConn -AND ($bExistingPrvwGood -eq $false)) -OR (-not($usePrvwConn) -AND $bExistingEXOGood -eq $false) ){
                 # open a new EXOv2 session
                 if(-not $UseConnEXO){
                 
@@ -1608,7 +1711,7 @@ Function Connect-EXO {
 
                 } else { 
                     # $UseConnEXO 
-                <#
+                    <#
                 ==4:21 PM 6/30/2022: v2.0.6p6 examples
                 -------------------------- Example 1 --------------------------
                     Connect-ExchangeOnline -UserPrincipalName chris@contoso.com
@@ -1645,7 +1748,7 @@ Function Connect-EXO {
                     In PowerShell 7.0.3 or later using the EXO V2 module version 2.0.4 or later, this example connects to Exchange Online PowerShell in
                     interactive scripting scenarios by passing credentials directly in the PowerShell window.
                 #>
-                    <# CCMS connect
+                    <# Prvw connect
                     ==2:04 PM 4/1/2024: v3.4.0 examples
                     -------------------------- Example 1 --------------------------
                     Connect-IPPSSession -UserPrincipalName michelle@contoso.onmicrosoft.com
@@ -1670,8 +1773,9 @@ Function Connect-EXO {
                     } ;
                 
                     # 9:43 AM 8/2/2022 add defaulted prefix spec
+                    
                     if($Prefix){
-                        if($useCCMSConn){
+                        if($usePrvwConn -OR $ConnectPurview){
                             $smsg = "(adding specified  Connect-IPPSSession -Prefix:$($Prefix))" ; 
                         } else { 
                             $smsg = "(adding specified Connect-ExchangeOnline -Prefix:$($Prefix))" ; 
@@ -1788,7 +1892,7 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
                                     } ;
                                 } else {
                                     $smsg = "(Dropping through, continuing to attempt execution...)" ; 
-                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;  
                                 } ;
                             }elseif($certLifeDays -lt $certWarnDays){
@@ -1799,7 +1903,7 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
                                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                             } else{
                                 $smsg = "(Auth Certificate $($Credential.UserName) ($($certUname) remaining lifespan:$($certLifeDays) days)" ; 
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                             
                             }; 
@@ -1832,7 +1936,7 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                     } ;
 
-                    if($useCCMSConn){
+                    if($usePrvwConn){
                         $smsg = "connect-IPPSSession w`n$(($pltCEO|out-string).trim())" ; 
                     } else { 
                         $smsg = "Connect-ExchangeOnline w`n$(($pltCEO|out-string).trim())" ; 
@@ -1840,7 +1944,7 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
                     if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
                     TRY {
-                        if($useCCMSConn){
+                        if($usePrvwConn -OR $ConnectPurview){
                             connect-IPPSSession @pltCEO ;
                         } else {
                             Connect-ExchangeOnline @pltCEO ;
@@ -1882,11 +1986,14 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
 
             $pltTXO=[ordered]@{erroraction = 'STOP' } ;
             if($Prefix){$pltTXO.add('Prefix',$Prefix) } ; 
+            if($ConnectPurview -AND ((get-command test-EXOConnectionTDO).Parameters.Keys -contains 'ConnectPurview') ){
+                $pltTXO.add('ConnectPurview',$ConnectPurview)
+            } ; 
             $smsg = "test-EXOConnectionTDO w`n$(($pltTXO|out-string).trim())" ; 
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
-            $bExistingEXOGood = $bExistingCCMSGood = $false ;
+            $bExistingEXOGood = $bExistingPrvwGood = $false ;
             if($oRet = test-EXOConnectionTDO @pltTXO ){
                 foreach($xSess in $oRet){
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){
@@ -1920,7 +2027,7 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
                                 $smsg += " ($($xSess.Organization.split('.')[0]))" ;
                             } ; 
                         } ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
 
@@ -1964,6 +2071,19 @@ $(
                         if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                     } else {
+
+                        # 3:17 PM 10/29/2024 disconnect them if borked!
+                        $pltDXOC=[ordered]@{
+                            ConnectionId = $xSess.ConnectionId ; 
+                            Confirm = $false ; 
+                            erroraction = 'STOP' ;
+                            whatif = $($whatif) ;
+                        } ;
+                        $smsg = "Clear broken Connection: Disconnect-ExchangeOnline w`n$(($pltDXOC|out-string).trim())" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        Disconnect-ExchangeOnline @pltDXOC ;
+
                         $smsg = "Not currently connected (TokenStatus:$($xSess.connection.TokenStatus))" ;
                         $smsg += "`nPreviously: "
                         if($xSess.isXO){$smsg += "XO EOM PS "}
@@ -1985,9 +2105,10 @@ $(
                         } else {
                             $smsg += " (neither Organization nor TenantID is populated)" ;
                         } ;
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        
                     } ; 
 
 
@@ -2015,12 +2136,21 @@ $(
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 $pltGCInfo.add('ModulePrefix',$Prefix) ; 
             } ; 
+            if($ConnectPurview){
+                $smsg = "(checking against  -ConnectPurview:)" ; 
+                if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                #$pltGCInfo.add('ModulePrefix',$Prefix) ; 
+            } ; 
             
             
             $smsg = "get-ConnectionInformation w`n$(($pltGCInfo|out-string).trim())" ; 
             if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
             if($cInfo = Get-ConnectionInformation @$pltGCInfo){
+                if($ConnectPurview){
+                    $cInfo = Get-ConnectionInformation @$pltGCInfo | ?{$_.ConnectionUri -match $rgxConnectionUriPrvw} ; 
+                } ; 
                 $smsg = "get-ConnectionInformation w`n$(($cInfo | fl |out-string).trim())" ; 
                 if($silent){}elseif($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -12514,7 +12644,7 @@ function get-xoHistSearch {
         Recipient = $null ;
         Sender = 'SENDER' ;
         NotifyAddress = 'todd.kadrie@toro.com' ;
-        MessageId = '<CH2PR04MB6886105FBBEB2C3FB2DD9D0DF4759@CH2PR04MB6886.namprd04.prod.outlook.com>' ;
+        MessageId = '<CH2PR04MB68.7.05FBBEB2C3FB2DD9D0DF4759@CH2PR04MB6886.namprd04.prod.outlook.com>' ;
         verbose = $true ;
         showdebug = $true ;
     } ;
@@ -20202,6 +20332,22 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:40 PM 1/16/2025 UPDATED cbh WITH DETAILED PARAM DESC & OUTPUT SAMPLES ; 
+         fixed missing -getMobile support in the force trailing pass; fixed mis applied $hSum.xoMapiStats for proper metrics
+    * 4:41 PM 1/9/2025 rebuffered in latest Server Connections, found that the 
+        assumption could use the existing PS session context for REMS, was bogus. So 
+        re-enabled the OP cred gather even for useExopNoDep conns. Also reworked 
+        connect-exchangeserverTdo() to actually use the credentials passed in, and 
+        added the missing import-module $PSS to make the session actually functional 
+        for running cmds, wo popping cred prompts. 
+    * 8:53 AM 12/31/2024 cbh typo: cleared duped param Tenorg
+    * 10:45 AM 12/27/2024 param aliass 'Quota','Perms' ; default -silent $true; updated propsADU to include desc & info ; add: $propsDG &  $propsADL7 ; rework into a loop for perm group summary dump; moved members & managedby into the grp summary; 
+        removed nonewlines on the initial OP mbx/rmbx type; tweaked unlic & disabled ww's to only fire on inapprop config (smbx v umbx)
+    * 3:43 PM 12/26/2024 add: -getPerms, runs Get-xoMailboxPermission & get-xoRecipientPermissions, outputs/returns non-SELF matches, and expands any group members in user or trustee
+         add: aduser.info field, echo into output, if pop'd; 
+        bugfix/cmw uses r: as room dname prefix, not recog'd as dname: #updated: $rgxDName CMW uses : in their room names, so went for broader AD dname support, per AI, and web specs, added 1-256char AD restriction         $rgxDName
+        also pushed dname in the detect type switch below samaccountname (which is more specific filter) ; added 'RemoteRoomMailbox' &  'RemoteEquipmentMailbox' switch clauses on typedetails handlers; 
+        tweaked lic test to exempt shared/room/equip from isUnlicened warnings.
     * 3:44 PM 12/4/2024 updated to support non-hybrid cloud recipients, w ADC sync'd ADU->AADU; updated enviro_discover etc from latest vers
     * 9:04 AM 11/27/2024 add SharedMbx quota support: flipped logic to pull xomailbox to pull any $hSum.xoRcp|?{$_.recipienttype -eq 'UserMailbox'... (any mailbox type), vs orig: recipienttypedetails, which would only stock UserMailbox details type.
     * 4:40 PM 10/16/2024 added code to do above, users I thot were c1 weren't, had rmbxs, so it needs further testing;  cloud first: VEN,INT,AA,HH, may not match ADU properly, but if they have AADU & AADUser.DirSyncEnabled, the .aaduser.ExtensionProperty.onPremisesDistinguishedName will point to the assoicated ADU! Need to re-resolve when missing ADU
@@ -20258,12 +20404,58 @@ function resolve-user {
     .DESCRIPTION
     resolve-user.ps1 - Resolve specified array of -users (displayname, emailaddress, samaccountname) to mail asset, lic & ticket descriptors
 
+    Typical summary block written to console (write-host, not pipeline):
+
+        10:06:45:===v (1/1):Input: 'lynctest14@DOMAIN.COM' | 'lynctest14' | '' v===(EML)
+        get-Rmbx/xMbx: (Rmbx *SHARED*)
+        (xSMbx)(TOR USER, fed:SUB.DOMAIN.COM)
+        SamAccountName | WindowsEmailAddress
+        lynctest14     | lynctest14@DOMAIN.COM
+        Office | RecipientTypeDetails | RemoteRecipientType     | IsDirSynced
+               | RemoteSharedMailbox  | Migrated, SharedMailbox |
+        ExternalDirectoryObjectId | CustomAttribute5 | EmailAddressPolicyEnabled
+                                  |                  | True
+        Outlook (xoMAPI) Access Test Result:Success
+        =get-AADuser lynctest14@DOMAIN.COM>:
+        =get-AADuserManager lynctest14@DOMAIN.COM>:
+        ===$hSum.ADUser:
+        UPN                 | DName       | FName | LName       | Title
+        lynctest14@DOMAIN.COM | lync test14 |       | lync test14 |
+        Company | Dept | Ofc
+                |      |
+        Street | City | State | Zip | Phone | Mobile
+               |      |       |     |       |
+        Enabled | DN
+        False   | CN=lync test14,OU=users,OU=SITE,DC=sd,DC=sub,DC=domain,DC=com
+        whenCreated           | whenChanged
+        5/13/2015 11:32:01 AM | 12/19/2024 3:18:41 PM
+        Desc :
+        LicenseGroup:(unresolved, direct-assigned other?)
+        (AADUserMgr was blank, or unresolved)
+        10:06:49: INFO:
+        lynctest14@DOMAIN.COM Is RecipientTypeDetails:SharedMailbox _expected unlicensed_
+        ===^ (1/1):Input: 'lynctest14@DOMAIN.COM' | 'lynctest14' | '' ^===(EML)
+
+
     Key parameter options: 
 
     -getMobile parameter, to return details on xo MobileDevices in use with the EXO mailbox
+        Note: 
+            - adds inline output:
+                xoMobileDeviceStats Count:2
+            - adds outobject property:
+            $results.xoMobileDeviceStats: 
+
+        PS> $results.xoMobileDeviceStats | ft -a
+
+        FirstSyncTime         LastPolicyUpdateTime  LastSyncAttemptTime  LastSuccessSync      DeviceType  DeviceID                         DeviceUserAgent       DeviceWipeSentTime DeviceWipeRequestTime DeviceWipeAckTime
+        -------------         --------------------  -------------------  ---------------      ----------  --------                         ---------------       ------------------ --------------------- -----------------
+        1/24/2022 8:58:54 PM                                                                  WindowsMail XXXnnXAnnAAnnnnXnnnnnnnXn0nnAn0n MSFT-WIN-3/10.0.17134
+        8/17/2023 10:50:16 PM 1/16/2025 10:08:42 AM 1/16/2025 5:45:14 PM 1/16/2025 5:45:14 PM Outlook     nXnXXn0XnnnXn0nnAAXA0XnnX0XnnnnX Outlook-Android/2.0
+
 
     -getQuotaUsage parameter, returns details on xo MailboxFolderStatistics and effective Quota, 
-        used with users with mailbox size issues (and/or LegalHold symptoms)
+        Used with users with mailbox size issues (and/or LegalHold symptoms)
 
         Note: use of -getQuotaUsage also does an extensive check for LegalHold signs in the mailbox. including reporting on:
             - xoMailbox.LitigationHoldEnabled
@@ -20273,19 +20465,135 @@ function resolve-user {
             - xoMailbox.DelayReleaseHoldApplied 
             - checks if xoMailboxFolderStats 'DiscoveryHolds' folder has ItemsInFolder -gt 0
 
+    - getPerms parameter, returns Get-xoMailboxPermission & 
+        Get-xoRecipientPermission, non-SELF grants, and membership of any grant 
+        groups (XO-only)
 
-    .PARAMETER  users
-    Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)
+        - Adds added inline output (per grant and nested group w membership)
+
+            ## xoMailboxPermission:
+            Identity   User                       AccessRights
+            --------   ----                       ------------
+            XAXXxxxxxx ABC-SEC-Email-XAXXxxxxxx-G {FullAccess}
+
+            ### Expanded Perm Group Summaries:
+            -----------
+            Identity                   | PrimarySmtpAddress
+            ABC-XXX-Xxaxx-XAXXxxxxxx-G | ABC-XXX-Xxaxx-XAXXxxxxxx-G@DOMAIN.COM
+            RecipientType              | RecipientTypeDetails       | ManagedBy
+            MailUniversalSecurityGroup | MailUniversalSecurityGroup | Xxxaxxx Xaxax
+            Description :
+            #### Members:
+            Alias   PrimarySmtpAddress       RecipientType RecipientTypeDetails
+            -----   ------------------       ------------- --------------------
+            xaxaxxx Xxxaxxx.Xaxax@DOMAIN.COM   UserMailbox   UserMailbox
+            ..
+
+
+            ## xoRecipientPermission:
+            Identity   Trustee                    AccessControlType AccessRights Inherited
+            --------   -------                    ----------------- ------------ ---------
+            XAXXxxxxxx ABC-XXX-Xxaxx-XAXXxxxxxx-G Allow             {SendAs}
+
+
+            ### Expanded Perm Group Summaries:
+            -----------
+            Identity                   | PrimarySmtpAddress
+            ABC-XXX-Xxaxx-XAXXxxxxxx-G | ABC-XXX-Xxaxx-XAXXxxxxxx-G@DOMAIN.COM
+            RecipientType              | RecipientTypeDetails       | ManagedBy
+            MailUniversalSecurityGroup | MailUniversalSecurityGroup | Xxxaxxx Xaxax
+            Description :
+            #### Members:
+            Alias   PrimarySmtpAddress       RecipientType RecipientTypeDetails
+            -----   ------------------       ------------- --------------------
+            xaxaxxx Xxxaxxx.Xaxax@DOMAIN.COM   UserMailbox   UserMailbox
+            ...
+
+
+    - outObject parameter causes it to return a system.object summary to the pipeline. 
+        Can be captured in a variable when calling, for further analysis of the components of the resolved user/mailbox object:
+
+         $results = resolve-user -outObject -users 'USERLOGON@DOMAIN.COM'  ;  
+
+         By default, the returned object includes the following properties & full object copies (if found and resolvable):
+
+            dname           : lynctest14@DOMAIN.COMlync test14
+            fname           : lynctest14
+            lname           : lync test14
+            OPRcp           : SD.SUB.DOMAIN.COM/ABC/USERS/lync test14
+            xoRcp           : lync test14_0650dc758f
+            OPMailbox       :
+            OPRemoteMailbox : lync test14
+            ADUser          : CN=lync test14,OU=users,OU=SITE,DC=sd,DC=sub,DC=domain,DC=com
+            Federator       : SUB.DOMAIN.COM
+            xoMailbox       : lync test14
+            xoMUser         :
+            xoUser          :
+            xoMemberOf      :
+            txGuest         :
+            OPMapiTest      :
+            xoMapiTest      : {Microsoft.Exchange.Monitoring.MapiTransactionOutcome}
+            MsolUser        :
+            AADUser         : class User {}
+            AADUserMgr      :
+            AADUserLics     :
+            LicenseGroup    :
+            isDirSynced     : True
+            isNoBrain       : False
+            isSplitBrain    : False
+            IsLicensed      : 0
+            IsDisabledOU    : False
+            IsADDisabled    : 0
+            IsAADDisabled   : 0
+
+    The following items above are substantial copies of the original cloud or OnPrem objects:
+
+        OPRcp           : OnPrem recipient details
+        xoRcp           : Cloud recipient details
+        OPMailbox       : OnPrem mailbox details (if present)
+        OPRemoteMailbox : OnPrem RemoteMailbox details
+        ADUser          : OnPrem ActiveDirectory ADUser object details
+        xoMailbox       : Cloud mailbox details 
+        xoMUser         : Cloud MailUser object details 
+        xoUser          : Cloud Exchange Online 'User' object details
+        txGuest         : Cloud Guest details
+        OPMapiTest      : Results of OnPrem mailbox access tests
+        xoMapiTest      : Results of cloud mailbox access tests
+        MsolUser        : Cloud MsolUser object details
+        AADUser         : Cloud AzureADUser object details
+        AADUserMgr      : Cloud subject user's 'ManagedBy' AzureADUser object details
+
+        Each can be accessed, if -outObject was used and the output assigned to a variable, as a dotted-property of the variable ($variable.property):
+
+            PS> $$results.xomailbox
+
+                Name                   Alias      ServerName    ProhibitSendQuota
+                ----                   -----      ----------    -----------------
+                lync test14_0650dc758f lynctest14 xxnxx0nxxnnnn 10 GB (10,737,418,240 bytes)
+
+
+    .PARAMETER users
+    Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)[-users 'xxx','yyy']
     .PARAMETER Ticket
-    Ticket number[-ticket 123456]
+    Ticket Number [-Ticket '999999']
     .PARAMETER getMobile
-    switch to return mobiledevice info for target XO Mailbox (not supported for onprem mailboxes)[-getMobile]
+    switch to return mobiledevice info for target user[-getMobile]
     .PARAMETER getQuotaUsage
     switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]
+    .PARAMETER getPerms
+    switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]
     .PARAMETER rgxAccentedNameChars
-    Regular Expression that identifies input 'user' strings that should ahve diacriticals/latin/non-simple english characters replaced, before lookups
+    Regular Expression that identifies input 'user' strings that should have diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]
+    .PARAMETER TenOrg
+    TenantTag value, indicating Tenants to connect to[-TenOrg 'ABC']
+    .PARAMETER Credential
+    Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]
+    .PARAMETER UserRole
+    Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]
     .PARAMETER useEXOv2
     Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
+    .PARAMETER silent
+    Silent output (suppress status echos, defaults true)[-silent]
     .PARAMETER outObject
     switch to return a system.object summary to the pipeline[-outObject]
     .INPUTS
@@ -20338,15 +20646,12 @@ function resolve-user {
     Example (from ahk 7uluo! macro parser output) that creates a variable based on ticketnumber & email address (with underscores for alphanums), from the output, and then exports the variable content to xml. 
     Assigns to an immediately parsable inmem variable, along with the canned .xml that can be reloaded in future, or attached to a ticket.
     .EXAMPLE
-    PS> resolve-user -users 'John Public' -getmobile
-    Example that includes the -getMobile parameter, to return details on xo MobileDevices in use with the EXO mailbox
-    .EXAMPLE
-    PS> $999999Rpt = resolve-user fname.lname@toro.com -Ticket 99999 -getQuotaUsage -outObject ; 
+    PS> $999999Rpt = resolve-user fname.lname@DOMAIN.COM -Ticket 99999 -getQuotaUsage -outObject ; 
 
-        10:39:53:===v (1/1):Input: 'FNAME.LNAME@toro.com' | 'FNAME' | 'LNAME' v===(EML)
-        get-Rmbx/xMbx: (Rmbx)(TOR USER, fed:ad.toro.com)
+        10:39:53:===v (1/1):Input: 'FNAME.LNAME@DOMAIN.COM' | 'FNAME' | 'LNAME' v===(EML)
+        get-Rmbx/xMbx: (Rmbx)(TOR USER, fed:SUB.DOMAIN.COM)
         SamAccountName | WindowsEmailAddress
-        LNAMEFI         | FNAME.LNAME@toro.com
+        LNAMEFI         | FNAME.LNAME@DOMAIN.COM
         Office | RecipientTypeDetails | RemoteRecipientType | IsDirSynced
                 | RemoteUserMailbox    | Migrated            |
         ExternalDirectoryObjectId | CustomAttribute5 | EmailAddressPolicyEnabled
@@ -20354,28 +20659,28 @@ function resolve-user {
         Outlook (xoMAPI) Access Test Result:Success
         xoMailboxStats Count:1
         10:39:56: INFO:  (-getQuotaUsage:running lengthy Get-xoMailboxFolderStatistics...)
-        =get-AADuser FNAME.LNAME@toro.com>:
-        =get-AADuserManager FNAME.LNAME@toro.com>:
+        =get-AADuser FNAME.LNAME@DOMAIN.COM>:
+        =get-AADuserManager FNAME.LNAME@DOMAIN.COM>:
         ===$hSum.ADUser: 
         UPN                 | DName      | FName | LName | Title                             
-        FNAME.LNAME@toro.com | FNAME LNAME | FNAME | LNAME  | Supervisor II, Distribution Center
+        FNAME.LNAME@DOMAIN.COM | FNAME LNAME | FNAME | LNAME  | Supervisor II, Distribution Center
         Company | Dept                            | Ofc          
                 | Operations Distribution El Paso | El Paso-D, TX
         Street | City | State | Zip | Phone           | Mobile
                 |      |       |     | +1 915 231 7404 |
         Enabled | DN                                                          
-        True    | CN=FNAME LNAME,OU=Users,OU=ELP,DC=global,DC=ad,DC=toro,DC=com
+        True    | CN=FNAME LNAME,OU=Users,OU=ELP,DC=SD,DC=sub,DC=domain,DC=com
         whenCreated          | whenChanged         
         8/18/2017 4:13:54 PM | 2/23/2024 8:23:33 AM
         Desc : 8/21/17 FT for FNAME LNAME 146294 -bk
         LicenseGroup:(direct-assigned E3)
         ===$hSum.AADUserMgr: 
         UserPrincipalName       | Mail                   
-        FNAME.LNAME@toro.com | FNAME.LNAME@toro.com
-        OpOU : OU=Users,OU=ELP,DC=global,DC=ad,DC=toro,DC=com
+        FNAME.LNAME@DOMAIN.COM | FNAME.LNAME@DOMAIN.COM
+        OpOU : OU=Users,OU=ELP,DC=SD,DC=sub,DC=domain,DC=com
         10:40:06: PROMPT:  UserPrincipalName       | Mail                   
-        FNAME.LNAME@toro.com | FNAME.LNAME@toro.com
-        OpOU : OU=Users,OU=ELP,DC=global,DC=ad,DC=toro,DC=com
+        FNAME.LNAME@DOMAIN.COM | FNAME.LNAME@DOMAIN.COM
+        OpOU : OU=Users,OU=ELP,DC=SD,DC=sub,DC=domain,DC=com
 
         Licenses::
         MCOEV, FLOW_FREE, MCOPSTNC, ENTERPRISEPACK, POWER_BI_STANDARD, EMS, Microsoft_Teams_Audio_Conferencing_select_dial_out
@@ -20400,7 +20705,7 @@ function resolve-user {
         annnnnnn-nbne-nnnn-anne-necncannbnnn\Top of Information Store        1     0                                      Root
         10:40:06: INFO:  
         ===output to::
-        D:\scripts\logs\823795-FNAME.LNAME@toro.com-folder-sizes-NONHIDDEN-NONZERO-run20240227-1039AM.xml
+        D:\scripts\logs\823795-FNAME.LNAME@DOMAIN.COM-folder-sizes-NONHIDDEN-NONZERO-run20240227-1039AM.xml
 
         10:40:09: WARNING:  
         10:40:09: WARNING:  
@@ -20435,36 +20740,91 @@ function resolve-user {
         - xoMailbox.DelayHoldApplied 
         - xoMailbox.DelayReleaseHoldApplied 
         - checks if xoMailboxFolderStats 'DiscoveryHolds' folder has ItemsInFolder -gt 0
+    .EXAMPLE
+    PS> $999999Rpt = resolve-user fname.lname@DOMAIN.COM -Ticket 99999 -getPerms -outObject ; 
+
+        # [... additional Permissions output returned]
+        10:42:56: PROMPT:
+        ## xoMailboxPermission:
+        Identity                             User                          AccessRights
+        --------                             ----                          ------------
+        xx299x9x-x51x-4562-8xx8-x2x45796x2xx ABC-SEC-Email-xxxxxxxxxxxxx-G {FullAccess}
+
+        ### Expanded Perm Group Summaries:
+        -----------
+        Identity                             | PrimarySmtpAddress
+        522x58x1-11x9-4x28-x391-1x8xxx211xxx | ABC-SEC-Email-xxxxxxxxxxxxx-G@DOMAIN.COM
+        RecipientType              | RecipientTypeDetails       | ManagedBy
+        MailUniversalSecurityGroup | MailUniversalSecurityGroup | Christie Moore
+        Description :
+        #### Members:
+        Alias   PrimarySmtpAddress        RecipientType RecipientTypeDetails
+        -----   ------------------        ------------- --------------------
+        xxxxxxx xxxxxxxx.xxxxx@DOMAIN.COM UserMailbox   UserMailbox
+
+        ## xoRecipientPermission:
+        Identity                             Trustee                              AccessControlType AccessRights Inherited
+        --------                             -------                              ----------------- ------------ ---------
+        xx299x9x-x51x-4562-8xx8-x2x45796x2xx 522x58x1-11x9-4x28-x391-1x8xxx211xxx Allow             {SendAs}
+
+        ### Expanded Perm Group Summaries:
+        -----------
+        Identity                             | PrimarySmtpAddress
+        522x58x1-11x9-4x28-x391-1x8xxx211xxx | ABC-SEC-Email-xxxxxxxxxxxxx-G@DOMAIN.COM
+        RecipientType              | RecipientTypeDetails       | ManagedBy
+        MailUniversalSecurityGroup | MailUniversalSecurityGroup | Christie Moore
+        Description :
+        #### Members:
+        Alias   PrimarySmtpAddress        RecipientType RecipientTypeDetails
+        -----   ------------------        ------------- --------------------
+        xxxxxxx xxxxxxxx.xxxxx@DOMAIN.COM UserMailbox   UserMailbox
+    .EXAMPLE
+    PS> $999999Rpt = resolve-user fname.lname@DOMAIN.COM -Ticket 99999 -getMobile -outObject ;
+        
+            .EXAMPLE
+    PS> $results = resolve-user -users 'John Public' -getmobile -outobject ; 
+        
+        ...
+        xoMobileDeviceStats Count:2
+        ...
+
+        $results.xoMobileDeviceStats: 
+
+        FirstSyncTime         LastPolicyUpdateTime  LastSyncAttemptTime  LastSuccessSync      DeviceType  DeviceID                         DeviceUserAgent       DeviceWipeSentTime DeviceWipeRequestTime DeviceWipeAckTime
+        -------------         --------------------  -------------------  ---------------      ----------  --------                         ---------------       ------------------ --------------------- -----------------
+        8/17/2023 10:50:16 PM 1/16/2025 10:08:42 AM 1/16/2025 5:45:14 PM 1/16/2025 5:45:14 PM Outlook     nXnXXn0XnnnXn0nnAAXA0XnnX0XnnnnX Outlook-Android/2.0
+    
+    Demo with the -getMobile parameter, to return details on xo MobileDevices in use with the EXO mailbox. Demos default output 'xoMobileDeviceStats Count' echo, and detailed xoMobileDeviceStats object output
     .LINK
     https://github.com/tostka/verb-exo
     #>
 
-    # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
-    # 12:19 PM 9/26/2023 pull verb-exo ref "
     #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-IO, verb-logging
     ##Requires -RunasAdministrator
-    # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.DOMAIN\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
     [Alias('ulu')]
     PARAM(
-        #[Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,ValueFromPipelineByPropertyName=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)")]
-        # failing to map pipeline to $users, reduce to Value from Pipeline
-        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)")]
-            #[ValidateNotNullOrEmpty()]
-            #[Alias('ALIAS1', 'ALIAS2')]
+        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)[-users 'xxx','yyy']")]
+            #[ValidateNotNullOrEmpty()] # pulls string from clipboard if not populated
+            [Alias('UserPrincipalName', 'Samaccountname','DisplayName','Name')]
             [array]$users,
         [Parameter(Mandatory=$False,HelpMessage="Ticket Number [-Ticket '999999']")]
             [string]$Ticket,
         [Parameter(HelpMessage="switch to return mobiledevice info for target user[-getMobile]")]
+            [Alias('Mobile')]
             [switch] $getMobile,
         [Parameter(HelpMessage="switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]")]
+            [Alias('Quota')]
             [switch]$getQuotaUsage,
-        [Parameter(HelpMessage="Regular Expression that identifies input 'user' strings that should ahve diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]")]
+        [Parameter(HelpMessage="switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]")]
+            [Alias('Perms','getPermissions')]
+            [switch]$getPerms,
+        [Parameter(HelpMessage="Regular Expression that identifies input 'user' strings that should have diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]")]
             [ValidateNotNullOrEmpty()]
             [regex]$rgxAccentedNameChars = "[^a-zA-Z0-9\s\.\(\)\{\}\/\&\$\#\@\,\`"\'\’\:\–_-]",
-        [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'TOL']")]
-        [ValidateNotNullOrEmpty()]
+        [Parameter(Mandatory=$FALSE,HelpMessage="TenantTag value, indicating Tenants to connect to[-TenOrg 'ABC']")]
+            [ValidateNotNullOrEmpty()]
             #[ValidatePattern("^\w{3}$")]
             [string]$TenOrg = $global:o365_TenOrgDefault,
         [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
@@ -20484,8 +20844,8 @@ function resolve-user {
             # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
         [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
             [switch] $useEXOv2=$true,
-        [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
-            [switch] $silent,
+        [Parameter(HelpMessage="Silent output (suppress status echos, defaults true)[-silent]")]
+            [switch] $silent=$true,
         [Parameter(HelpMessage="switch to return a system.object summary to the pipeline[-outObject]")]
             [switch] $outObject
     ) ;
@@ -20530,6 +20890,13 @@ function resolve-user {
         ${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ; # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
         #region PsParams ; #*------v PsParams v------
         $PSParameters = New-Object -TypeName PSObject -Property $rPSBoundParameters ;
+        # DIFFERENCES $PSParameters vs $PSBoundParameters:
+        # - $PSBoundParameters: System.Management.Automation.PSBoundParametersDictionary (native obj)
+        # test/access: ($PSBoundParameters['Verbose'] -eq $true) ; $PSBoundParameters.ContainsKey('Referrer') #hash syntax
+        # CAN use as a @PSBoundParameters splat to push through (make sure populated, can fail if wrong type of wrapping code)
+        # - $PSParameters: System.Management.Automation.PSCustomObject (created obj)
+        # test/access: ($PSParameters.verbose -eq $true) ; $PSParameters.psobject.Properties.name -contains 'SenderAddress' ; # cobj syntax
+        # CANNOT use as a @splat to push through (it's a cobj)
         write-verbose "`$rPSBoundParameters:`n$(($rPSBoundParameters|out-string).trim())" ;
         # pre psv2, no $rPSBoundParameters autovari to check, so back them out:
         if($rPSCmdlet.MyInvocation.InvocationName){
@@ -20547,6 +20914,24 @@ function resolve-user {
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         } ; 
+        <# recycling $rPSBoundParameters into @splat calls: (can't use $psParams, it's a cobj, not a hash!)
+        # rgx for filtering $rPSBoundParameters for params to pass on in recursive calls (excludes keys matching below)
+        $rgxBoundParamsExcl = '^(Name|RawOutput|Server|Referrer)$' ; 
+        if($rPSBoundParameters){
+                $pltRvSPFRec = [ordered]@{} ;
+                # add the specific Name for this call, and Server spec (which defaults, is generally not 
+                $pltRvSPFRec.add('Name',"$RedirectRecord" ) ;
+                $pltRvSPFRec.add('Referrer',$Name) ; 
+                $pltRvSPFRec.add('Server',$Server ) ;
+                $rPSBoundParameters.GetEnumerator() | ?{ $_.key -notmatch $rgxBoundParamsExcl} | foreach-object { $pltRvSPFRec.add($_.key,$_.value)  } ;
+                write-host "Resolve-SPFRecord w`n$(($pltRvSPFRec|out-string).trim())" ;
+                Resolve-SPFRecord @pltRvSPFRec  | write-output ;
+        } else {
+            $smsg = "unpopulated `$rPSBoundParameters!" ;
+            write-warning $smsg ;
+            throw $smsg ;
+        };     
+        #>
         #endregion PsParams ; #*------^ END PsParams ^------
         <#
         # Debugger:proxy automatic variables that aren't directly accessible when debugging ; 
@@ -20617,8 +21002,46 @@ function resolve-user {
         'tv','tvmx'|get-variable | remove-variable ; # cleanup temp varis        
 
         #endregion ENVIRO_DISCOVER ; #*------^ END ENVIRO_DISCOVER ^------
-
+        #region TLS_LATEST_FORCE ; #*------v TLS_LATEST_FORCE v------
+        $CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
+        write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
+        # psv6+ already covers, test via the SslProtocol parameter presense
+        if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
+            $currentMaxTlsValue = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__,[Net.SecurityProtocolType]::Tls.value__) ;
+            write-verbose "`$currentMaxTlsValue : $($currentMaxTlsValue )" ;
+            $newerTlsTypeEnums = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $currentMaxTlsValue }
+            if($newerTlsTypeEnums){
+                write-verbose "Appending upgraded/missing TLS `$enums:`n$(($newerTlsTypeEnums -join ','|out-string).trim())" ;
+            } else {
+                write-verbose "Current TLS `$enums are up to date with max rev available on this machine" ;
+            };
+            $newerTlsTypeEnums | ForEach-Object {
+                [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
+            } ;
+        } ;
+        #endregion TLS_LATEST_FORCE ; #*------^ END TLS_LATEST_FORCE ^------
+        #region PARAMHELP ; #*------v PARAMHELP  v------
+            # if you want no params -OR -help to run get-help, use:
+            #if ($help -OR (-not $rPSCmdlet.MyInvocation.ExpectingInput) -AND (($PSParameters| measure-object).count -eq 0)) {
+            # on blank specific param -or -help
+            #if (-not $Header -OR $HELP) {
+            # if you only want -help to run get-help
+            if ($HELP) {
+                if($MyInvocation.MyCommand.Name.length -gt 0){
+                    Get-Help -Name "$($MyInvocation.MyCommand.Name)" -full ; 
+                    # also could run using native -? == get-help [command] (avoiding as invoke-expression is stigmatized for sec)
+                    # also note -? only runs default gh output, not full or some other variant. And cmdlet -? -full etc doesn't work
+                    #Invoke-Expression -Command "$($MyInvocation.MyCommand.Name) -?"
+                }elseif($PSCommandPath.length -gt 0){
+                    Get-Help -Name "$($PSCommandPath)" -full ; 
+                }elseif($CmdletName.length -gt 0){
+                    Get-Help -Name "$($CmdletName)" -full ; 
+                } ; 
+                break ; #Exit  ; 
+            }; 
+        #endregion PARAMHELP  ; #*------^ END PARAMHELP  ^------  
         #region COMMON_CONSTANTS ; #*------v COMMON_CONSTANTS v------
+    
         if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
         if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
         if(-not $RetrySleep){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
@@ -20653,22 +21076,26 @@ function resolve-user {
         #write-verbose "start-Timer:Master" ; 
         $swM = [Diagnostics.Stopwatch]::StartNew() ;
         #endregion COMMON_CONSTANTS ; #*------^ END COMMON_CONSTANTS ^------
-        #region LOCAL_CONSTANTS ; #*------v LOCAL_CONSTANTS v------
+
+        #region LOCAL_CONSTANTS ; #*------v LOCAL_CONSTANTS v------        
         $rgxEmailAddr = "^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$" ;
         # added support for . fname lname delimiter (supports pasted in dirname of email addresses, as user)
         $rgxDName = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
+        #updated: CMW uses : in their room names, so went for broader AD dname support, per AI, and web specs, added 1-256char AD restriction
+        $rgxDName ="[a-zA-Z0-9\s$([Regex]::Escape('/\[:;|=,+*?<>') + '\]' + '\"')]{1,256}" ; 
         #"^([a-zA-Z]{2,}\s[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
         $rgxObjNameNewHires = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)_[a-z0-9]{10}"  # Name:Fname LName_f4feebafdb (appending uniqueness guid chunk)
         $rgxSamAcctNameTOR = "^\w{2,20}$" ; # up to 20k, the limit prior to win2k
         #$rgxSamAcctName = "^[^\/\\\[\]:;|=,+?<>@?]+$" # no char limit ;
         $MaxRecips = 25 ; # max number of objects to permit on a return resultsize/,ResultSetSize, to prevent empty set return of everything in the addressspace
-        #$rgxADDistNameGAT = ",DC=global,DC=ad,DC=toro,DC=com" ; 
-        $rgxADDistNameAT = ",DC=ad,DC=toro,DC=com" ; 
+        # interpolate from TORMETA
+        $rgxADDistNameGAT = ",$(($TORMeta.UnreplicatedOU -split ',' | select -skip 1 ) -join ',')" 
+        $rgxADDistNameAT = ",$(($TORMeta.UnreplicatedOU -split ',' | select -skip 2 ) -join ',')"
         #$DNDOM = @() ; 
         #$TORMeta.adforestname.split('.') | %{$dndom += "DC=$($_)"} ;
         #$rgxADDistNameAT = [regex]::Escape($DNDOM -join ',') ; 
 
-        # props dyn filtering: write-host "=get-xMbx:>`n$(($hSum.xoMailbox |fl ($xMprops |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
+        # props dyn filtering: write-host "=get-xMbx:>`n$(($hSum.xoMailbox |fl ($xMprops |?{$_     -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
         # $propsMailx: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
         # 11:01 AM 12/27/2021 add forwarding settings (critical to bounce/block tracking for RM)
         #$propsMailx='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','IsDirSynced','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
@@ -20687,7 +21114,8 @@ function resolve-user {
         $propsLic = @{Name='HasLic'; Expression={$_.IsLicensed }},@{Name='LicIssue'; Expression={$_.LicenseReconciliationNeeded }} ;
         $propsADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName',
             'StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone','Enabled','DistinguishedName',
-            'Description','whenCreated','whenChanged'
+            'Description','Info','whenCreated','whenChanged'
+
         #'samaccountname','UserPrincipalName','distinguishedname','Description','title','whenCreated','whenChanged','Enabled','sAMAccountType','userAccountControl' ;
         $propsADUsht = 'Enabled','Description','whenCreated','whenChanged','Title' ;
         $propsAADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName',
@@ -20697,6 +21125,7 @@ function resolve-user {
         $prpADU = 'DistinguishedName','GivenName','Surname','Name','UserPrincipalName','mailNickname','SamAccountName','physicalDeliveryOfficeName','msExchRecipientDisplayType','msExchRecipientTypeDetails','msExchRemoteRecipientType','msExchWhenMailboxCreated' ; 
         $propsAADUfed = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
         $propsRcpTbl = 'Alias','PrimarySmtpAddress','RecipientType','RecipientTypeDetails' ;
+        $propsDG = 'Identity','PrimarySmtpAddress','Description','RecipientType','RecipientTypeDetails','ManagedBy' ; 
         # line1-X AADU outputs
             #$propsMailx='samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType','IsDirSynced','ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
         <# full size
@@ -20721,6 +21150,7 @@ function resolve-user {
         #$propsADL5 = 'ObjectType','UserType' ;
         $propsADL5 = 'whenCreated','whenChanged' ; 
         $propsADL6 = @{Name='Desc';Expression={$_.Description }} ;
+        $propsADL7 = 'Info' ;
 
         # line1-5 AADU outputs
         <# full size
@@ -20795,10 +21225,22 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             $rgxHiddn = '.*\\(Versions|SubstrateHolds|DiscoveryHolds|Yammer.*|Social\sActivity\sNotifications|Suggested\sContacts|Recipient\sCache|PersonMetadata|Audits|Calendar\sLogging|Purges)$' ; 
 
         } ; 
+        # 2:31 PM 12/26/2024
+        # getPerms
+        if($getPerms){
+
+            # 12:54 PM 9/18/2023 adds for MbxFolderStats, Quota & LegalHold eval:
+            $prpRPerms = 'Identity','Trustee','AccessControlType','AccessRights','Inherited' ;
+
+            $prpMPerms = 'Identity','User','AccessRights'
+
+        } ; 
         $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         #endregion LOCAL_CONSTANTS ; #*------^ END LOCAL_CONSTANTS ^------        
-         # ENCODED CONsTANTS & SUPPORT FUNCTIONS:
+    
+        #region ENCODED_CONTANTS ; #*------v ENCODED_CONTANTS v------
+        # ENCODED CONsTANTS & SUPPORT FUNCTIONS:
         #region 2B4 ; #*------v 2B4 v------
         if(-not (get-command 2b4 -ea 0)){function 2b4{[CmdletBinding()][Alias('convertTo-Base64String')] PARAM([Parameter(ValueFromPipeline=$true)][string[]]$str) ; PROCESS{$str|%{[Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($_))}  };} ; } ; 
         #endregion 2B4 ; #*------^ END 2B4 ^------
@@ -20810,9 +21252,58 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         # DEMO: $SitesNameList = 'THluZGFsZQ==','U3BlbGxicm9vaw==','QWRlbGFpZGU=' | fb4 ;
         if(-not (get-command fb4 -ea 0)){function fb4{[CmdletBinding()][Alias('convertFrom-Base64String')] PARAM([Parameter(ValueFromPipeline=$true)][string[]]$str) ; PROCESS{$str | %{ [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String($_)) }; } ; } ; }; 
         #endregion FB4 ; #*------^ END FB4 ^------
+        # FOLLOWING CONSTANTS ARE USED FOR DEPENDANCY-LESS CONNECTIONS
+        if(-not $o365_Toroco_SIDUpn){$o365_Toroco_SIDUpn = 'cy10b2RkLmthZHJpZUB0b3JvLmNvbQ==' | fb4 } ;
+        $o365_SIDUpn = $o365_Toroco_SIDUpn ; 
+        switch($env:Userdomain){
+            'CMW'{
+                if(-not $CMW_logon_SID){$CMW_logon_SID = 'Q01XXGQtdG9kZC5rYWRyaWU=' | fb4 } ; 
+                $logon_SID = $CMW_logon_SID ; 
+            }
+            'TORO'{
+                if(-not $TOR_logon_SID){$TOR_logon_SID = 'VE9ST1xrYWRyaXRzcw==' | fb4 } ; 
+                $logon_SID = $TOR_logon_SID ; 
+            }
+            default{
+                $smsg = "$($env:userdomain):UNRECOGIZED/UNCONFIGURED USER DOMAIN STRING!" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                THROW $SMSG 
+                BREAK ; 
+            }
+        } ; 
         #endregion ENCODED_CONTANTS ; #*------^ END ENCODED_CONTANTS ^------
+    
+        #region WHPASSFAIL ; #*------v WHPASSFAIL v------
+        $whPASS = @{
+        Object = "$([Char]8730) PASS" ;
+        ForegroundColor = 'Green' ;
+        NoNewLine = $true ;
+        } ;
+        $whFAIL = @{
+            # light diagonal cross: ╳ U+2573 DOESN'T RENDER IN PS, use it if WinTerm
+            'Object'= if ($env:WT_SESSION) { "$([Char]8730) FAIL"} else {' X FAIL'};
+            ForegroundColor = 'RED' ;
+            NoNewLine = $true ;
+        } ;
+        <#
+        # inline pass/fail color-coded w char
+        $smsg = "Testing:THING" ; 
+        $Passed = $true ; 
+        Write-Host "$($smsg)... " -NoNewline ; 
+        if($Passed){Write-Host @whPASS} else {write-host @whFAIL} ; 
+        Write-Host " (Done)" ;
+        # out: Test:Thing... √ PASS (Done) | Test:Thing...  X FAIL (Done)
+        #>
+        $psPASS = "$([Char]8730) PASS" ; 
+        $psFAIL = if ($env:WT_SESSION) { "$([Char]8730) FAIL"} else {' X FAIL'} ;
+        #endregion WHPASSFAIL ; #*------^ END WHPASSFAIL ^------
+    
+        #endregion CONSTANTS_AND_ENVIRO ; #*------^ END CONSTANTS_AND_ENVIRO ^------
 
         #region FUNCTIONS ; #*======v FUNCTIONS v======
+
+        # 2b4() 2b4c() & fb4() are located up in the CONSTANTS_AND_ENVIRO\ENCODED_CONTANTS block ( to convert Constant assignement strings)
 
         #endregion FUNCTIONS ; #*======^ END FUNCTIONS ^======
 
@@ -20827,7 +21318,6 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         caad ;
         #>
 
-        
         #region SERVICE_CONNECTIONS #*======v SERVICE_CONNECTIONS v======
         # PRETUNE STEERING separately *before* pasting in balance of region
         # THIS BLOCK DEPS ON VERB-* FANCY CRED/AUTH HANDLING MODULES THAT *MUST* BE INSTALLED LOCALLY TO FUNCTION
@@ -20838,7 +21328,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         $useEXO = $true ; 
         $UseOP=$true ; 
         $UseExOP=$true ;
-        $useExopNoDep = $false ; # switch to use Connect-ExchangeServerTDO, vs connect-ex2010 (creds are assumed inherent to the account)
+        $useExopNoDep = $true ; # switch to use Connect-ExchangeServerTDO, vs connect-ex2010 (creds are assumed inherent to the account)
         $useForestWide = $true ; # flag to trigger cross-domain/forest-wide code in AD & EXoP
         $UseOPAD = $true ; 
         $UseMSOL = $false ; # should be hard disabled now in o365
@@ -20939,7 +21429,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
                 # 9:58 AM 6/13/2024 populate $credential with return, if not populated (may be required for follow-on calls that pass common $Credentials through)
-                if((gv Credential) -AND $Credential -eq $null){
+                if((gv Credential) -AND $null -eq $Credential){
                     $credential = $o365Cred.Cred ;
                 }elseif($credential.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
                     $smsg = "(`$Credential is properly populated; explicit -Credential was in initial call)" ; 
@@ -21094,65 +21584,68 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         } ;
         #>
         if($UseOP){
-            if($useExopNoDep){
+            <#if($useExopNoDep){
                 # Connect-ExchangeServerTDO use: creds are implied from the PSSession creds; assumed to have EXOP perms
+                # 3:14 PM 1/9/2025 no they aren't, it still wants explicit creds to connect - I've just been doing rx10 and pre-initiating
             } else {
-                #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
-                # do the OP creds too
-                $OPCred=$null ;
-                # default to the onprem svc acct
-                # userrole='ESVC','SID'
-                #$pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC','SID'; verbose=$($verbose)} ;
-                # userrole='SID','ESVC'
-                $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='SID','ESVC'; verbose=$($verbose)} ;
-                $smsg = "get-HybridOPCredentials w`n$(($pltGHOpCred|out-string).trim())" ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
-                    # make it script scope, so we don't have to predetect & purge before using new-variable
-                    if(get-Variable -Name "cred$($tenorg)OP" -scope Script -ea 0 ){ remove-Variable -Name "cred$($tenorg)OP" -scope Script } ;
-                    New-Variable -Name "cred$($tenorg)OP" -scope Script -Value $OPCred ;
-                    $smsg = "Resolved $($Tenorg) `$OPCred:$($OPCred.username) (assigned to `$cred$($tenorg)OP)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                } else {
-                    $statusdelta = ";ERROR"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
-                    $script:PassStatus += $statusdelta ;
-                    set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
-                    $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    throw "Unable to resolve $($tenorg) `$OPCred value!`nEXIT!"
-                    Break ;
-                } ;
-                $smsg= "Using OnPrem/EXOP cred:`$cred$($tenorg)OP:$((Get-Variable -name "cred$($tenorg)OP" ).value.username)" ;
+            #>
+            # useExopNoDep: at this point creds are *not* implied from the PS context creds. So have to explicitly pass in $creds on the new-Pssession etc, 
+            # so we always need the EXOP creds block, or at worst an explicit get-credential prompt to gather when can't find in enviro or profile. 
+            #*------v GENERIC EXOP CREDS & SRVR CONN BP v------
+            # do the OP creds too
+            $OPCred=$null ;
+            # default to the onprem svc acct
+            # userrole='ESVC','SID'
+            #$pltGHOpCred=@{TenOrg=$TenOrg ;userrole='ESVC','SID'; verbose=$($verbose)} ;
+            # userrole='SID','ESVC'
+            $pltGHOpCred=@{TenOrg=$TenOrg ;userrole='SID','ESVC'; verbose=$($verbose)} ;
+            $smsg = "get-HybridOPCredentials w`n$(($pltGHOpCred|out-string).trim())" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            if($OPCred=(get-HybridOPCredentials @pltGHOpCred).cred){
+                # make it script scope, so we don't have to predetect & purge before using new-variable
+                if(get-Variable -Name "cred$($tenorg)OP" -scope Script -ea 0 ){ remove-Variable -Name "cred$($tenorg)OP" -scope Script } ;
+                New-Variable -Name "cred$($tenorg)OP" -scope Script -Value $OPCred ;
+                $smsg = "Resolved $($Tenorg) `$OPCred:$($OPCred.username) (assigned to `$cred$($tenorg)OP)" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                                                                            <### CALLS ARE IN FORM: (cred$($tenorg))
-                $pltRX10 = @{
-                    Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
-                    #verbose = $($verbose) ;
-                    Verbose = $FALSE ; 
-                } ;
-                $1stConn = $false ; # below uses silent suppr for both x10 & xo!
-                if($1stConn){
-                    $pltRX10.silent = $pltRXO.silent = $false ;
-                } else {
-                    $pltRX10.silent = $pltRXO.silent =$true ;
-                } ;
-                if($pltRX10){ReConnect-Ex2010 @pltRX10 }
-                else {ReConnect-Ex2010 }
-                #$pltRx10 creds & .username can also be used for local ADMS connections
-                ###>
-                $pltRX10 = @{
-                    Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
-                    #verbose = $($verbose) ;
-                    Verbose = $FALSE ; 
-                } ;
-                if((get-command Reconnect-Ex2010).Parameters.keys -contains 'silent'){
-                    $pltRX10.add('Silent',$false) ;
-                } ;
-            } ; 
+            } else {
+                $statusdelta = ";ERROR"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                $script:PassStatus += $statusdelta ;
+                set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta) ;
+                $smsg = "Unable to resolve get-HybridOPCredentials -TenOrg $($TenOrg) -userrole 'ESVC' value!"
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw "Unable to resolve $($tenorg) `$OPCred value!`nEXIT!"
+                Break ;
+            } ;
+            $smsg= "Using OnPrem/EXOP cred:`$cred$($tenorg)OP:$((Get-Variable -name "cred$($tenorg)OP" ).value.username)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            <### CALLS ARE IN FORM: (cred$($tenorg))
+            $pltRX10 = @{
+                Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
+                #verbose = $($verbose) ;
+                Verbose = $FALSE ; 
+            } ;
+            $1stConn = $false ; # below uses silent suppr for both x10 & xo!
+            if($1stConn){
+                $pltRX10.silent = $pltRXO.silent = $false ;
+            } else {
+                $pltRX10.silent = $pltRXO.silent =$true ;
+            } ;
+            if($pltRX10){ReConnect-Ex2010 @pltRX10 }
+            else {ReConnect-Ex2010 }
+            #$pltRx10 creds & .username can also be used for local ADMS connections
+            ###>
+            $pltRX10 = @{
+                Credential = (Get-Variable -name "cred$($tenorg)OP" ).value ;
+                #verbose = $($verbose) ;
+                Verbose = $FALSE ; 
+            } ;
+            if((get-command Reconnect-Ex2010).Parameters.keys -contains 'silent'){
+                $pltRX10.add('Silent',$false) ;
+            } ;
             # defer cx10/rx10, until just before get-recipients qry
             # connect to ExOP X10
             if($useEXOP){
@@ -21163,7 +21656,16 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     TRY{
                         $Site=[System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().Name 
                     }CATCH{$Site=$env:COMPUTERNAME} ;
-                    $PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
+                    $pltCcX10=[ordered]@{
+                        siteName = $Site ;
+                        RoleNames = @('HUB','CAS') ;
+                        verbose  = $($rPSBoundParameters['Verbose'] -eq $true)
+                        Credential = $pltRX10.Credential ; 
+                    } ;
+                    $smsg = "Connect-ExchangeServerTDO w`n$(($pltCcX10|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #$PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
+                    $PSSession = Connect-ExchangeServerTDO @pltCcX10 ; 
                 } else {
                     if($pltRX10){
                         #ReConnect-Ex2010XO @pltRX10 ;
@@ -21345,7 +21847,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         #endregion SERVICE_CONNECTIONS #*======^ END SERVICE_CONNECTIONS ^======
     
-
+        #region IS_PIPELINE ; #*------v IS_PIPELINE v------
         # finally if we're using pipeline, and aggregating, we need to aggreg outside of the process{} block
         if($PSCmdlet.MyInvocation.ExpectingInput){
             # pipeline instantiate an aggregator here
@@ -21362,7 +21864,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             #if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
             #else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         } ;
-
+        #endregion IS_PIPELINE ; #*------^ END IS_PIPELINE ^------
     }
     PROCESS{
         $Error.Clear() ; 
@@ -21617,6 +22119,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             } ; 
             #endregion LOGBUILD ; #*------^ END LOGBUILD ^------
 
+            #region VARI_SETUP ; #*------v VARI_SETUP v------
             #$fname = $lname = $dname = $OPRcp = $OPMailbox = $OPRemoteMailbox = $ADUser = $xoRcp = $xoMailbox = $xoUser = $xoMemberOf = $MsolUser = $LicenseGroup = $null ;
             $isEml=$isDname=$isSamAcct=$isXORcpMulti  = $false ;
 
@@ -21674,6 +22177,15 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 [string]$ofMbxFolderStats = $ofile.replace('REPORT',"folder-sizes-NONHIDDEN-NONZERO") ; 
 
             } ; 
+            # 2:35 PM 12/26/2024 getPerms
+            if($getPerms){
+                $hsum.add('xoMailboxPermission',$null) ; 
+                $hsum.add('xoRecipientPermission',$null) ; 
+                #$hsum.add('xoMailboxPermissionGroupManagedBy',$null) ; # moved into the group summary
+                $hsum.add('xoMailboxPermissionGroups',@()) ; 
+                $hsum.add('xoRecipientPermissionGroups',$null) ; 
+                #$hsum.add('xoRecipientPermissionGroupManagedBy',@()) ; 
+            }
 
             if($usr -match $rgxAccentedNameChars){
                 # 9:36 AM 9/23/2024 pre remove all diacritics & latin chars 
@@ -21708,8 +22220,18 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     $isObjName = $true ;
                     Break ;
                 }
+                $rgxSamAcctNameTOR {
+                # $rgxSamAcctNameTOR = "^\w{2,20}$" ; # up to 20c, the limit prior to win2k
+                    $hSum.lname = $usr ;
+                    write-verbose "(detected user ($($usr)) as SamAccountName)" ;
+                    $isSamAcct  = $true ;
+                    Break ;
+                }
+                # move dname below samacct, it's a broader spec
                 $rgxDName {
-                # $rgxDName = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
+                    # $rgxDName = "^([a-zA-Z]{2,}(\s|\.)[a-zA-Z]{1,}'?-?[a-zA-Z]{2,}\s?([a-zA-Z]{1,})?)" ;
+                    #updated: CMW uses : in their room names, so went for broader AD dname support, per AI, and web specs, added 1-256char AD restriction
+                    #$rgxDName ="[a-zA-Z0-9\s$([Regex]::Escape('/\[:;|=,+*?<>') + '\]' + '\"')]{1,256}" ; 
                     if($usr.contains('.')){
                         write-verbose "(replacing period in DName)" ;
                         $usr = $usr.replace('.',' ') ;
@@ -21720,18 +22242,12 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     $isDname = $true ;
                     Break ;
                 }
-                $rgxSamAcctNameTOR {
-                # $rgxSamAcctNameTOR = "^\w{2,20}$" ; # up to 20c, the limit prior to win2k
-                    $hSum.lname = $usr ;
-                    write-verbose "(detected user ($($usr)) as SamAccountName)" ;
-                    $isSamAcct  = $true ;
-                    Break ;
-                }
                 default {
                     write-warning "$((get-date).ToString('HH:mm:ss')):No -user specified, nothing matching dname, emailaddress or samaccountname, found on clipboard. EXITING!" ;
                     #Break ;
                 } ;
             } ;
+            #endregion VARI_SETUP ; #*------^ END VARI_SETUP ^------
 
             $sBnr="===v ($($Procd)/$($ttl)):Input: '$($usr)' | '$($hSum.fname)' | '$($hSum.lname)' v===" ;
             if($isEml){$sBnr+="(EML)"}
@@ -21742,7 +22258,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
 
             write-host -foreground yellow "get-Rmbx/xMbx: " -nonewline;
 
-
+            #region SPLAT_SETUP ; #*------v SPLAT_SETUP v------
             # $isEml=$isDname=$isSamAcct=$false ;
             $MDtbl=[ordered]@{NoDashRow=$true } ; # out-markdowntable splat
             $pltGMailObj=[ordered]@{
@@ -21779,6 +22295,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 write-verbose "processing:'filter':$($fltr)" ;
                 $pltGMailObj.add('filter',$fltr) ;
             } ;
+            #endregion SPLAT_SETUP ; #*------^ END SPLAT_SETUP ^------
 
             $error.clear() ;
 
@@ -21786,10 +22303,12 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             #write-verbose "get-recipient w`n$(($pltGMailObj|out-string).trim())" ;
             # exclude contacts, they don't represent real onprem mbx assoc, and we need to refer those to EXO mbx qry anyway.
             write-verbose "get-recipient w`n$(($pltGMailObj|out-string).trim())" ;
-            rx10 -Verbose:$false -silent ;
+            #rx10 -Verbose:$false -silent ;
 
+            #region OPRCP_DISCOVERY ; #*------v OPRCP_DISCOVERY v------
             $smsg = "get-recipient w`n$(($pltGMailObj|out-string).trim())`n...| ?{$_.recipienttypedetails -ne 'MailContact'}" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;            
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             if($hSum.OPRcp=get-recipient @pltGMailObj -ea 0 | select -first $MaxRecips | ?{$_.recipienttypedetails -ne 'MailContact'}){
                 write-verbose "`$hSum.OPRcp found as $($pltGMailObj.filter)" ;
@@ -21848,7 +22367,9 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
    
                 } ; 
             } ; 
+            #endregion OPRCP_DISCOVERY ; #*------^ END OPRCP_DISCOVERY ^------
 
+            #region ECHO_OPRCP ; #*------v ECHO_OPRCP v------
             if(-not $hsum.OpRcp){
                 $smsg = "(Failed to OP:get-recipient on:$($usr))"
                 if($isDname){$smsg += " or *$($hsum.lname )*"}
@@ -21867,19 +22388,24 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     $tmpRcp = $_ ; 
                     #switch ($hSum.OPRcp.recipienttypedetails){
                     switch ($tmpRcp.recipienttypedetails){
-                        'RemoteUserMailbox' {write-host "(Rmbx)" -nonewline}
+                        'RemoteUserMailbox' {write-host "(Rmbx)"}
                         # 8:53 AM 10/9/2024 add to cover mbx2shared conversion results
-                        'RemoteSharedMailbox' {write-host "(Rmbx *SHARED*)" -nonewline} 
-                        'UserMailbox' {write-host "(Mbx)" -nonewline}
-                        'SharedMailbox' {write-host "(SMbx)" -nonewline}
+                        'RemoteSharedMailbox' {write-host "(Rmbx *SHARED*)"} 
+                        # 12:23 PM 12/26/2024 add resource & remote res's
+                        'RemoteRoomMailbox' {write-host "(Rmbx *ROOM*)"} 
+                        'RemoteEquipmentMailbox' {write-host "(Rmbx *EQUIP*)"} 
+                        'UserMailbox' {write-host "(Mbx)"}
+                        'SharedMailbox' {write-host "(SMbx)"}
+                        'RoomMailbox' {write-host "(RoomMbx)"}
+                        'EquipmentMailbox' {write-host "(EquipMbx)"}
                         'MailUser' {
                             $smsg = "MAILUSER WO RMBX DETECTED! - POSSIBLE NOBRAIN?"
                             write-warning $smsg
                             #$hsum.isNoBrain = $true ;    
                         }
-                        'MailUniversalDistributionGroup' {write-host "(DG)" -nonewline}
-                        'DynamicDistributionGroup'  {write-host "(DDG)" -nonewline}
-                        'MailContact' {write-host "(MC)" -nonewline]}
+                        'MailUniversalDistributionGroup' {write-host "(DG)"}
+                        'DynamicDistributionGroup'  {write-host "(DDG)"}
+                        'MailContact' {write-host "(MC)"]}
                         default{
                             #$smsg = "Unable to resolve `$hSum.OPRcp.recipienttypedetails:$($hSum.OPRcp.recipienttypedetails)" ; 
                             $smsg = "Unable to resolve `$hSum.OPRcp.recipienttypedetails:$($tmpRcp.OPRcp.recipienttypedetails)" ; 
@@ -21891,42 +22417,16 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     }
                 }  # loop-E 
             } ; # if-E
+            #endregion ECHO_OPRCP ; #*------^ END ECHO_OPRCP ^------
 
-            <# 2:57 PM 10/8/2024 splice over from grcp code above
-            #write-verbose "$((get-alias ps1GetxRcp).definition) w`n$(($pltGMailObj|out-string).trim())" ;
-            write-verbose "get-xorecipient  w`n$(($pltGMailObj|out-string).trim())" ;
-            #rxo  -Verbose:$false -silent ;
-            if($hSum.xoRcp=get-xorecipient @pltGMailObj -ea 0 | select -first $MaxRecips ){
-                write-verbose "`$hSum.xoRcp found" ;
-            } elseif($isDname -and $hsum.lname) {
-                $smsg = "Failed:RETRY: detected 'LName':$($hsum.lname) for near matches..." ;
-                write-host $smsg ;
-                $lname = $hsum.lname ;
-                $fltrB = "displayname -like '*$lname*'" ;
-                write-verbose "RETRY:get-recipient -filter {$($fltr)}" ;
-                if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 -ResultSize $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
-                    write-verbose "`$hSum.xoRcp found" ;
-                } ;
-            }
-            if(-not $hsum.xoRcp){
-                #$smsg = "Failed to $((get-alias ps1GetxRcp).definition) on:$($usr)"
-                $smsg = "get-xorecipient on:$($usr)"
-                if($isDname){$smsg += " or *$($hsum.lname )*"} ;
-                write-host $smsg ;
-            } else {
-                $smsg =  "`$hSum.xoRcp:`n$(($hSum.xoRcp|out-string).trim())" ;
-                write-verbose $smsg ;
-                if($hSum.xoRcp -is [system.array]){
-                    write-warning "Multiple matching xoRcps!:$($smsg)`nTHIS WILL NOT RETURN FULL AADUSER ETC FOR BOTH OBJECTS!`nUSE TARGETED UPN ETC TO DUMP VARIANT OBJECTS!" ;
-                    $isXORcpMulti = $true ;
-                } ;
-            } ;
-            #>
-            #-=-=-=-=-=-=-=-=
-            if ($script:useEXOv2) { reconnect-eXO2 @pltRXOC }
-            else { reconnect-EXO @pltRXOC } ;
+            #region XORCP_DISCOVERY ; #*------v XORCP_DISCOVERY v------
+            #if ($useEXOv2) { reconnect-eXO2 @pltRXOC }
+            #else { reconnect-EXO @pltRXOC } ;
+            #write-host -foreground yellow "get-xoMbx/xMbx: " -nonewline;
             $smsg = "get-xorecipient w`n$(($pltGMailObj|out-string).trim())`n...| ?{$_.recipienttypedetails -ne 'MailContact'}" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+
             if($hSum.xoRcp=get-xorecipient @pltGMailObj -ea 0 | select -first $MaxRecips | ?{$_.recipienttypedetails -ne 'MailContact'}){
                 write-verbose "`$hSum.xoRcp found as $($pltGMailObj.filter)" ;
             } elseif($isDname -and $hsum.lname) {
@@ -21981,10 +22481,9 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     } ;
                 } ;
             } ; 
-            #-=-=-=-=-=-=-=-=
+            #endregion XORCP_DISCOVERY ; #*------^ END XORCP_DISCOVERY ^------
 
-            # 9:14 AM 10/9/2024 put in the same type of user type reporting as for oprcp
-            #-=-=-=-=-=-=-=-=
+            #region ECHO_XORCP ; #*------v ECHO_XORCP v------
             if(-not $hSum.xoRcp){
                 $smsg = "(Failed to OP:get-recipient on:$($usr))"
                 if($isDname){$smsg += " or *$($hsum.lname )*"}
@@ -22007,8 +22506,13 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         'RemoteUserMailbox' {write-host "(Rmbx)" -nonewline}
                         # 8:53 AM 10/9/2024 add to cover mbx2shared conversion results
                         'RemoteSharedMailbox' {write-host "(Rmbx *SHARED*)" -nonewline}
+                        # 12:23 PM 12/26/2024 add resource & remote res's
+                        'RemoteRoomMailbox' {write-host "(Rmbx *ROOM*)" -nonewline}
+                        'RemoteEquipmentMailbox' {write-host "(Rmbx *EQUIP*)" -nonewline}
                         'UserMailbox' {write-host "(xMbx)" -nonewline}
                         'SharedMailbox' {write-host "(xSMbx)" -nonewline}
+                        'RoomMailbox' {write-host "(xRoomMbx)" -nonewline}
+                        'EquipmentMailbox' {write-host "(xEquipMbx)" -nonewline}
                         # no rmbx, but remote obj?
                         'MailUser' {
                             $smsg = "xMAILUSER WO MBX DETECTED! - POSSIBLE NOBRAIN?"
@@ -22033,9 +22537,11 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     }
                 }  # loop-E
             } ; # if-E
-            #-=-=-=-=-=-=-=-=
+            #endregion ECHO_XORCP ; #*------^ END ECHO_XORCP ^------
+
             # new rules, with INT/VEN AADU anchored to ADU, but xoMbx anchored solely to AADU (and not OP rcp), it's possible to completely fail onprem get-recipient, and still have a functional mailbox in cloud, that's operating properly.
 
+            #region NONUNIQUE_RCPS_ABORT ; #*------v NONUNIQUE_RCPS_ABORT v------
             $abortReport = $false ; 
             if( ($hSum.OPRcp -OR $hSum.xoRcp) -AND ( ($hSum.OPRcp -is [array]) -AND ($hSum.xoRcp -is [array]) ) ){
                 # failed to isolate both op & xo unique recip
@@ -22066,8 +22572,11 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
 
                 BREAK ; 
             } ; 
+            #endregion NONUNIQUE_RCPS_ABORT ; #*------^ END NONUNIQUE_RCPS_ABORT ^------
 
+            #region OP_V_XO_RCPEXPAND ; #*------v OP_V_XO_RCPEXPAND v------
             if($hSum.OPRcp){
+                #region OPRCP_EXPAND ; #*------v OPRCP_EXPAND v------
                 # 9:41 AM 10/9/2024 with array loops we need to accomodate, and aggregate - or it throws errors tying to get-remotemailbox -id [array]
                 # also need to += all assigns to acomodate both lookups, not just the last one
                 if($hSum.OPRcp -is [array]){
@@ -22075,7 +22584,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     $smsg += "`n(need to isolate single specific identifier from these outputs, and rerun fresh pass)" ; 
                     write-warning $smsg ; 
                 } ; 
-                 $hSum.OPRcp | ForEach-Object{
+                $hSum.OPRcp | ForEach-Object{
                     $tmpRcp = $_ ; 
                     $error.clear() ;
                     TRY {
@@ -22143,7 +22652,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                 Break ;
                             }
                         }
-                        <# get-aduser docs say REsultSetSize is documented,
+                        #region OP_GADU ; #*------v OP_GADU v------
+                        <# get-aduser docs say -REsultSetSize is documented,
                         [Get-ADUser (ActiveDirectory) | Microsoft Docs - docs.microsoft.com/](https://docs.microsoft.com/en-us/powershell/module/activedirectory/get-aduser?view=windowsserver2019-ps)
                          but use of it throws: Parameter set cannot be resolved using the specified named parameters.
                          pull it and post filter to 1...
@@ -22204,14 +22714,6 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                             $hSum.Federator = $TORMeta.adforestname ;
                             write-host -Fore yellow $smsg ;
                         
-                            <#
-                            if($hSum.OPRemoteMailbox){
-                                $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
-                            } ;
-                            if($hSum.OPMailbox){
-                                $smsg =  "$(($hSum.OPMailbox |fl $propsMailx|out-string).trim())" ;
-                            } ;
-                            #>
                             # swap to md tbl fmt
                             if($hSum.OPRemoteMailbox){$MailRecip = $hSum.OPRemoteMailbox } ; 
                             if($hSum.OPMailbox){$MailRecip = $hSum.OPMailbox } ; 
@@ -22224,21 +22726,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                             # flip dn L4 to fl (suppress crlf)
 
                             write-host $smsg ;
-                            #if($MailRecip.ForwardingAddress){
-                            #    $smsg += "`n$(($MailRecip|select $propsMailxL5 |out-markdowntable @MDtbl|out-string).trim())" ;
-                            #} ; 
-                            <#
-                            if($hSum.OPRemoteMailbox -AND $hSum.OPRemoteMailbox.ForwardingAddress){
-                                write-host $smsg ; # write pending primary (using ww on next)
-                                #$smsg = "==FORWARDED rMBX!:`n$(($hSum.OPRemoteMailbox  |ft -a ForwardingAddress,DeliverToMailboxAndForward,ForwardingSmtpAddress|out-string).trim())" ;
-                                $smsg = "==FORWARDED rMBX!:" ; 
-                                $smsg += "`n$(($MailRecip|select $propsMailxL5 |out-markdowntable @MDtbl|out-string).trim())" ;
-                            } ;
-                            if($hSum.OPMailbox -AND $hSum.OPMailbox.ForwardingAddress){
-                                write-host $smsg ; # write pending primary (using ww on next)
-                                $smsg = "==FORWARDED opMBX!:`n$(($hSum.OPMailbox |ft -a ForwardingAddress,DeliverToMailboxAndForward,ForwardingSmtpAddress|out-string).trim())" ;
-                            } ;
-                            #>
+
                             if($hSum.OPRemoteMailbox.ForwardingAddress -OR $hSum.OPMailbox.ForwardingAddress){
                                 write-host $smsg ; # echo pending, using ww below
                                 $smsg = "==FORWARDED rMBX!:" ; 
@@ -22258,8 +22746,11 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         Continue ;
                     } ;
-                }  # loop-E
+                    #endregion OP_GADU ; #*------^ END OP_GADU ^------
+                }  # loop-E $hSum.OPRcp
+                #endregion OPRCP_EXPAND ; #*------^ END OPRCP_EXPAND ^------
             }elseif($hSum.xoRcp){
+                #region XORCP_EXPAND ; #*------v XORCP_EXPAND v------
                 foreach($txR in $hSum.xoRcp){
                     TRY {
                         switch -regex ($txR.recipienttypedetails){
@@ -22293,18 +22784,21 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                         } else {
                                             write-WARNING $smsg ;
                                         } ;
+                                        #region xogetMobile ; #*------v xogetMobile v------
                                         if($getMobile){
-                                            # $devstats = Get-exoMobileDeviceStatistics -Mailbox UPN
-                                            #$smsg = "'xoMobileDeviceStats':$((get-alias ps1GetxMobilDevStats).definition) -Mailbox $($xmbx.userprincipalname)"
-                                            $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.userprincipalname)"
+                                            $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
                                             if($verbose){
                                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                                                 else{ write-verbose $smsg } ; 
                                             } ; 
-                                            $hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ; 
-                                            $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMapiTest|measure).count)" ;
+                                            #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ; 
+                                            # wasn't getting data back: shift to the .xomailbox.ExchangeGuid.guid, it's 100% going to hit and return data 
+                                            $hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.ExchangeGuid.guid -ea STOP ; 
+                                            $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
                                             write-host -foregroundcolor green $smsg ;
                                         } ; 
+                                        #endregion xogetMobile ; #*------^ END xogetMobile ^------
+                                        #region xogetQuotaUsage ; #*------v getQuotaUsage v------
                                         if($getQuotaUsage){
                                             $pltGMbxStatX=[ordered]@{
                                                 identity = $hSum.xoMailbox.exchangeguid ;
@@ -22316,7 +22810,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                                 else{ write-verbose $smsg } ; 
                                             } ; 
                                             $hSum.xoMailboxStats  +=  Get-xoMailboxStatistics @pltGMbxStatX | select $prpStat;
-                                            $smsg = "xoMailboxStats Count:$(($hsum.xoMapiTest|measure).count)" ;
+                                            $smsg = "xoMailboxStats Count:$(($hsum.xoMailboxStats|measure).count)" ;
                                             write-host -foregroundcolor green $smsg ;
 
                                             If($hSum.xoMailbox.UseDatabaseQuotaDefaults){
@@ -22353,7 +22847,84 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                                 write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
                                             } ; 
                                         } ; 
-                                    } ;
+                                        #endregion xogetQuotaUsage ; #*------^ END xogetQuotaUsage ^------
+                                        #region xogetPerms ; #*------v xogetPerms v------
+                                        if($getPerms){
+                                            $pltGMbxPermX=[ordered]@{
+                                                identity = $hSum.xoMailbox.exchangeguid ;
+                                                ErrorAction = 'STOP' ;
+                                            } ;
+                                            $smsg = "Get-xoMailboxPermission  w`n$(($pltGMbxPermX|out-string).trim())"
+                                            if($verbose){
+                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                                else{ write-verbose $smsg } ;
+                                            } ;
+                                            TRY{
+                                                $hSum.xoMailboxPermission  +=  Get-xoMailboxPermission @pltGMbxPermX | ?{$_.user -notmatch 'NT\sAUTHORITY\\SELF'} | select $prpMPerms;
+                                                $smsg = "xoMailboxPermission Count:$(($hsum.xoMailboxPermission|measure).count)" ;
+                                                write-host -foregroundcolor green $smsg ;
+                                                if($hSum.xoMailboxPermission){
+                                                    foreach($grp in ($hSum.xoMailboxPermission.user | 
+                                                        get-xorecipient  | ?{$_.recipienttype -eq 'MailUniversalSecurityGroup'}) ){
+                                                        $hshGrpSumm = [ordered]@{
+                                                            Identity = $grp.Identity
+                                                            PrimarySmtpAddress = $grp.PrimarySmtpAddress ;
+                                                            Description = $grp.Description ;
+                                                            RecipientType = $grp.RecipientType ;
+                                                            RecipientTypeDetails = $grp.RecipientTypeDetails ;
+                                                            ManagedBy = ($grp | get-xodistributiongroup | select -expand managedby | get-xorecipient -ea 0) ;
+                                                            Members = ($grp | get-xodistributiongroupmember | get-xorecipient  -ea 0) ;
+                                                        } ; 
+                                                        $hSum.xoMailboxPermissionGroups += [pscustomobject]$hshGrpSumm ; 
+                                                    } ;
+                                                } else {
+                                                    $smsg = "(no non-SELF Get-xoMailboxPermission returned)" ; 
+                                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                                };
+                                            } CATCH {
+                                                $ErrTrapd=$Error[0] ;
+                                                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                                                write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                                            } ;
+                                            $smsg = "Get-xoRecipientPermission  w`n$(($pltGMbxPermX|out-string).trim())"
+                                            if($verbose){
+                                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                                                else{ write-verbose $smsg } ;
+                                            } ;
+                                            TRY{
+                                                $hsum.xoRecipientPermission += Get-xoRecipientPermission @pltGMbxPermX | ?{$_.trustee -notmatch 'NT\sAUTHORITY\\SELF'}  | select $prpRPerms;
+                                                $smsg = "xoRecipientPermission Count:$(($hsum.xoRecipientPermission|measure).count)" ;
+                                                write-host -foregroundcolor green $smsg ;
+                                                if($hsum.xoRecipientPermission){
+                                                    foreach($grp in ($hsum.xoRecipientPermission.trustee | 
+                                                        get-xorecipient  | ?{$_.recipienttype -eq 'MailUniversalSecurityGroup'}) ){
+                                                        $hshGrpSumm = [ordered]@{
+                                                            Identity = $grp.Identity
+                                                            PrimarySmtpAddress = $grp.PrimarySmtpAddress ;
+                                                            Description = $grp.Description ;
+                                                            RecipientType = $grp.RecipientType ;
+                                                            RecipientTypeDetails = $grp.RecipientTypeDetails ;
+                                                            ManagedBy = ($grp | get-xodistributiongroup | select -expand managedby | get-xorecipient -ea 0) ;
+                                                            Members = ($grp | get-xodistributiongroupmember | get-xorecipient  -ea 0) ;
+                                                        } ; 
+                                                        $hSum.xoRecipientPermissionGroups += [pscustomobject]$hshGrpSumm ;
+                                                    } ;
+                                                } else {
+                                                    $smsg = "(no non-SELF Get-xoRecipientPermission returned)" ; 
+                                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                                };
+                                            } CATCH {
+                                                $ErrTrapd=$Error[0] ;
+                                                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                                                write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                                            } ;
+                                        } ; 
+                                        #endregion xogetPerms ; #*------^ END xogetPerms ^------
+                                    } ; # foreach($xmbx in $hSum.xoMailbox)
                                     break ;
                                 } ;
                             }
@@ -22392,7 +22963,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                 write-verbose "`$hSum.txGuest:`n$(($hSum.txGuest|ft -a |out-string).trim())" ;
                                 #$Rpt += $hSum.OPRemoteMailbox.primarysmtpaddress ;
                                 write-host "$($txR.ExternalEmailAddress): matches a Guest object with UPN:$($hSum.xoUser.userPrincipalName)" ;
-                                if($hSum.txGuest.EmailAddresses -eq $null){
+                                if($null -eq $hSum.txGuest.EmailAddresses){
                                     write-warning "Guest appears to have damage from conficting replicated onprem MailContact, as it's EmailAddresses property is *blank*" ;
                                 } ;
                                 break ;
@@ -22421,8 +22992,9 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         Continue ;
                     } ;
-                }  # loop-E $txR
+                }  # loop-E $hSum.xoRcpx
                 # contacts and guests won't drop with $hSum.OPRemoteMailbox or $hSum.OPMailbox populated
+                #region XO_GADU ; #*------v XO_GADU v------
                 TRY {
                     $pltGadu=[ordered]@{Identity = $null ; Properties='*' ;errorAction='SilentlyContinue'} ;
                     if($hSum.OPRemoteMailbox ){
@@ -22491,11 +23063,13 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         if($hSum.OPRemoteMailbox){
                             $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
                             #$smsg += "`n-Title:$($hSum.ADUser.Title)"
-                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                            #$smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','Info','whenCreated','whenChanged','Title' |out-string).trim())"
                         } ;
                         if($hSum.OPMailbox){
                             $smsg =  "$(($hSum.OPMailbox |fl $propsMailx|out-string).trim())" ;
-                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                            #$smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                            $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','Info','whenCreated','whenChanged','Title' |out-string).trim())"
                         } ; 
                         if( -not $hsum.OPRcp -AND $hsum.xoRcp -AND $hsum.xomailbox){ 
                             $smsg = "Cloud Mailbox is nonDirSync'd NON-HYBRID mail object!" ; 
@@ -22506,7 +23080,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                 } else { 
                                     $smsg += "`nADUser Object IS NOT dirsync'd to AzureADUser object" ; 
                                 } ; 
-                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                #$smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','Info','whenCreated','whenChanged','Title' |out-string).trim())"
                             } else {
                                 $smsg += "`nNO ADUser Object appears to be cloud-first AADUser object" ;
                             }; 
@@ -22529,7 +23104,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Continue ;
                 } ;
-
+                #endregion XO_GADU ; #*------^ END XO_GADU ^------
+                #endregion XORCP_EXPAND ; #*------^ END XORCP_EXPAND ^------
                 if($outObject){
 
                 } else {
@@ -22605,7 +23181,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         $hSum.xoUser += get-xouser -id $xmbx.UserPrincipalName -ResultSize $MaxRecips ;
                         write-verbose "`$hSum.xoUser:`n$(($hSum.xoUser|ft -a |out-string).trim())" ;
                     } ;
-                }
+                } ; 
+
                 if($hSum.xoMailbox){
                     $ino = 0 ;
                     foreach($xmbx in $hSum.xoMailbox){
@@ -22617,19 +23194,12 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         write-host -foreground yellow "=get-xMbx:> " -nonewline;
                         write-host "$(($hSum.xoMailbox |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
                     } ;
-
+                    #region xogetMobile2 ; #*------v xogetMobile2 v------
                     if($getMobile){
                         write-host -foreground yellow "===`$hsum.xoMobileDeviceStats: " #-nonewline;
                         $ino = 0 ;
                         foreach($xmob in $hsum.xoMobileDeviceStats){
                             $ino++ ;
-                            <#if($hsum.xoMobileDeviceStats -isnot [system.array]){
-                                $smsg = "xmob$($ino):$($xmob.userprincipalname)" ;
-                                write-host $smsg ;
-                            } ;
-                            write-host -foreground yellow "=get-xMob:> " -nonewline;
-                            write-host "$(($xmob.userprincipalname |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
-                            #>
                             if($hsum.xoMobileDeviceStats -is [system.array]){
                                  write-host -foreground yellow "=get-xMob$($ino):> " #-nonewline;
                             } else { 
@@ -22641,12 +23211,15 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         } ;
 
                     } ; 
+                    #endregion xogetMobile2 ; #*------^ END xogetMobile2 ^------
 
                 }elseif($hSum.xoMUser){
                     write-host "=get-xMUSR:>`n$(($hSum.xoMUser |fl ($propsMailx |?{$_ -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
                 }elseif($hSum.txGuest){
                     write-host "=get-AADU:>`n$(($hSum.txGuest |fl userp*,PhysicalDeliveryOfficeName,JobTitle|out-string).trim())"
                 } ;
+
+                # populate xoMemberOf
                 TRY {
                     #write-verbose "$((get-alias ps1GetxRcp).definition) -Filter {Members -eq '$($hSum.xoUser.DistinguishedName)'}`n -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup"
                     write-verbose "get-xorecipient -Filter {Members -eq '$($hSum.xoUser.DistinguishedName)'}`n -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup"
@@ -22660,6 +23233,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     Continue ;
                 } ;
             } else {
+                #region XORCP_RETRY ; #*------v XORCP_RETRY v------
                 write-warning "(no matching EXOP or EXO recipient object:$($usr))"
                 # do near Lname[0-3]* searches for comparison
                 if($hSum.lname){
@@ -22689,6 +23263,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
 
 
                 } ;
+                #endregion XORCP_RETRY ; #*------^ END XORCP_RETRY ^------
+                #region GADU_NAME ; #*------v GADU_NAME v------
                 # do ADUser search on fname/lname
                 if($hSum.lname){
                     # try as surname & givenname
@@ -22735,6 +23311,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                        } ; 
                     } ; 
                 } 
+                #endregion GADU_NAME ; #*------^ END GADU_NAME ^------
+                #region GAADU_NAME ; #*------v GAADU_NAME v------
                 # do AADUser search on fname/lname
                 if($hSum.lname){
                     # try as surname & givenname
@@ -22783,13 +23361,12 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                        } ; 
                     } ; 
                 } 
-
+                #endregion GAADU_NAME ; #*------^ END GAADU_NAME ^------
 
                 $abortReport = $true ; 
 
-
-
             } ; # don't break, doesn't continue loop
+            #endregion OP_V_XO_RCPEXPAND ; #*------^ END OP_V_XO_RCPEXPAND ^------
 
             if($abortReport ){
                 $smsg = "(multiple recipients - or no recipients, but ADUsers, or but AADUsers -  found in OnPrem And/Or Cloud, detailed reporting & output aborted)" ; 
@@ -22798,6 +23375,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 BREAK ; 
             } ; 
 
+            #region FORCE_XOMBXINFO ; #*------v FORCE_XOMBXINFO v------
             # 10:42 AM 9/9/2021 force populate the xoMailbox, ALWAYS - need for xbrain ids
             #if($hSum.xoRcp.recipienttypedetails -eq 'UserMailbox' -AND -not($hSum.xoMailbox)){
             # accomodate array xorcp
@@ -22829,6 +23407,21 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     $hSum.xoMapiTest  +=  $mapiResults ;
                 } ;
             } ;
+            #region xogetMobile ; #*------v xogetMobile v------
+            if($getMobile){
+                $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
+                if($verbose){
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-verbose $smsg } ; 
+                } ; 
+                #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ; 
+                # wasn't getting data back: shift to the .xomailbox.ExchangeGuid.guid, it's 100% going to hit and return data 
+                $hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP ; 
+                $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
+                write-host -foregroundcolor green $smsg ;
+            } ; 
+            #endregion xogetMobile ; #*------^ END xogetMobile ^------
+            #region xogetQuotaUsage2 ; #*------v xogetQuotaUsage2 v------
             # 3:42 PM 9/25/2023 bring in new quota support as well - it's not populated in the oprcp first test
             if($getQuotaUsage){
                 if(($hSum.xoRcp|?{$_.recipienttypedetails -match 'UserMailbox|SharedMailbox|RoomMailbox|EquipmentMailbox'}) -AND -not($hSum.xoMailboxStats)){
@@ -22842,7 +23435,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         else{ write-verbose $smsg } ; 
                     } ; 
                     $hSum.xoMailboxStats  +=  Get-xoMailboxStatistics @pltGMbxStatX | select $prpStat;
-                    $smsg = "xoMailboxStats Count:$(($hsum.xoMapiTest|measure).count)" ;
+                    $smsg = "xoMailboxStats Count:$(($hSum.xoMailboxStats|measure).count)" ;
                     write-host -foregroundcolor green $smsg ;
 
                     If($hSum.xoMailbox.UseDatabaseQuotaDefaults){
@@ -22885,7 +23478,86 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     
                 }
             } ; 
+            #endregion xogetQuotaUsage2 ; #*------^ END xogetQuotaUsage2 ^------
+            #region xogetPerms2 ; #*------v xogetPerms2 v------
+            if($getPerms){
+                $pltGMbxPermX=[ordered]@{
+                    identity = $hSum.xoMailbox.exchangeguid ;
+                    ErrorAction = 'STOP' ;
+                } ;
+                $smsg = "Get-xoMailboxPermission  w`n$(($pltGMbxPermX|out-string).trim())"
+                if($verbose){
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-verbose $smsg } ;
+                } ;
+                TRY{
+                    $hSum.xoMailboxPermission  +=  Get-xoMailboxPermission @pltGMbxPermX | ?{$_.user -notmatch 'NT\sAUTHORITY\\SELF'} | select $prpMPerms;
+                    $smsg = "xoMailboxPermission Count:$(($hsum.xoMailboxPermission|measure).count)" ;
+                    write-host -foregroundcolor green $smsg ;
+                    if($hSum.xoMailboxPermission){
+                        foreach($grp in ($hSum.xoMailboxPermission.user |
+                            get-xorecipient  | ?{$_.recipienttype -eq 'MailUniversalSecurityGroup'}) ){
+                            $hshGrpSumm = [ordered]@{
+                                Identity = $grp.Identity
+                                PrimarySmtpAddress = $grp.PrimarySmtpAddress ;
+                                Description = $grp.Description ;
+                                RecipientType = $grp.RecipientType ;
+                                RecipientTypeDetails = $grp.RecipientTypeDetails ;
+                                ManagedBy = ($grp | get-xodistributiongroup | select -expand managedby | get-xorecipient -ea 0) ;
+                                Members = ($grp | get-xodistributiongroupmember | get-xorecipient  -ea 0) ;
+                            } ; 
+                            $hSum.xoMailboxPermissionGroups += [pscustomobject]$hshGrpSumm ;
+                        } ;
+                    } else {
+                        $smsg = "(no non-SELF Get-xoMailboxPermission returned)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    };
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                    write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                } ;
+                $smsg = "Get-xoRecipientPermission  w`n$(($pltGMbxPermX|out-string).trim())"
+                if($verbose){
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-verbose $smsg } ;
+                } ;
+                TRY{
+                    $hsum.xoRecipientPermission += Get-xoRecipientPermission @pltGMbxPermX | ?{$_.trustee -notmatch 'NT\sAUTHORITY\\SELF'}  | select $prpRPerms;
+                    $smsg = "xoRecipientPermission Count:$(($hsum.xoRecipientPermission|measure).count)" ;
+                    write-host -foregroundcolor green $smsg ;
+                    if($hSum.xoRecipientPermission){
+                        foreach($grp in ($hsum.xoRecipientPermission.trustee |
+                            get-xorecipient  | ?{$_.recipienttype -eq 'MailUniversalSecurityGroup'}) ){
+                            $hshGrpSumm = [ordered]@{
+                                Identity = $grp.Identity
+                                PrimarySmtpAddress = $grp.PrimarySmtpAddress ;
+                                Description = $grp.Description ;
+                                RecipientType = $grp.RecipientType ;
+                                RecipientTypeDetails = $grp.RecipientTypeDetails ;
+                                ManagedBy = ($grp | get-xodistributiongroup | select -expand managedby | get-xorecipient -ea 0) ;
+                                Members = ($grp | get-xodistributiongroupmember | get-xorecipient  -ea 0) ;
+                            } ; 
+                            $hSum.xoRecipientPermissionGroups += [pscustomobject]$hshGrpSumm ;
+                        } ;
+                    } else {
+                        $smsg = "(no non-SELF Get-xoRecipientPermission returned)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    };
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                    write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                } ;
+            }
+            #endregion xogetPerms2 ; #*------^ END xogetPerms2 ^------
+            #endregion FORCE_XOMBXINFO ; #*------^ END FORCE_XOMBXINFO ^------
 
+            #region RV_VIA_GAADU ; #*------v RV_VIA_GAADU v------
             #$pltgMsoUsr=@{UserPrincipalName=$null ; MaxResults= $MaxRecips; ErrorAction= 'STOP' } ;
             # maxresults is documented:
             # but causes a fault with no $error[0], doesn't seem to be functional param, post-filter
@@ -22898,7 +23570,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             else{} ;
 
             if($pltgAADUsr.UserPrincipalName){
-
+                #region FORCE_GAADU ; #*------v FORCE_GAADU v------
                 if(-not($hSum.AADUser)){
                     write-host -foregroundcolor yellow "=get-AADuser $($pltgAADUsr.UserPrincipalName)>:" ;
                     TRY{
@@ -22918,7 +23590,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             thumbnailPhoto@odata.mediaEditLink                        directoryObjects/.../Microsoft.DirectoryServices.User/thumbnailPhoto
                             thumbnailPhoto@odata.mediaContentType                     image/Jpeg
                             userIdentities                                            []
-                            extension_9d88b2c96135413e88afff067058e860_employeeNumber 8621
+                            extension_9d88b2c96135413e88afff067058e860_employeeNumber 1234
                              $hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName
                             CN=XXX,OU=XXX,...
                         #>
@@ -22938,7 +23610,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     } ;
 
                 } ;
-
+                #endregion FORCE_GAADU ; #*------^ END FORCE_GAADU ^------
+                #region FORCE_AADU_MGR ; #*------v FORCE_AADU_MGR v------
                 if(-not($hSum.AADUserMgr) -AND $hSum.AADUser ){
                     write-host -foregroundcolor yellow "=get-AADuserManager $($hSum.AADUser.UserPrincipalName)>:" ;
                     TRY{
@@ -22960,17 +23633,19 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     } ;
 
                 } ;
+                #endregion FORCE_AADU_MGR ; #*------^ END FORCE_AADU_MGR ^------
 
                 # display user info:
+                #region OUTPUT_P1 ; #*------v OUTPUT_P1 v------
                 if(-not($hSum.ADUser)){
                     if($hSum.AADUser.DirSyncEnabled -AND $hSum.aaduser.ExtensionProperty.onPremisesDistinguishedName){
+                        #region ADU_FEDERATED ; #*------v ADU_FEDERATED v------
                         $pltGadu.Identity = $hSum.aaduser.ExtensionProperty.onPremisesDistinguishedName ; 
                         $hSum.ADUser  += Get-ADUser @pltGadu | select -first $MaxRecips ;
                         if($pltGadu.identity){
                             write-verbose "Get-ADUser w`n$(($pltGadu|out-string).trim())" ;
                             # try a nested local trycatch, against a missing result
                             Try {
-                                #Get-ADUser $DN -ErrorAction Stop ;
                                 $hSum.ADUser  += Get-ADUser @pltGadu | select -first $MaxRecips ;
                             } Catch [Microsoft.ActiveDirectory.Management.ADIdentityNotFoundException] {
                                 write-warning "(no matching ADuser found:$($pltGadu.identity))" ;
@@ -22989,15 +23664,19 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             if($hSum.OPRemoteMailbox){
                                 $smsg = "$(($hSum.OPRemoteMailbox |fl $propsMailx|out-string).trim())"
                                 #$smsg += "`n-Title:$($hSum.ADUser.Title)"
-                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                #$smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','Info','whenCreated','whenChanged','Title' |out-string).trim())"
                             } ;
                             if($hSum.OPMailbox){
                                 $smsg =  "$(($hSum.OPMailbox |fl $propsMailx|out-string).trim())" ;
-                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                #$smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','whenCreated','whenChanged','Title' |out-string).trim())"
+                                $smsg += "`n$(($hSum.ADUser |fl 'Enabled','Description','Info','whenCreated','whenChanged','Title' |out-string).trim())"
                             } ;
                             write-host $smsg ;
                         } ;
+                        #endregion ADU_FEDERATED ; #*------^ END ADU_FEDERATED ^------
                     } else { 
+                        #region REMOTE_ADU_FEDERATED ; #*------v REMOTE_ADU_FEDERATED v------
                         # remote fed, use AADU to proxy remote AD hybrid info:
                         write-host -foreground yellow "===`$hSum.AADUser: " #-nonewline;
                         $smsg = "$(($hSum.AADUser| select $propsAADL1 |out-markdowntable @MDtbl |out-string).trim())" ;
@@ -23009,6 +23688,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         if($hSum.Federator -ne $TORMeta.adforestname){
                             $smsg += "`n$($hSum.Federator):Remote ADUser.DN:`n$(($hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName|out-string).trim())" ;
                         }  ;
+                        #endregion REMOTE_ADU_FEDERATED ; #*------^ END REMOTE_ADU_FEDERATED ^------
                     }; 
 
                     write-host $smsg
@@ -23019,27 +23699,21 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     $hSum.lname  +=  $hSum.AADUser.Surname ;
 
                 } else {
-                    #write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser| ft -auto ObjectId,DisplayName,UserPrincipalName,UserType |out-string).trim())" ;
+                    #region OUTPUT_ADU_INFO ; #*------v OUTPUT_ADU_INFO v------
                     # defer to ADUser details
-                    #"$(($hSum.ADUser |fl $propsMailx |out-markdowntable @MDtbl|out-string).trim())"
-                    <#$propsADL1 = 'UserPrincipalName','DisplayName','GivenName','Surname','Title' ;
-                    $propsADL2 = 'Company','Department','PhysicalDeliveryOfficeName' ;
-                    $propsADL3 = 'StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone' ;
-                    #>
                     write-host -foreground yellow "===`$hSum.ADUser: " #-nonewline;
                     $smsg = "$(($hSum.ADUser| select $propsADL1 |out-markdowntable @MDtbl |out-string).trim())" ;
                     $smsg += "`n$(($hSum.ADUser|select $propsADL2 |out-markdowntable @MDtbl|out-string).trim())" ;
                     $smsg += "`n$(($hSum.ADUser|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                     $smsg += "`n$(($hSum.ADUser|select $propsADL4 |out-markdowntable @MDtbl|out-string).trim())" ;
-                    <# $propsADL5 = 'whenCreated','whenChanged' ; 
-                    $propsADL6 = @{Name='Desc';Expression={$_.Description }} ;
-                    #>
                     $smsg += "`n$(($hSum.ADUser|select $propsADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
                     # stick desc on trailing line $propsADL5
                     #$smsg += "`n$(($hSum.ADUser|select $propsADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
                     # flip L5 to fl (suppress crlf wrap)
                     $smsg += "`n$(($hSum.ADUser|select $propsADL6 |Format-List|out-string).trim())" ;
-
+                    if($hsum.ADUser.Info){
+                        $smsg += "`n$(($hSum.ADUser|select $propsADL7 |Format-List|out-string).trim())" ;
+                    } ;
                     # moved DN into adl4, w enabled
                     #$smsg += "`n`$ADUser.DN:`n$(($hsum.aduser.DistinguishedName|out-string).trim())" ;
                     #$smsg += "`n$($hSum.ADUser|select Enabled,distinguishedname| convertTo-MarkdownTable -NoDashRow -Border) `$ADUser.DN:`n$(($hsum.aduser.DistinguishedName|out-string).trim())" ;
@@ -23049,26 +23723,44 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     $hSum.dname  +=  $hSum.ADUser.DisplayName ;
                     $hSum.fname  +=  $hSum.ADUser.GivenName ;
                     $hSum.lname  +=  $hSum.ADUser.Surname ;
+                    #endregion OUTPUT_ADU_INFO ; #*------^ END OUTPUT_ADU_INFO ^------
                 } ;
-
-                # acct enabled/disabled: .aduser.Enbabled & .aaduser.AccountEnabled
+                #endregion OUTPUT_P1 ; #*------^ END OUTPUT_P1 ^------
+                #region ENABLED_STATUS ; #*------v ENABLED_STATUS v------
+                # aduser enabled/disabled: .aduser.Enbabled
                 if($hSum.aduser){
-                    if($hSum.aduser.Enabled){} else {
-                        $smsg = "ADUser:$($hSum.ADUser.userprincipalname) AD Account is *DISABLED!*"
-                        write-warning $smsg ;
-                    } ;
+                    if($hSum.aduser.Enabled){
+                        if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){
+                            $smsg = "ADUser:$($hSum.ADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) mbx is *ENABLED!*"
+                            write-warning $smsg ;
+                        } ;
+                    } else {
+                        if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){} else { 
+                            $smsg = "ADUser:$($hSum.ADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) is *DISABLED!*"
+                            write-warning $smsg ;
+                        } ; 
+                    } ; 
                 } ;
-                # acct enabled/disabled: .aduser.Enbabled & .aaduser.AccountEnabled
+                # AADUser enabled/disabled: .aaduser.AccountEnabled
                 if($hSum.AADUser){
-                    if($hSum.aaduser.AccountEnabled){} else {
-                        $smsg = "AADUser:$($hSum.AADUser.userprincipalname) AAD Account is *DISABLED!*"
-                        write-warning $smsg ;
-                    } ;
-                } ;
-                if($hSum.ADUser){$hSum.LicenseGroup  +=  $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
+                    if($hSum.AADUser.Enabled){
+                        if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){
+                            $smsg = "ADUser:$($hSum.AADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) mbx is *ENABLED!*"
+                            write-warning $smsg ;
+                        } ;
+                    } else {
+                        if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){} else { 
+                            $smsg = "ADUser:$($hSum.AADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) is *DISABLED!*"
+                            write-warning $smsg ;
+                        } ; 
+                    } ; 
 
+                } ;
+                #endregion ENABLED_STATUS ; #*------^ END ENABLED_STATUS ^------
+                #region LIC_GRP ; #*------v LIC_GRP v------
                 if($hSum.ADUser){$hSum.LicenseGroup  +=  $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
                 elseif($hSum.xoMemberOf){$hSum.LicenseGroup  +=  $hSum.xoMemberOf.Name |?{$_ -match $rgxXLic}}
+
                 #if(-not ($hSum.LicenseGroup) -AND ($hSum.MsolUser.licenses.AccountSkuId -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup  +=  '(direct-assigned E3)'} ;
                 # $hSum.AADUser ; $aadu | Get-AzureADUserLicenseDetail  | select -exp SkuPartNumber
                 #if(-not ($hSum.LicenseGroup) -AND ( $hsum.AADUserLics  -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup  +=  '(direct-assigned E3)'} ;
@@ -23077,7 +23769,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 if($hSum.LicenseGroup){$smsg = "LicenseGroup:$($hSum.LicenseGroup)"}
                 else{$smsg = "LicenseGroup:(unresolved, direct-assigned other?)" } ;
                 write-host $smsg ;
-
+                #endregion LIC_GRP ; #*------^ END LIC_GRP ^------
+                #region OUTPUT_AADUserMgr ; #*------v OUTPUT_AADUserMgr v------
                 if($hSum.AADUserMgr){
                     #($hSum.AADUserMgr) |ft -a  $propsaadmgr
                     #$smsg += "`nAADUserMgr:`n$(($hSum.AADUserMgr|select $propsAadMgr |out-markdowntable @MDtbl|out-string).trim())" ;
@@ -23088,13 +23781,14 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     $smsg += "`n$(($hSum.AADUserMgr|Format-List $propsAADMgrL2|out-string).trim())" ;
                     #$smsg += "`n$(($hSum.AADUserMgr|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                 } else {
-                    $smsg += "(AADUserMgr was blank, or unresolved)" ;
+                    $smsg = "(AADUserMgr was blank, or unresolved)" ;
                 } ;
                 write-host $smsg ;
-
+                #endregion OUTPUT_AADUserMgr ; #*------^ END OUTPUT_AADUserMgr ^------
+                #region OUTPUT_QUOTA_N_SIZE ; #*------v OUTPUT_QUOTA_N_SIZE v------
                 if($getQuotaUsage -AND $hSum.xoMailbox){
 
-                    $smsg += "`n`nLicenses::`n$(($hsum.AADUserLics -join ', ' |out-string).trim())`n`n" ; 
+                    $smsg += "`n`nLicenses:`n$(($hsum.AADUserLics -join ', ' |out-string).trim())`n`n" ; 
                     $smsg += "`nwhich specify the following size limits:`n$(($hSum.xoEffectiveQuotas| fl |out-string).trim())`n(UseDatabaseQuotaDefaults:$($hSum.xoMailbox.UseDatabaseQuotaDefaults))" ; 
                     $smsg += "`n`nCurrent TotalMailboxSizeMB: $($hSum.xoMailboxStats.TotalMailboxSizeMB)`n`n" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
@@ -23118,7 +23812,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
 
-                    $smsg = "`n===`output to::`n$($ofMbxFolderStats)`n" ;
+                    $smsg = "`n===`output to:`n$($ofMbxFolderStats)`n" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     
@@ -23175,9 +23869,44 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     write-host $hsInfo ;   
 
                 } ; 
-            } ;
+                #endregion OUTPUT_QUOTA_N_SIZE ; #*------^ END OUTPUT_QUOTA_N_SIZE ^------
+                #region OUTPUT_PERMS ; #*------v OUTPUT_PERMS v------
+                if($getPerms -AND $hSum.xoMailbox){
 
-            # do a split-brain/nobrain check
+                    if($hSum.xoMailboxPermission){
+                        $smsg = "`n## xoMailboxPermission:`n$(($hsum.xoMailboxPermission | ft -a $prpMPerms |out-string).trim())`n" ; 
+                        if($hSum.xoMailboxPermissionGroups){
+                            $smsg += "`n### Expanded Perm Group Summaries:" ; 
+                            foreach($grp in $hSum.xoMailboxPermissionGroups){
+                                $smsg += "`n-----------" ; 
+                                $smsg += "`n$(($grp |select $propsDG[0..1] |out-markdowntable @MDtbl|out-string).trim())" ;
+                                $smsg += "`n$(($grp |select $propsDG[3..6] |out-markdowntable @MDtbl|out-string).trim())" ;
+                                $smsg += "`n$(($grp |select $propsDG[2] |fl |out-string).trim())" ;
+                                $smsg += "`n#### Members:`n$(($grp.members | ft -a $propsRcpTbl|out-string).trim())`n`n" ;
+                            } ; 
+                        } ; 
+                    } ; 
+                    if($hSum.xoRecipientPermission){
+                        $smsg += "`n## xoRecipientPermission:`n$(($hsum.xoRecipientPermission | ft -a $prpRPerms |out-string).trim())`n`n" ; 
+                        if($hSum.xoRecipientPermissionGroups){
+                            $smsg += "`n### Expanded Perm Group Summaries:" ; 
+                            foreach($grp in $hSum.xoRecipientPermissionGroups){
+                                $smsg += "`n-----------" ; 
+                                $smsg += "`n$(($grp |select $propsDG[0..1] |out-markdowntable @MDtbl|out-string).trim())" ;
+                                $smsg += "`n$(($grp |select $propsDG[3..6] |out-markdowntable @MDtbl|out-string).trim())" ;
+                                $smsg += "`n$(($grp |select $propsDG[2] |fl |out-string).trim())" ;
+                                $smsg += "`n#### Members:`n$(($grp.members | ft -a $propsRcpTbl|out-string).trim())`n`n" ;
+                            } ; 
+                        } ; 
+                    } ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                } ;
+                #endregion OUTPUT_PERMS ; #*------^ END OUTPUT_PERMS ^------
+            } ;
+            #endregion RV_VIA_GAADU ; #*------^ END RV_VIA_GAADU ^------
+            
             # switch ($hSum.OPRcp.recipienttypedetails){
             <#
             AD - Users (more effective)
@@ -23207,7 +23936,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             } ;
             #>
             # ($hSum.ADUser.sAMAccountType -eq '805306368')
-
+            #region OUTPUT_ACCT_DISABLED ; #*------v OUTPUT_ACCT_DISABLED v------
             if($hsum.ADUser){
                 $hsum.IsADDisabled  +=  [boolean]($hsum.ADUser.Enabled -eq $true) ; 
              } else {
@@ -23225,14 +23954,19 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             } else {
                 write-verbose "(no AADUser found)" ;
             } ;
+            #endregion OUTPUT_ACCT_DISABLED ; #*------^ END OUTPUT_ACCT_DISABLED ^------
 
+            #region ISSUE_DETECT ; #*------v ISSUE_DETECT v------
+
+            #region SPLITBRAIN_NOBRAIN ; #*------v SPLITBRAIN_NOBRAIN v------
+            # do a split-brain/nobrain check
             $smsg = "`n"
             if(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hsum.IsLicensed -AND $hSum.xomailbox -AND $hSum.OPMailbox){
-                <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
+                #OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox
                 $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!" ;
                 $hsum.IsSplitBrain  +=  $true ;
             }elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND -not($hsum.IsLicensed) -AND $hSum.xomailbox -AND $hSum.OPMailbox){
-                <#OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#>
+                #OPRcp, xorcp, OPMailbox, OPRemoteMailbox, xoMailbox#
                 $smsg += "SPLITBRAIN!:$($hSum.ADUser.userprincipalname).IsLic'd & has *BOTH* xoMbx & opMbx!`nAND is *UNLICENSED!*" ;
                 $hsum.IsSplitBrain  +=  $true ;
             } elseif(($hsum.xoRcp.RecipientTypeDetails -match '(UserMailbox|MailUser)') -AND $hsum.IsLicensed -AND -not($hSum.xomailbox) -AND -not($hSum.OPMailbox)){
@@ -23242,23 +23976,45 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 $smsg += "NOBRAIN! *WO* LICENSE! (TERM?):$($hSum.ADUser.userprincipalname) NOT licensed'd &  has *NEITHER* xoMbx OR opMbx!" ;
                 $hsum.IsNoBrain  +=  $true ;
             } elseif($hsum.IsLicensed -eq $false){
-                $smsg += "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
-                
+                # 12:37 PM 12/26/2024 ACCOMOD UNlic'd non-user mbxs (normal)
+                if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){
+                    $smsg += "$($hSum.ADUser.userprincipalname) Is RecipientTypeDetails:$($hsum.xoRcp.RecipientTypeDetails) _expected unlicensed_" ;
+                } ELSE { 
+                    $smsg += "$($hSum.ADUser.userprincipalname) Is *UNLICENSED*!" ;
+                } ; 
                 $hsum.IsLicensed  +=  $false ;
             } elseif($hsum | ?{-not $_.ADUser -AND $_.AADUser -AND $_.xomailbox -AND -not $_.opMailbox -AND -not $_.opRemoteMailbox}){
                 # 3:54 PM 10/16/2024 add cloud-first VEN|INT|AA|HH detect
                 $smsg += "LICENSED AADUSER CLOUD-FIRST XOMAILBOX  (No ADUser, No OPMailbox, No OPRemoteMailbox)~" ; 
             } ELSE { } ;
 
-            if($hsum.IsSplitBrain -OR $hsum.IsNoBrain -OR -not $hsum.IsLicensed){
+            # conditional w-w, w-h block on status
+            #if($hsum.IsSplitBrain -OR $hsum.IsNoBrain -OR (-not $hsum.IsLicensed -AND $hsum.xoRcp.RecipientTypeDetails -NOTmatch 'SharedMailbox|RoomMailbox|EquipmentMailbox') ){
+            [boolean[]]$testArray = @(
+                $hsum.IsSplitBrain, 
+                $hsum.IsNoBrain, 
+                (-not $hsum.IsLicensed -AND $hsum.xoRcp.RecipientTypeDetails -NOTmatch 'SharedMailbox|RoomMailbox|EquipmentMailbox')
+            ) ; 
+            #write-verbose "Test: All `$true" ; 
+            #if(($testArray | Where-Object {$_ -eq $true}).Count -eq $testArray.Count){
+            #write-verbose "Test: Count `$true meets threshold" ; 
+            #$tTrues = $testArray.count -3 ; # test is 3 less than total elem count
+            #if(($testArray | Where-Object {$_ -eq $true}).Count -ge $tTrues){write-host "test:$($tTrues)/$($testArray.count) `$true: PASS" } ; 
+            write-verbose "Test: Any `$true above" ; 
+            # the $smsg is populated further up, this is just the output format on the $smsg text
+            if($testArray -contains $true){
+                # w-w
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
             } else { 
+                # w-h
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-            } ; 
+            } ;  
+            #endregion SPLITBRAIN_NOBRAIN ; #*------^ END SPLITBRAIN_NOBRAIN ^------
 
+            #region NOBRAIN_DETAILS ; #*------v NOBRAIN_DETAILS v------
             if($hsum.IsNoBrain){
                 switch ($hSum.Federator) {
                     $TORMeta.adforestname {$rgxTermOU = $TORMeta.rgxTermUserOUs }
@@ -23284,6 +24040,9 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 if($hsum.ADUser){
                     $smsg += "`n----$($hsum.ADUser.distinguishedname)" ;
                     $smsg += "`n--ADUser.Description:$($hsum.ADUser.Description)" ;
+                    if($hsum.ADUser.Info){
+                        $smsg += "`n--ADUser.Info:$($hsum.ADUser.Info)" ;
+                    }
                     if($hsum.IsADDisabled){
                         $smsg += "`n--ADUser:$($hsum.ADUser.samaccountname) is *DISABLED* for logon (likely TERM)" ;
                     } else {
@@ -23300,9 +24059,66 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 $smsg += "`n"
                 write-warning $smsg ;
             } ;
+            #endregion NOBRAIN_DETAILS ; #*------^ END NOBRAIN_DETAILS ^------
 
+            #region RMBX_BLOCKED_XOMBX ; #*------v RMBX_BLOCKED_XOMBX v------
+            # 2:34 PM 1/9/2025 test for 886258, blocked license-xoMailbox mount issue
+            [boolean[]]$testArray = @(
+                ($hsum.oprcp.recipienttypedetails -eq 'RemoteUserMailbox'),
+                ($hsum.xorcp.recipienttypedetails -eq 'Mailuser'),
+                (-not $hsum.xoMailbox),
+                $hsum.AADUser,
+                $hsum.ADUser,
+                $hsum.isDirSynced,
+                ($hsum.IsNoBrain -eq 1),
+                (-not $hsum.IsLicensed),
+                $hsum.opRemoteMailbox.exchangeguid,
+                $hsum.opRemoteMailbox.remoteroutingaddress    
+            ) ;  
+            # test variants: eval patterns of $true/$false
+            #write-verbose "Test: Count `$true meets threshold" ;
+            #$nTrues = $testArray.count -3 ; # test is 3 less than total elem count
+            #if(($testArray | Where-Object {$_ -eq $true}).Count -ge $nTrues){write-verbose "test:$($nTrues)/$($testArray.count) `$true: PASS" } ;
+            #write-verbose "Test: Any `$true above" ;
+            #if($testArray -contains $true){ # -OR clause
+            write-verbose "Test: All `$true" ; # -AND clause
+            if(($testArray | Where-Object {$_ -eq $true}).Count -eq $testArray.Count){
+                $hsAlertMsg = @"
+User has:
+- OPRmbx and no XoMailbox!
+- Dirsynced AADUser & ADUser
+- Detects as NoBrain (neither OP or xo Mailbox)
+- is not Licensed
+- And Rmbx has populated ExchangeGuid & RemoteRoutingAddress
+(against Mailbox that doesn't currently *exist*
+with email address that also doesn't currently *exist)
+If this matches Incident # 886258:
+- if Licensed, the xoMailbox will never mount
+    sits 18h+ in status: `"We are preparing a mailbox for the user.`"
+- Fix: in that condition is to:
+    1. *Remove* the OpRemoteMailbox
+    2. Permit ADC replication to replicate, and wait for xoMailbox to mount
+    3. Create a new matched OpRmbx with the RemoteMountingAddress and xoMailbox.ExchangeGuid, copied to the OpRmbx.Exchangeguid
+    4. Verify if any CA5 setting is missing/required to properly steer primarysmtpaddress
+## Detailed status:
+### get-RemoteMailbox:
+$(($hsum.opRemoteMailbox | fl 'Name','RecipientTypeDetails','RemoteRecipientType','exchangeguid','PrimarySmtpAddress','RemoteRoutingAddress' | fl |out-string).trim())
+### Cloud: get-xoRecipient:
+$(($hsum.xorcp | fl 'RecipientType','RecipientTypeDetails','PrimarySmtpAddress','Alias' |out-string).trim())
+- SMTP EmailAddresses:
+$(($hsum.xorcp | select -expand emailaddresses | ?{$_ -match 'smtp:'} | sort |out-string).trim())
+### DirSync-settings:
+opRemoteMailbox.exchangeguid.guid:`t$($hsum.opRemoteMailbox.exchangeguid.guid)
+opRemoteMailbox.RemoteRoutingAddress:`t$($hsum.opRemoteMailbox.RemoteRoutingAddress.guid)
+"@ ;        
+                $smsg = $hsAlertMsg ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;  
+            }
+            #endregion RMBX_BLOCKED_XOMBX ; #*------^ END RMBX_BLOCKED_XOMBX ^------
+            #endregion ISSUE_DETECT ; #*------^ END ISSUE_DETECT ^------
 
-
+            #region WRITE_OUTPUT ; #*------v WRITE_OUTPUT v------
             if($outObject){
                 if($PSCmdlet.MyInvocation.ExpectingInput){
                     write-verbose "(pipeline input, skipping aggregator, dropping into pipeline)" ;
@@ -23315,8 +24131,10 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 $Rpt += New-Object PSObject -Property $hSum ;
                 $Rpt | export-clixml -Path $ofile -Depth 100 ;
             } ;
+            #endregion WRITE_OUTPUT ; #*------^ END WRITE_OUTPUT ^------
             write-host -foregroundcolor green $sBnr.replace('=v','=^').replace('v=','^=') ;
-        } ;
+
+        } ; # loop-E $users
         #endregion PIPELINE_PROCESSINGLOOP ; #*------^ END PIPELINE_PROCESSINGLOOP ^------
 
     } # PROC-E
@@ -26721,8 +27539,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUlddKIRKrI47ub9fcTV4+u8t2
-# 782gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUTWpggkhgZj0PMz5pt9uDmtbR
+# yMWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -26737,9 +27555,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTfWzaE
-# JxdMgbx1jH9j+EyucXyY8TANBgkqhkiG9w0BAQEFAASBgHIEq7/F+Yf0cccq/i+P
-# bZAAzk1m+ztMqs8Q1qmHC40jrxAZOZC6AWrHslwDPzHhSRPESNtrGT+59xX6cJoi
-# ZVeX8SnmnN8S+CMgnV/MFPt+CpDse7LFzY3ss7u/tg9hvoyWWMpJxRqXlnb8Hvbl
-# 950c2aWaRPBj16OuOiaNeYdf
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQniMUF
+# zSrYQewvsF3VVy2IHQax6DANBgkqhkiG9w0BAQEFAASBgJVcHluvaOPrtWF+20VO
+# H3z6a+077Etd8NNSZ4mMcBDS2jJJTtG6INQmZlDyuWk7JFlRJoAkkWCTuOD7PisB
+# uoYbLeFZ7Rwa2+uW4LHDGGDia85Ibo2QtjfjM5p9VdtdCVNRCyZ3dJ661uFIA3zH
+# OA7uW9BAHmcBvBtLVA0WSGqY
 # SIG # End signature block

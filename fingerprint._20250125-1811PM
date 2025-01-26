@@ -1477,7 +1477,6 @@ resolve-user:getQuotaUsage
 resolve-user:Quota
 resolve-user:getPerms
 resolve-user:Perms
-resolve-user:getPermissions
 resolve-user:rgxAccentedNameChars
 resolve-user:TenOrg
 resolve-user:Credential
