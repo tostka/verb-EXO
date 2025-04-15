@@ -18,6 +18,17 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 10:55 AM 4/15/2025 updated added param -ResolveForwards:
+        -  to expand MailContacts into object that forwards the contact (net of MsgTracese that show the contact as a leaf recipient, informs *who* forwarded to the contact) ; 
+        - new func: resolve-RMbxForwards() pulls all Rmbxs w ForwardingAddress populated, 
+            grcps the Forward & builds an indexed hash to look up the primarysmtpAddress of the forwarding target, against  the detail of the forwarding mailbox 
+            (for -ResolveForwards lookup speed, run a series of MailContact addresses through, and it only has to build the hash once, recycling the hash for the full set)
+        - Also adds extra returned properties: opMailContact,opContactForwards,xoMailContact,xoMailboxForwardingAddress,xoContactForwards
+        - made normal MailContact rcp exclusion conditional: exempts when running -ResolveForwards
+        - Also expanded rmbx/opmbx/xombx to expand and fully report ForwardingAddress targeted rcp object
+        - spliced in new resolve-Enviornment() & Start-Log code to match; working: works
+        
+    * 3:21 PM 4/12/2025 usable for now ; WIP implemented initial attempt at getting Forwarded MailContacts coded, still throwing odd errors, tho it completes, run against 3  contact addresess.
     * 12:40 PM 1/16/2025 UPDATED cbh WITH DETAILED PARAM DESC & OUTPUT SAMPLES ; 
          fixed missing -getMobile support in the force trailing pass; fixed mis applied $hSum.xoMapiStats for proper metrics
     * 4:41 PM 1/9/2025 rebuffered in latest Server Connections, found that the 
@@ -268,6 +279,8 @@ function resolve-user {
     switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]
     .PARAMETER getPerms
     switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]
+    .PARAMETER ResolveForwards
+    switch to resolve MailContact email addresses against the population of forwarded RemoteMailbox objects(XO-only)[-ResolveForwards]
     .PARAMETER rgxAccentedNameChars
     Regular Expression that identifies input 'user' strings that should have diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]
     .PARAMETER TenOrg
@@ -506,6 +519,8 @@ function resolve-user {
         [Parameter(HelpMessage="switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]")]
             [Alias('Perms','getPermissions')]
             [switch]$getPerms,
+        [Parameter(HelpMessage="switch to resolve MailContact email addresses against the population of forwarded RemoteMailbox objects(XO-only)[-ResolveForwards]")]
+            [switch]$ResolveForwards,
         [Parameter(HelpMessage="Regular Expression that identifies input 'user' strings that should have diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]")]
             [ValidateNotNullOrEmpty()]
             [regex]$rgxAccentedNameChars = "[^a-zA-Z0-9\s\.\(\)\{\}\/\&\$\#\@\,\`"\'\’\:\–_-]",
@@ -538,43 +553,35 @@ function resolve-user {
     BEGIN{
         #region CONSTANTS_AND_ENVIRO #*======v CONSTANTS_AND_ENVIRO v======
         #region ENVIRO_DISCOVER ; #*------v ENVIRO_DISCOVER v------
-        $Verbose = ($VerbosePreference -eq 'Continue') ; 
-        # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
-        $rPSCmdlet = $PSCmdlet ; 
-        $rPSScriptRoot = $PSScriptRoot ; 
-        $rPSCommandPath = $PSCommandPath ; 
-        $rMyInvocation = $MyInvocation ; 
+        $Verbose = [boolean]($VerbosePreference -eq 'Continue') ; 
+        $rPSCmdlet = $PSCmdlet ; # an object that represents the cmdlet or advanced function that's being run. Available on functions w CmdletBinding (& $args will not be available). (Blank on non-CmdletBinding/Non-Adv funcs).
+        $rPSScriptRoot = $PSScriptRoot ; # the full path of the executing script's parent directory., PS2: valid only in script modules (.psm1). PS3+:it's valid in all scripts. (Funcs: ParentDir of the file that hosts the func)
+        $rPSCommandPath = $PSCommandPath ; # the full path and filename of the script that's being run, or file hosting the funct. Valid in all scripts.
+        $rMyInvocation = $MyInvocation ; # populated only for scripts, function, and script blocks.
+        # - $MyInvocation.MyCommand.Name returns name of a function, to identify the current command,  name of the current script (pop'd w func name, on Advfuncs)
+        # - Ps3+:$MyInvocation.PSScriptRoot : full path to the script that invoked the current command. The value of this property is populated only when the caller is a script (blank on funcs & Advfuncs)
+        # - Ps3+:$MyInvocation.PSCommandPath : full path and filename of the script that invoked the current command. The value of this property is populated only when the caller is a script (blank on funcs & Advfuncs)
+        #     ** note: above pair contain information about the _invoker or calling script_, not the current script
         $rPSBoundParameters = $PSBoundParameters ; 
-        [array]$score = @() ; 
-        if($rPSCmdlet.MyInvocation.InvocationName){
-            if($rPSCmdlet.MyInvocation.InvocationName -match '\.ps1$'){
-                $score+= 'ExternalScript' 
-            }elseif($rPSCmdlet.MyInvocation.InvocationName  -match '^\.'){
-                write-warning "dot-sourced invocation detected!:$($rPSCmdlet.MyInvocation.InvocationName)`n(will be unable to leverage script path etc from MyInvocation objects)" ; 
-                # dot sourcing is implicit scripot exec
-                $score+= 'ExternalScript' ; 
-            } else {$score+= 'Function' };
-        } ; 
-        if($rPSCmdlet.CommandRuntime){
-            if($rPSCmdlet.CommandRuntime.tostring() -match '\.ps1$'){$score+= 'ExternalScript' } else {$score+= 'Function' }
-        } ; 
-        $score+= $rMyInvocation.MyCommand.commandtype.tostring() ; 
-        $grpSrc = $score | group-object -NoElement | sort count ;
-        if( ($grpSrc |  measure | select -expand count) -gt 1){
-            write-warning  "$score mixed results:$(($grpSrc| ft -a count,name | out-string).trim())" ;
-            if($grpSrc[-1].count -eq $grpSrc[-2].count){
-                write-warning "Deadlocked non-majority results!" ;
-            } else {
-                $runSource = $grpSrc | select -last 1 | select -expand name ;
-            } ;
-        } else {
-            write-verbose "consistent results" ;
-            $runSource = $grpSrc | select -last 1 | select -expand name ;
-        };
-        write-verbose  "Calculated `$runSource:$($runSource)" ;
-        'score','grpSrc' | get-variable | remove-variable ; # cleanup temp varis
-        ${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ; # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
-        #region PsParams ; #*------v PsParams v------
+        # splatted resolve-EnvironmentTDO CALL: 
+        $pltRvEnv=[ordered]@{
+            PSCmdletproxy = $rPSCmdlet ; 
+            PSScriptRootproxy = $rPSScriptRoot ; 
+            PSCommandPathproxy = $rPSCommandPath ; 
+            MyInvocationproxy = $rMyInvocation ;
+            PSBoundParametersproxy = $rPSBoundParameters
+            verbose = [boolean]($PSBoundParameters['Verbose'] -eq $true) ; 
+        } ;
+        write-verbose "(Purge no value keys from splat)" ; 
+        $mts = $pltRVEnv.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 ; 
+        $smsg = "resolve-EnvironmentTDO w`n$(($pltRVEnv|out-string).trim())" ; 
+        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        $rvEnv = resolve-EnvironmentTDO @pltRVEnv ; 
+        $smsg = "`$rvEnv returned:`n$(($rvEnv |out-string).trim())" ; 
+        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        <#
+        #region PsParams ; #*------v PSPARAMS v------
         $PSParameters = New-Object -TypeName PSObject -Property $rPSBoundParameters ;
         # DIFFERENCES $PSParameters vs $PSBoundParameters:
         # - $PSBoundParameters: System.Management.Automation.PSBoundParametersDictionary (native obj)
@@ -585,21 +592,7 @@ function resolve-user {
         # CANNOT use as a @splat to push through (it's a cobj)
         write-verbose "`$rPSBoundParameters:`n$(($rPSBoundParameters|out-string).trim())" ;
         # pre psv2, no $rPSBoundParameters autovari to check, so back them out:
-        if($rPSCmdlet.MyInvocation.InvocationName){
-            if($rPSCmdlet.MyInvocation.InvocationName  -match '^\.'){
-                $smsg = "detected dot-sourced invocation: Skipping `$PSCmdlet.MyInvocation.InvocationName-tied cmds..." ; 
-                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-            } else { 
-                write-verbose 'Collect all non-default Params (works back to psv2 w CmdletBinding)'
-                $ParamsNonDefault = (Get-Command $rPSCmdlet.MyInvocation.InvocationName).parameters | Select-Object -expand keys | Where-Object{$_ -notmatch '(Verbose|Debug|ErrorAction|WarningAction|ErrorVariable|WarningVariable|OutVariable|OutBuffer)'} ;
-            } ; 
-        } else { 
-            $smsg = "(blank `$rPSCmdlet.MyInvocation.InvocationName, skipping Parameters collection)" ; 
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        } ; 
+        #>
         <# recycling $rPSBoundParameters into @splat calls: (can't use $psParams, it's a cobj, not a hash!)
         # rgx for filtering $rPSBoundParameters for params to pass on in recursive calls (excludes keys matching below)
         $rgxBoundParamsExcl = '^(Name|RawOutput|Server|Referrer)$' ; 
@@ -618,75 +611,8 @@ function resolve-user {
             throw $smsg ;
         };     
         #>
-        #endregion PsParams ; #*------^ END PsParams ^------
-        <#
-        # Debugger:proxy automatic variables that aren't directly accessible when debugging ; 
-        $rPSScriptRoot = $PSScriptRoot ; 
-        $rPSCommandPath = $PSCommandPath ; 
-        $rMyInvocation = $MyInvocation ; 
-        $rPSBoundParameters = $PSBoundParameters ; 
-        #>
-        $ScriptDir = $scriptName = '' ;     
-        if($ScriptDir -eq '' -AND ( (get-variable -name rPSScriptRoot -ea 0) -AND (get-variable -name rPSScriptRoot).value.length)){
-            $ScriptDir = $rPSScriptRoot
-        } ; # populated rPSScriptRoot
-        if( (get-variable -name rPSCommandPath -ea 0) -AND (get-variable -name rPSCommandPath).value.length){
-            $ScriptName = $rPSCommandPath
-        } ; # populated rPSCommandPath
-        if($ScriptDir -eq '' -AND $runSource -eq 'ExternalScript'){$ScriptDir = (Split-Path -Path $rMyInvocation.MyCommand.Source -Parent)} # Running from File
-        # when $runSource:'Function', $rMyInvocation.MyCommand.Source is empty,but on functions also tends to pre-hit from the rPSCommandPath entFile.FullPath ;
-        if( $scriptname -match '\.psm1$' -AND $runSource -eq 'Function'){
-            write-host "MODULE-HOMED FUNCTION:Use `$CmdletName to reference the running function name for transcripts etc (under a .psm1 `$ScriptName will reflect the .psm1 file  fullname)"
-            if(-not $CmdletName){write-warning "MODULE-HOMED FUNCTION with BLANK `$CmdletNam:$($CmdletNam)" } ;
-        } # Running from .psm1 module
-        if($ScriptDir -eq '' -AND (Test-Path variable:psEditor)) {
-            write-verbose "Running from VSCode|VS" ; 
-            $ScriptDir = (Split-Path -Path $psEditor.GetEditorContext().CurrentFile.Path -Parent) ; 
-                if($ScriptName -eq ''){$ScriptName = $psEditor.GetEditorContext().CurrentFile.Path }; 
-        } ;
-        if ($ScriptDir -eq '' -AND $host.version.major -lt 3 -AND $rMyInvocation.MyCommand.Path.length -gt 0){
-            $ScriptDir = $rMyInvocation.MyCommand.Path ; 
-            write-verbose "(backrev emulating `$rPSScriptRoot, `$rPSCommandPath)"
-            $ScriptName = split-path $rMyInvocation.MyCommand.Path -leaf ;
-            $rPSScriptRoot = Split-Path $ScriptName -Parent ;
-            $rPSCommandPath = $ScriptName ;
-        } ;
-        if ($ScriptDir -eq '' -AND $rMyInvocation.MyCommand.Path.length){
-            if($ScriptName -eq ''){$ScriptName = $rMyInvocation.MyCommand.Path} ;
-            $ScriptDir = $rPSScriptRoot = Split-Path $rMyInvocation.MyCommand.Path -Parent ;
-        }
-        if ($ScriptDir -eq ''){throw "UNABLE TO POPULATE SCRIPT PATH, EVEN `$rMyInvocation IS BLANK!" } ;
-        if($ScriptName){
-            if(-not $ScriptDir ){$ScriptDir = Split-Path -Parent $ScriptName} ; 
-            $ScriptBaseName = split-path -leaf $ScriptName ;
-            $ScriptNameNoExt = [system.io.path]::GetFilenameWithoutExtension($ScriptName) ;
-        } ; 
-        # blank $cmdlet name comming through, patch it for Scripts:
-        if(-not $CmdletName -AND $ScriptBaseName){
-            $CmdletName = $ScriptBaseName
-        }
-        # last ditch patch the values in if you've got a $ScriptName
-        if($rPSScriptRoot.Length -ne 0){}else{ 
-            if($ScriptName){$rPSScriptRoot = Split-Path $ScriptName -Parent }
-            else{ throw "Unpopulated, `$rPSScriptRoot, and no populated `$ScriptName from which to emulate the value!" } ; 
-        } ; 
-        if($rPSCommandPath.Length -ne 0){}else{ 
-            if($ScriptName){$rPSCommandPath = $ScriptName }
-            else{ throw "Unpopulated, `$rPSCommandPath, and no populated `$ScriptName from which to emulate the value!" } ; 
-        } ; 
-        if(-not ($ScriptDir -AND $ScriptBaseName -AND $ScriptNameNoExt  -AND $rPSScriptRoot  -AND $rPSCommandPath )){ 
-            throw "Invalid Invocation. Blank `$ScriptDir/`$ScriptBaseName/`ScriptNameNoExt" ; 
-            BREAK ; 
-        } ; 
-        # echo results dyn aligned:
-        $tv = 'runSource','CmdletName','ScriptName','ScriptBaseName','ScriptNameNoExt','ScriptDir','PSScriptRoot','PSCommandPath','rPSScriptRoot','rPSCommandPath' ; 
-        $tvmx = ($tv| Measure-Object -Maximum -Property Length).Maximum * -1 ; 
-        if($silent){}else{
-            #$tv | get-variable | %{  write-host -fore yellow ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; # w-h
-            $tv | get-variable | %{  write-verbose ("`${0,$tvmx} : {1}" -f $_.name,$_.value) } ; # w-v
-        }
-        'tv','tvmx'|get-variable | remove-variable ; # cleanup temp varis        
-
+        #endregion PsParams ; #*------^ END PSPARAMS ^------
+    
         #endregion ENVIRO_DISCOVER ; #*------^ END ENVIRO_DISCOVER ^------
         #region TLS_LATEST_FORCE ; #*------v TLS_LATEST_FORCE v------
         $CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
@@ -990,6 +916,39 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         #region FUNCTIONS ; #*======v FUNCTIONS v======
 
         # 2b4() 2b4c() & fb4() are located up in the CONSTANTS_AND_ENVIRO\ENCODED_CONTANTS block ( to convert Constant assignement strings)
+        
+        #*------v Function resolve-RMbxForwards v------
+        function resolve-RMbxForwards(){
+            <#
+            .SYNOPSIS
+            Resolves out all RemoteMailboxes (OnPrem) with ForwardingAddress configured; converts the mailboxes into a hashtable keyed on ForwardingAddress. Returns the hash to the pipeline
+            .EXAMPLE
+            PS> $hshForwards = resolve-RMbxForwards ; 
+            PS> $smsg = "Recipient:$($tid) => $($hshForwards[$tid])" ; 
+            PS> write-host $smsg ;
+            .NOTES
+            VERSION:
+            * 3:18 PM 4/12/2025 init
+            #>
+            write-host "get-remotemailbox  -ResultSize unlimited | ?{`$_.ForwardingAddress}..." ; 
+            $fwdRmbxs = get-remotemailbox  -ResultSize unlimited | ?{$_.ForwardingAddress} ; 
+            $hshForwards = @{} ;  
+            write-host "[" ; 
+            $forwardedSummary = $fwdRmbxs |%{
+                write-host -NoNewline '.'
+                $target = $_ ; 
+                $smsg = "$(($target | ft -a primarysmtpaddress,forwardingaddress|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                $fwd = $null; 
+                if($fwd = get-recipient -id $target.ForwardingAddress -resultsize 1 | select -expand primarysmtpaddress){
+                   $hshForwards[$fwd] = $target ; 
+                } ; 
+            } ; 
+            write-host "]" ; 
+            $hshForwards | write-output 
+        } ; 
+        #*------^ END Function resolve-RMbxForwards ^------
 
         #endregion FUNCTIONS ; #*======^ END FUNCTIONS ^======
 
@@ -1577,9 +1536,9 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         #region PIPELINE_PROCESSINGLOOP ; #*------v PIPELINE_PROCESSINGLOOP v------
         foreach ($usr in $users){
             
-            #region START-LOG #*======v START-LOG OPTIONS v======
+            #region START-LOG #*======v START_LOG_OPTIONS v======
             $useSLogHOl = $true ; # one or 
-            $useSLogSimple = $false ; # ... the other
+            $useSLogSimple = $false ; #... the other
             $useTransName = $false ; # TRANSCRIPTNAME
             $useTransPath = $false ; # TRANSCRIPTPATH
             $useTransRotate = $false ; # TRANSCRIPTPATHROTATE
@@ -1603,10 +1562,32 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 #$pltSL.Tag = $ModuleName ; 
                 #$pltSL.Tag = "$($ticket)-$($usr)" ; 
                 $pltSL.Tag = $((@($ticket,$usr) |?{$_}) -join '-')
-                if($script:rPSCommandPath){ $prxPath = $script:rPSCommandPath }
-                elseif($script:PSCommandPath){$prxPath = $script:PSCommandPath}
-                if($rMyInvocation.MyCommand.Definition){$prxPath2 = $rMyInvocation.MyCommand.Definition }
-                elseif($MyInvocation.MyCommand.Definition){$prxPath2 = $MyInvocation.MyCommand.Definition } ; 
+                <#
+                if($rPSBoundParameters.keys){ # alt: leverage $rPSBoundParameters hash
+                    $sTag = @() ; 
+                    #$pltSL.TAG = $((@($rPSBoundParameters.keys) |?{$_}) -join ','); # join all params
+                    if($rPSBoundParameters['Summary']){ $sTag+= @('Summary') } ; # build elements conditionally, string
+                    if($rPSBoundParameters['Number']){ $sTag+= @("Number$($rPSBoundParameters['Number'])") } ; # and keyname,value
+                    $pltSL.Tag = $sTag -join ',' ; 
+                } ; 
+                #>
+                if($rvEnv.isScript){
+                    write-host "`$script:PSCommandPath:$($script:PSCommandPath)" ;
+                    write-host "`$PSCommandPath:$($PSCommandPath)" ;
+                    if($rvEnv.PSCommandPathproxy){ $prxPath = $rvEnv.PSCommandPathproxy }
+                    elseif($script:PSCommandPath){$prxPath = $script:PSCommandPath}
+                    elseif($rPSCommandPath){$prxPath = $rPSCommandPath} ; 
+                } ; 
+                if($rvEnv.isFunc){
+                    if($rvEnv.FuncDir -AND $rvEnv.FuncName){
+                           $prxPath = join-path -path $rvEnv.FuncDir -ChildPath $rvEnv.FuncName ; 
+                    } ; 
+                } ; 
+                if(-not $rvEnv.isFunc){
+                    # under funcs, this is the scriptblock of the func, not a path
+                    if($rvEnv.MyInvocationproxy.MyCommand.Definition){$prxPath2 = $rvEnv.MyInvocationproxy.MyCommand.Definition }
+                    elseif($rvEnv.MyInvocationproxy.MyCommand.Definition){$prxPath2 = $rvEnv.MyInvocationproxy.MyCommand.Definition } ; 
+                } ; 
                 if($prxPath){
                     if(($prxPath -match $rgxPSAllUsersScope) -OR ($prxPath -match $rgxPSCurrUserScope)){
                         $bDivertLog = $true ; 
@@ -1617,9 +1598,9 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         $smsg += " context script/module, divert logging into [$budrv]:\scripts" 
                         write-verbose $smsg  ;
                         if($bDivertLog){
-                            if((split-path $prxPath -leaf) -ne $cmdletname){
+                            if((split-path $prxPath -leaf) -ne $rvEnv.CmdletName){
                                 # function in a module/script installed to allusers|cu - defer name to Cmdlet/Function name
-                                $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
+                                $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($rvEnv.CmdletName).ps1") ;
                             } else {
                                 # installed allusers|CU script, use the hosting script name
                                 $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath -leaf)) ;
@@ -1628,21 +1609,21 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     } else {
                         $pltSL.Path = $prxPath ;
                     } ;
-               }elseif($prxPath2){
+                }elseif($prxPath2){
                     if(($prxPath2 -match $rgxPSAllUsersScope) -OR ($prxPath2 -match $rgxPSCurrUserScope) ){
-                         $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath2 -leaf)) ;
+                            $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath2 -leaf)) ;
                     } elseif(test-path $prxPath2) {
                         $pltSL.Path = $prxPath2 ;
-                    } elseif($cmdletname){
-                        $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
+                    } elseif($rvEnv.CmdletName){
+                        $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($rvEnv.CmdletName).ps1") ;
                     } else {
-                        $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$CMDLETNAME, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
+                        $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$rvEnv.CmdletName, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug 
                         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         BREAK ;
                     } ; 
                 } else{
-                    $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$CMDLETNAME, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
+                    $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$rvEnv.CmdletName, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug 
                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     BREAK ;
@@ -1684,6 +1665,151 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 } ;
             } ; 
             #endregion START-LOG-HOLISTIC #*------^ END START-LOG-HOLISTIC ^------
+            #region START-LOG-SIMPLE #*------v START-LOG-SIMPLE v------
+            if($useSLogSimple){
+                $pltSL=@{ NoTimeStamp=$false ; Tag="$($ticket)-$($TenOrg)-LASTPASS-" ; showdebug=$($showdebug) ; whatif=$($whatif) ; Verbose=$($VerbosePreference -eq 'Continue') ; } ;
+                # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
+                #$pltSL=@{ NoTimeStamp=$false ; Tag="$($ticket)-$($TenOrg)-LASTPASS-" ; showdebug=$($showdebug) ; whatif=$($WhatIfPreference) ; Verbose=$($VerbosePreference -eq 'Continue') ; } ;
+                # overrides
+                #$pltSL.NoTimeStamp=$true ; 
+                #$pltSL.Tag = $null ; Tag="$($ticket)-$($TenOrg)-LASTPASS-$($users -join ',')" ;Tag="$($ticket)-$($TenOrg)-LASTPASS-" ; showdebug=$($showdebug) ;
+    
+                if($forceall){
+                    #$pltSL.Tag += "$($TenOrg)-ForceAll" ;
+                    $pltSL.Tag += "-ForceAll" ;
+                } else {
+                    #$pltSL.Tag += "($TenOrg)-LASTPASS" ;
+                    $pltSL.Tag += "-LASTPASS" ;
+                }
+                if((get-command -Name start-log).source -eq 'verb-transcript'){
+                    get-module verb-transcript | remove-module ;
+                } ;
+                if($rvEnv.isScript){
+                    if($rvEnv.PSCommandPathproxy){   $logspec = start-Log -Path $rvEnv.PSCommandPathproxy  @pltSL }
+                    if($PSCommandPath){   $logspec = start-Log -Path $PSCommandPath  @pltSL }
+                    else {    $logspec = start-Log -Path ($rvEnv.MyInvocationproxy.MyCommand.Definition)  @pltSL ;  } ;
+                } ; 
+                if($rvEnv.isFunc){
+                    if($rvEnv.FuncDir -AND $rvEnv.FuncName){
+                            $logspec = start-Log -Path (join-path -path $rvEnv.FuncDir -ChildPath $rvEnv.FuncName) ; 
+                    } else {
+                        write-warning "Missing either `$rvEnv.FuncDir -OR `$rvEnv.FuncName!" ; 
+                    } ;  
+                } ; 
+                if($logspec){
+                    $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+                    $logging=$logspec.logging ;
+                    $logfile=$logspec.logfile ;
+                    $transcript=$logspec.transcript ;
+                    #Configure default logging from parent script name
+                    if(Test-TranscriptionSupported){
+                        # throwing up on other running transcripts (out of scope)
+                        $error.clear() ;
+                        TRY {
+                            $startResults = start-Transcript -Path $transcript #-Verbose:($VerbosePreference -eq 'Continue')
+                            if($startResults){
+                                $smsg = "start-transcript:$($startResults)" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            } ; 
+                        } CATCH {
+                            $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+                            $startResults = start-Transcript -Path $transcript #-Verbose:($VerbosePreference -eq 'Continue')
+                            if($startResults){
+                                $smsg = "start-transcript:$($startResults)" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            } ; 
+                            Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
+                            Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                        } ;
+                    } else { write-warning "$($host.name) v$($host.version.major) does *not* support Transcription!" } ;
+                } else {throw "Unable to configure logging!" } ;
+            } ; 
+            #endregion START-LOG-SIMPLE #*------^ END START-LOG SIMPLE ^------
+            #region TRANSCRIPTNAME ; #*------v TRANSCRIPT FROM SCRIPT/MODULENAME v------
+            if($useTransName){
+                # ISSUES with use of start-log(), even local, deps on Remove-StringDiacritic() etc, that are in dep modules, so alt: (see 7psOFile for other alts)
+                if($rvEnv.isScript){
+                    $transcript = "$($rvEnv.ScriptDir)\logs" ; 
+                } elseif($rvEnv.isFunc -AND $rvEnv.FuncDir){
+                    $transcript = "$($rvEnv.FuncDir)\logs" ; 
+                } ; 
+                if(-not (test-path -path $transcript)){ mkdir $transcript -verbose:$true ; } ; 
+                # - FOR FUNCTIONS, build from ${CmdletName}
+                #$transcript +=  "\$($rvEnv.CmdletName)" ;
+                #$transcript +=  "\$($rvEnv.FuncName)" ; 
+                # - OR FOR SCRIPTS, use $rvEnv.ScriptBaseName/$rvEnv.ScriptNameNoExt (which reflect name of hosting .psm1/.ps1 a function was loaded from)
+                $transcript +=  "\$($rvEnv.ScriptNameNoExt)" ;
+                <# - OR PULLING DIRECTLY FROM THE INVOCATION OBJ
+                $transcript = join-path -path (Split-Path -parent $rvEnv.MyInvocationproxy.MyCommand.Definition) -ChildPath "logs" ;
+                if(-not (test-path -path $transcript)){ write-host "Creating missing log dir $($transcript)..." ; mkdir $transcript -verbose:$true ; } ;
+                $transcript = join-path -path $transcript -childpath "$([system.io.path]::GetFilenameWithoutExtension($rvEnv.MyInvocationproxy.InvocationName))"  ;
+                #>
+                # -- common v
+                if(get-variable whatif -ea 0){
+                    $transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
+                    if(-not $whatif){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
+                } ; 
+                # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
+                <#if(get-variable WhatIfPreference -ea 0){
+                    $transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
+                    if(-not $WhatIfPreference){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
+                } ; 
+                #>
+                write-verbose "set dep varis for Write-Log() use" ; 
+                $logfile = $transcript.replace('-trans','-log') ; $logging = $true ; 
+            } ; 
+            #endregion TRANSCRIPTNAME ; #*------^ END TRANSCRIPT FROM SCRIPT/MODULENAME ^------
+            #region TRANSCRIPTPATH ; #*------v TRANSCRIPT FROM A $PATH VARI v------
+            if($useTransPath){
+                $transcript = "$($path.directoryname)\logs" ; 
+                if(-not (test-path -path $transcript)){ write-host "Creating missing log dir $($transcript)..." ; mkdir $ofile -verbose:$true  ; } ;
+                $transcript += "\$($path.basename)"
+                $transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
+                if(get-variable whatif -ea 0){
+                    if(-not $whatif){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
+                } ; 
+                # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
+                <#if(get-variable WhatIfPreference -ea 0){
+                    $transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
+                    if(-not $WhatIfPreference){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
+                } ; 
+                #>
+                $logfile = $transcript.replace('-trans','-log') ; 
+                $logging = $true ; 
+            } ; 
+            #endregion TRANSCRIPTPATH ; #*------^ END TRANSCRIPT FROM A $PATH VARI ^------
+            #region TRANSCRIPTPATHROTATE ; #*------v TRANSCRIPT FROM A $PATH VARI W ROTATION v------
+            if($useTransRotate){
+                # simple root of path'd drive x:\scripts\logs transcript on the functionname
+                $transcript = "$((split-path $path[0]).split('\')[0])\scripts\logs" ; 
+                if(-not (test-path -path $transcript)){ write-host "Creating missing log dir $($transcript)..." ; mkdir $transcript -verbose:$true  ; } ;
+                $transcript += "\$($rvEnv.ScriptNameNoExt)" ; 
+                <#$transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
+                if(get-variable whatif -ea 0){
+                    if(-not $whatif){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
+                } ;
+                #>
+                # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
+                <#if(get-variable WhatIfPreference -ea 0){
+                    $transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
+                    if(-not $WhatIfPreference){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
+                } ; 
+                #>
+                # rotating series of 4 logs named for the base $transcript
+                $transcript += "-transNO.txt" ; 
+                $rotation = (get-childitem $transcript.replace('NO','*')) ; 
+                if(-not $rotation ){
+                    write-verbose "Establishing 4 rotating log files ($transcript)..." ; 
+                    1..4 | foreach-object{echo $null > $transcript.replace('NO',"0$($_)") } ; 
+                    $rotation = (get-childitem $transcript.replace('NO','*')) ;
+                } ;
+                $transcript = $rotation | sort LastWriteTime | select -first 1 | select -expand fullname ; 
+                write-verbose "set dep varis for Write-Log() use" ; 
+                $logfile = $transcript.replace('-trans','-log') ; 
+            } ; 
+            #endregion TRANSCRIPTPATHROTATE ; #*------^ END TRANSCRIPT FROM A $PATH VARI W ROTATION ^------
             #region STARTTRANS ; #*------v STARTTRANSCRIPT v------
             if($useStartTrans){
                 TRY {
@@ -1720,7 +1846,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 } ;
             } ; 
             #endregion STARTTRANS ; #*------^ END STARTTRANSCRIPT ^------
-            #endregion START-LOG #*======^ START-LOG OPTIONS ^======
+            #endregion START-LOG #*======^ START_LOG_OPTIONS ^======
 
             $useLogBuild = $true ;     
             #region LOGBUILD ; #*------v LOGBUILD v------
@@ -1872,7 +1998,14 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 $hsum.add('xoRecipientPermissionGroups',$null) ; 
                 #$hsum.add('xoRecipientPermissionGroupManagedBy',@()) ; 
             }
-
+            # 2:44 PM 4/12/2025 add ResolveForwards Mailcontact/ForwardingAddress resolution
+            if($ResolveForwards){
+                $hsum.add('opMailContact',$null) ;
+                $hsum.add('opContactForwards',$null) ; 
+                $hsum.add('xoMailContact',$null) ;
+                $hsum.add('xoMailboxForwardingAddress',$null) ; 
+                $hsum.add('xoContactForwards',$null) ; 
+            }
             if($usr -match $rgxAccentedNameChars){
                 # 9:36 AM 9/23/2024 pre remove all diacritics & latin chars 
                 #Remove-StringDiacritic -String 'Helen Bräuchle' |Remove-StringLatinCharacters
@@ -1992,21 +2125,42 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             #rx10 -Verbose:$false -silent ;
 
             #region OPRCP_DISCOVERY ; #*------v OPRCP_DISCOVERY v------
-            $smsg = "get-recipient w`n$(($pltGMailObj|out-string).trim())`n...| ?{$_.recipienttypedetails -ne 'MailContact'}" ; 
+            if($resolveForwards){
+                $smsg = "-resolveForwards: (include MailContacts)`nget-recipient w`n$(($pltGMailObj|out-string).trim())`n..." ; 
+            }else{
+                $smsg = "get-recipient w`n$(($pltGMailObj|out-string).trim())`n...| ?{$_.recipienttypedetails -ne 'MailContact'}" ; 
+            } ; 
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-
-            if($hSum.OPRcp=get-recipient @pltGMailObj -ea 0 | select -first $MaxRecips | ?{$_.recipienttypedetails -ne 'MailContact'}){
-                write-verbose "`$hSum.OPRcp found as $($pltGMailObj.filter)" ;
+            
+            #if($hSum.OPRcp=get-recipient @pltGMailObj -ea 0 | select -first $MaxRecips | ?{$_.recipienttypedetails -ne 'MailContact'}){
+            if($hSum.OPRcp=get-recipient @pltGMailObj -ea 0 | select -first $MaxRecips ){
+                if($resolveForwards){
+                    
+                } else { 
+                    $hSum.OPRcp | ?{$_.recipienttypedetails -ne 'MailContact'} ; 
+                } ; 
+                $smsg = "`$hSum.OPRcp found as `n$(($pltGMailObj.GetEnumerator() | ?{$_.key -ne 'ResultSize'}  | ft -a key,value|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                 
             } elseif($isDname -and $hsum.lname) {
                 # put in missing *, hits on mis-spellings 'Spark' matches 'Sparks' w wildcard
                 if($hsum.lname -match "[']"){
-                    $fltr = "recipienttypedetails -ne " + $sQot + "MailContact" + $sQot ; 
-                    $fltr += " -AND displayname -like " + $sQot + $($hsum.lname) + $sQot ;
+                    if(-not $resolveForwards){
+                        $fltr = "recipienttypedetails -ne " + $sQot + "MailContact" + $sQot ; 
+                        $fltr += " -AND displayname -like " + $sQot + $($hsum.lname) + $sQot ;
+                    } else {
+                        $fltr = "displayname -like " + $sQot + $($hsum.lname) + $sQot ;
+                    };
+                    
                 }else {
-                    $fltr = "recipienttypedetails -ne 'MailContact'" ; 
-                    $fltr += " -AND displayname -like '$($hsum.lname)'" ;
+                    if(-not $resolveForwards){
+                        $fltr = "recipienttypedetails -ne 'MailContact'" ; 
+                        $fltr += " -AND displayname -like '$($hsum.lname)'" ;
+                    } else { 
+                        $fltr += "displayname -like '$($hsum.lname)'" ;
+                    } 
                 } ; 
                 if($hsum.fname){
                     # try first 3 of fname first
@@ -2016,33 +2170,71 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         $fltr += " -AND firstName -like '$($hsum.fname.substring(0,3))*'" ; 
                     } ; 
                     
-                    if($hSum.OPRcp=get-recipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
-                        write-verbose "`$hSum.OPRcp found as $($pltGMailObj.filter)" ;
+                    #if($hSum.OPRcp=get-recipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                    if($hSum.OPRcp=get-recipient -filter $fltr -ea 0 | select -first $MaxRecips){
+                        if($resolveForwards){
+                            
+                        } else { 
+                            $hSum.OPRcp = $hSum.OPRcp |?{$_.recipienttypedetails -ne 'MailContact'}
+                        } ;
+                        $smsg = "`$hSum.OPRcp found as `n$(($pltGMailObj.GetEnumerator() | ?{$_.key -ne 'ResultSize'}  | ft -a key,value|out-string).trim())" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                     }elseif($hsum.fname){
                         # retry first initial
                         if($hsum.lname -match "[']"){
-                            $fltr = "recipienttypedetails -ne " + $sQot + "MailContact" + $sQot + " -AND lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ; 
+                            if($resolveForwards){
+                                $fltr = "lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ; 
+                            }else {
+                                $fltr = "recipienttypedetails -ne " + $sQot + "MailContact" + $sQot + " -AND lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ; 
+                            };
                         }else {
-                            $fltr = "recipienttypedetails -ne 'MailContact' -AND lastName -like '$($hsum.lname)*'" ; 
+                            if($resolveForwards){
+                                $fltr = "lastName -like '$($hsum.lname)*'" ; 
+                            }else {
+                                $fltr = "recipienttypedetails -ne 'MailContact' -AND lastName -like '$($hsum.lname)*'" ; 
+                            } ;
                         } ; 
                         if($hsum.fname -match "[']"){
-                            $fltr += " -AND firstName -like " + $sQot + $($hsum.fname.substring(0,1)) + "*" + $sQot ; 
+                                $fltr += " -AND firstName -like " + $sQot + $($hsum.fname.substring(0,1)) + "*" + $sQot ; 
                         }else {
                             $fltr += " -AND firstName -like '$($hsum.fname.substring(0,1))*'" ; 
                         } ; 
                         
-                        if($hSum.OPRcp=get-recipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
-                            write-verbose "`$hSum.OPRcp found as $($pltGMailObj.filter)" ;
+                        #if($hSum.OPRcp=get-recipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                        if($hSum.OPRcp=get-recipient -filter $fltr -ea 0 | select -first $MaxRecips){
+                            if($resolveForwards){}else {
+                                $hSum.OPRcp=$hSum.OPRcp  |?{$_.recipienttypedetails -ne 'MailContact'} ; 
+                            }
+                            $smsg = "`$hSum.OPRcp found as `n$(($pltGMailObj.GetEnumerator() | ?{$_.key -ne 'ResultSize'}  | ft -a key,value|out-string).trim())" ; 
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         }elseif($hsum.lname){
                             # do wildcard lname matches
                             if($hsum.lname -match "[']"){
+                                if($resolveForwards){
+                                    $fltr = "lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ; 
+                                }else {
                                     $fltr = "recipienttypedetails -ne " + $sQot + "MailContact" + $sQot + " -AND lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ; 
+                                }
                             }else {
-                                $fltr = "recipienttypedetails -ne 'MailContact' -AND lastName -like '$($hsum.lname)*'" ; 
+                                if($resolveForwards){
+                                    $fltr = "lastName -like '$($hsum.lname)*'" ; 
+                                }else{
+                                    $fltr = "recipienttypedetails -ne 'MailContact' -AND lastName -like '$($hsum.lname)*'" ; 
+                                }
                             } ; 
                             
-                            if($hSum.OPRcp=get-recipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
-                                write-verbose "`$hSum.OPRcp found as $($pltGMailObj.filter)" ;
+                            #if($hSum.OPRcp=get-recipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                            if($hSum.OPRcp=get-recipient -filter $fltr -ea 0 | select -first $MaxRecips){
+                                if($resolveForwards){
+
+                                }else{
+                                    $hSum.OPRcp=$hSum.OPRcp |?{$_.recipienttypedetails -ne 'MailContact'} ; 
+                                }
+                                $smsg = "`$hSum.OPRcp found as `n$(($pltGMailObj.GetEnumerator() | ?{$_.key -ne 'ResultSize'}  | ft -a key,value|out-string).trim())" ; 
+                                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                             }else{
                                 $smsg = "(Failed to OP:get-recipient on:$($usr))"
                                 if($isDname){$smsg += " or *$($hsum.lname )*"}
@@ -2109,21 +2301,42 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             #if ($useEXOv2) { reconnect-eXO2 @pltRXOC }
             #else { reconnect-EXO @pltRXOC } ;
             #write-host -foreground yellow "get-xoMbx/xMbx: " -nonewline;
-            $smsg = "get-xorecipient w`n$(($pltGMailObj|out-string).trim())`n...| ?{$_.recipienttypedetails -ne 'MailContact'}" ;
+            if($resolveForwards){
+                $smsg = "get-xorecipient w`n$(($pltGMailObj|out-string).trim())`n..." ;
+            } else { 
+                $smsg = "get-xorecipient w`n$(($pltGMailObj|out-string).trim())`n...| ?{$_.recipienttypedetails -ne 'MailContact'}" ;                
+            }
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
-            if($hSum.xoRcp=get-xorecipient @pltGMailObj -ea 0 | select -first $MaxRecips | ?{$_.recipienttypedetails -ne 'MailContact'}){
-                write-verbose "`$hSum.xoRcp found as $($pltGMailObj.filter)" ;
+            #if($hSum.xoRcp=get-xorecipient @pltGMailObj -ea 0 | select -first $MaxRecips | ?{$_.recipienttypedetails -ne 'MailContact'}){
+            if($hSum.xoRcp=get-xorecipient @pltGMailObj -ea 0 | select -first $MaxRecips){
+                if($resolveForwards){
+
+                }else {
+                    $hSum.xoRcp=$hSum.xoRcp  | ?{$_.recipienttypedetails -ne 'MailContact'}
+                }
+                $smsg = "`$hSum.xoRcp found as `n$(($pltGMailObj.GetEnumerator() | ?{$_.key -ne 'ResultSize'}  | ft -a key,value|out-string).trim())" ; 
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                
             } elseif($isDname -and $hsum.lname) {
                 
                 # put in missing *, hits on mis-spellings 'Spark' matches 'Sparks' w wildcard
                 if($hsum.lname -match "[']"){
-                    $fltr = "recipienttypedetails -ne " + $sQot + "MailContact" + $sQot ;
-                    $fltr += " -AND lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ;
+                    if($resolveForwards){
+                        $fltr = "lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ;
+                    }else {
+                        $fltr = "recipienttypedetails -ne " + $sQot + "MailContact" + $sQot ;
+                        $fltr += " -AND lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ;
+                    }
                 }else{
-                    $fltr = "recipienttypedetails -ne 'MailContact'" ;
-                    $fltr += " -AND lastName -like '$($hsum.lname)*'" ;
+                    if($resolveForwards){
+                        $fltr += "lastName -like '$($hsum.lname)*'" ;
+                    }else {
+                        $fltr = "recipienttypedetails -ne 'MailContact'" ;
+                        $fltr += " -AND lastName -like '$($hsum.lname)*'" ;
+                    }
                 } ; 
                 if($hsum.fname){
                     # try first 3 of fname first
@@ -2132,14 +2345,30 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     }else{
                         $fltr += " -AND firstName -like '$($hsum.fname.substring(0,3))*'" ;
                     } ; 
-                    if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
-                        write-verbose "`$hSum.xoRcp found as $($pltGMailObj.filter)" ;
+                    #if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                    if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 | select -first $MaxRecips){
+                        if($resolveForwards){
+
+                        }else {
+                            $hSum.xoRcp=$hSum.xoRcp  |?{$_.recipienttypedetails -ne 'MailContact'}
+                        }
+                        $smsg = "`$hSum.xoRcp found as `n$(($pltGMailObj.GetEnumerator() | ?{$_.key -ne 'ResultSize'}  | ft -a key,value|out-string).trim())" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                     }elseif($hsum.fname){
                         # retry first initial
                         if($hsum.lname -match "[']"){
-                             $fltr = "recipienttypedetails -ne " + $sQot + "MailContact" + $sQot + " -AND lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ;
+                            if($resolveForwards){
+                                $fltr = "lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ;
+                            }else {
+                                $fltr = "recipienttypedetails -ne " + $sQot + "MailContact" + $sQot + " -AND lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ;
+                            }
                         } else { 
-                            $fltr = "recipienttypedetails -ne 'MailContact' -AND lastName -like '$($hsum.lname)*'" ;
+                            if($resolveForwards){
+                                $fltr = "lastName -like '$($hsum.lname)*'" ;
+                            }else{
+                                $fltr = "recipienttypedetails -ne 'MailContact' -AND lastName -like '$($hsum.lname)*'" ;
+                            }
                         }
                         if($hsum.fname -match "[']"){
                             $fltr += " -AND firstName -like " + $sQot + $($hsum.fname.substring(0,1)) + "*" + $sQot ;
@@ -2147,17 +2376,40 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                             $fltr += " -AND firstName -like '$($hsum.fname.substring(0,1))*'" ;
                         } ; 
 
-                        if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
-                            write-verbose "`$hSum.xoRcp found as $($pltGMailObj.filter)" ;
+                        #if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                        if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 | select -first $MaxRecips ){
+                            if($resolveForwards){
+
+                            }else {
+                                $hSum.xoRcp=$hSum.xoRcp |?{$_.recipienttypedetails -ne 'MailContact'} ; 
+                            } ; 
+                            $smsg = "`$hSum.xoRcp found as `n$(($pltGMailObj.GetEnumerator() | ?{$_.key -ne 'ResultSize'}  | ft -a key,value|out-string).trim())" ; 
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         }elseif($hsum.lname){
                             # do wildcard lname matches
                             if($hsum.fname -match "[']"){
-                                $fltr = "recipienttypedetails -ne " + $sQot + "MailContact" + $sQot + " -AND lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ;
+                                if($resolveForwards){
+                                    $fltr = "lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ;
+                                }else {
+                                    $fltr = "recipienttypedetails -ne " + $sQot + "MailContact" + $sQot + " -AND lastName -like " + $sQot + $($hsum.lname) + "*" + $sQot ;
+                                }
                             } else { 
-                                $fltr = "recipienttypedetails -ne 'MailContact' -AND lastName -like '$($hsum.lname)*'" ;
+                                if($resolveForwards){
+                                       $fltr = "lastName -like '$($hsum.lname)*'" ;
+                                }else{
+                                    $fltr = "recipienttypedetails -ne 'MailContact' -AND lastName -like '$($hsum.lname)*'" ;
+                                }
                             } ; 
-                            if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
-                                write-verbose "`$hSum.xoRcp found as $($pltGMailObj.filter)" ;
+                            #if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                            if($hSum.xoRcp=get-xorecipient -filter $fltr -ea 0 | select -first $MaxRecips){
+                                if($resolveForwards){
+                                }else{
+                                    $hSum.xoRcp=$hSum.xoRcp |?{$_.recipienttypedetails -ne 'MailContact'}
+                                }
+                                $smsg = "`$hSum.xoRcp found as `n$(($pltGMailObj.GetEnumerator() | ?{$_.key -ne 'ResultSize'}  | ft -a key,value |out-string).trim())" ; 
+                                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                             }else{
                                 $smsg = "(Failed to OP:get-xorecipient on:$($usr))"
                                 if($isDname){$smsg += " or *$($hsum.lname )*"}
@@ -2211,7 +2463,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                         } ;
                         'MailUniversalDistributionGroup' {write-host "(xDG)" -nonewline}
                         'DynamicDistributionGroup'  {write-host "(xDDG)" -nonewline}
-                        'MailContact' {write-host "(xMC)" -nonewline]}
+                        'MailContact' {write-host -nonewline "(xMC)" }
                         default{
                             #$smsg = "Unable to resolve `$hSum.xoRcp.recipienttypedetails:$($hSum.xoRcp.recipienttypedetails)" ; 
                             $smsg = "Unable to resolve `$hSum.xoRcp.recipienttypedetails:$($tmpxRcp.OPRcp.recipienttypedetails)" ; 
@@ -2333,6 +2585,39 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                     $Rpt += $hSum.OPRemoteMailbox.primarysmtpaddress ;
                                 } ;
                             } ;
+                            "MailContact" {
+                                #$hSum.OPRemoteMailbox += get-remotemailbox $txR.identity  ;
+                                #$Rpt += $hSum.OPRemoteMailbox.primarysmtpaddress ;
+
+                                $bufferRcp = $null ; 
+                                $bufferRcp  = get-mailcontact $tmpRcp.identity -resultsize $MaxRecips -ea 0 | select -first $MaxRecips ; 
+                                #if($hSum.opMailContact += get-mailcontact $tmpRcp.identity -resultsize $MaxRecips -ea 0 | select -first $MaxRecips ; ){
+                                if($bufferRcp){
+                                    $hSum.opMailContact += $bufferRcp ; 
+                                    write-verbose "`$hSum.opMailContact:`n$(($hSum.opMailContact|ft -a |out-string).trim())" ;
+                                }else{
+                                    $smsg = "RecipientTypeDetails:MailContact with NO Contact!!" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                                }
+                                $smsg = "$($tmpRcp.primarysmtpaddress): matches an EXO MailContact with external Email: $($bufferRcp.primarysmtpaddress)" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                if($ResolveForwards){
+                                    if(-not $hshForwards){
+                                        $hshForwards = resolve-RMbxForwards ;
+                                    } ;
+                                    $tid = $bufferRcp.primarysmtpaddress ;
+                                    if($hshForwards[$tid]){
+                                        write-host "$($bufferRcp.primarysmtpaddress):Forwarding Contact"
+                                        $smsg = "Recipient:$($tid) => $($hshForwards[$tid])" ;
+                                        write-host $smsg ;
+                                        $hsum.opContactForwards = $hshForwards[$tid] ;
+                                    } ;
+                                } ;
+                                break ;
+ 
+                            }
                             default {
                                 write-warning "$((get-date).ToString('HH:mm:ss')):Unsupported RecipientType:($tmpRcp.recipienttype). EXITING!" ;
                                 Break ;
@@ -2416,7 +2701,13 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                             if($hSum.OPRemoteMailbox.ForwardingAddress -OR $hSum.OPMailbox.ForwardingAddress){
                                 write-host $smsg ; # echo pending, using ww below
                                 $smsg = "==FORWARDED rMBX!:" ; 
-                                $smsg += "`n$(($MailRecip|select $propsMailxL5 |out-markdowntable @MDtbl|out-string).trim())" ;
+                                # 10:31 AM 4/15/2025 resolve target of forward
+                                $smsg += "`n$(($MailRecip|select $propsMailxL5 |out-markdowntable @MDtbl|out-string).trim())" ; 
+                                if($fAddrRcp = $MailRecip.forwardingaddress| get-recipient -ea 0){
+                                    $smsg += "`nFORWARDS TO OBJECT:`n$(($fAddrRcp | select name,RecipientType,PrimarySmtpAddress |out-markdowntable @MDtbl|out-string).trim())" ; 
+                                } else{
+                                     $smsg += "UNABLE TO RESOLVE forwardingaddress TO FUNCTIONAL RECIPIENT!(get-recipient)!" ;
+                                }; 
                                 write-warning $smsg ;
                             } ; 
 
@@ -2610,6 +2901,20 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                             } ;
                                         } ; 
                                         #endregion xogetPerms ; #*------^ END xogetPerms ^------
+                                        #region ResolveForwards ; #*------v ResolveForwards v------
+                                        # we don't need the hash-Rmbx lookup process, just expand the fwd address to matching recip
+                                        if($hSum.xoMailbox.ForwardingAddress){
+                                            $smsg = "NOTE:$($hSum.xoMailbox.userprincipalname) has *populated* ForwardingAddress!:" ; 
+                                            $smsg += "`nForwardingAddress`n$(($hSum.xoMailbox.ForwardingAddress|out-string).trim())" ;
+                                            if($fAddrRcp = $hSum.xoMailbox.ForwardingAddress | get-xorecipient -ea 0){
+                                                $smsg += "`n=> which forwards into object`n$(($faddrrcp | ft -a name,RecipientType,PrimarySmtpAddress|out-string).trim())" ;
+                                            } else { 
+                                                $smsg += "==> UNABLE TO RESOLVE THE ABOVE OBJECT INTO GET-XORECIPIENT (NO RETURN)!" ; 
+                                            } ; 
+                                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                                        };
+                                        #endregion ResolveForwards ; #*------^ END ResolveForwards ^------
                                     } ; # foreach($xmbx in $hSum.xoMailbox)
                                     break ;
                                 } ;
@@ -2655,9 +2960,31 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                 break ;
                             } ;
                             "MailContact" {
-                                #$hSum.OPRemoteMailbox += get-remotemailbox $txR.identity  ;
-                                #$Rpt += $hSum.OPRemoteMailbox.primarysmtpaddress ;
-                                write-host "$($txR.primarysmtpaddress): matches an EXO MailContact with external Email: $($txR.primarysmtpaddress)" ;
+                                $bufferRcp = $null ;
+                                $bufferRcp  = get-xomailcontact $txR.identity -resultsize $MaxRecips -ea 0 | select -first $MaxRecips ;
+                                if($bufferRcp){
+                                    $hSum.xoMailContact += $bufferRcp ;
+                                    write-verbose "`$hSum.opMailContact:`n$(($hSum.opMailContact|ft -a |out-string).trim())" ;
+                                }else{
+                                    $smsg = "RecipientTypeDetails:MailContact with NO Contact!!" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                }
+                                $smsg = "$($txR.primarysmtpaddress): matches an EXO MailContact with external Email: $($bufferRcp.externalemailaddress)" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                if($ResolveForwards){
+                                    if(-not $hshForwards){
+                                        $hshForwards = resolve-RMbxForwards ;
+                                    } ;
+                                    $tid = $bufferRcp.primarysmtpaddress ;
+                                    if($hshForwards[$tid]){
+                                        write-host "$($bufferRcp.primarysmtpaddress):Forwarding Contact"
+                                        $smsg = "Recipient:$($tid) => $($hshForwards[$tid])" ;
+                                        write-host $smsg ;
+                                        $hsum.xoContactForwards = $hshForwards[$tid] ;
+                                    } ;
+                                } ;
                                 break ;
                             } ;
                             "MailUniversalSecurityGroup" {
@@ -2930,19 +3257,38 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                     #get-recipient "$($txusr.lastname.substring(0,3))*"| sort name
                     $substring = "$($hSum.lname.substring(0,3))*"
                     
-
-                    write-host "get-recipient -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} :"
+                    if($resolveForwards){
+                        write-host "get-recipient -id $($substring) -ea 0 :"
+                    }else{
+                        write-host "get-recipient -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} :"
+                    }
                     #==9:21 AM 10/8/2024:  since HR/WD change to SamAcctName as employe#, the above won't match any user created since 2022 or so. , 
                     # need to search on last name first
 
-                    if($hSum.Rcp += get-recipient -id "$($substring)" -ea 0 -ResultSize $MaxRecips | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                    #if($hSum.Rcp += get-recipient -id "$($substring)" -ea 0 -ResultSize $MaxRecips | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                    if($hSum.Rcp += get-recipient -id "$($substring)" -ea 0 -ResultSize $MaxRecips | select -first $MaxRecips){
+                        if($resolveForwards){
+
+                        }else{
+                            $hSum.Rcp = $hSum.Rcp  |?{$_.recipienttypedetails -ne 'MailContact'}
+                        }
                         #$hSum.Rcp | write-output ;
                         # $propsRcpTbl
                         write-host -foregroundcolor yellow "`n$(($hSum.Rcp | ft -a $propsRcpTbl |out-string).trim())" ;
                     } ;
                     #write-host "$((get-alias ps1GetxRcp).definition) -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} : "
-                    write-host "get-xorecipient -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} : "
-                    if($hSum.xoRcp += get-xorecipient -id "$($substring)" -ea 0 -ResultSize $MaxRecips | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                    if($resolveForwards){
+                        write-host "get-xorecipient -id $($substring) -ea 0 : "
+                    }else {
+                        write-host "get-xorecipient -id $($substring) -ea 0 |?{$_.recipienttypedetails -ne 'MailContact'} : "
+                    }
+                    #if($hSum.xoRcp += get-xorecipient -id "$($substring)" -ea 0 -ResultSize $MaxRecips | select -first $MaxRecips |?{$_.recipienttypedetails -ne 'MailContact'}){
+                    if($hSum.xoRcp += get-xorecipient -id "$($substring)" -ea 0 -ResultSize $MaxRecips | select -first $MaxRecips){
+                        if($resolveForwards){
+
+                        }else {
+                            $hSum.xoRcp = $hSum.xoRcp|?{$_.recipienttypedetails -ne 'MailContact'} 
+                        }
                         #$hSum.xoRcp | write-output ;
                         write-host -foregroundcolor yellow "`n$(($hSum.xoRcp | ft -a $propsRcpTbl |out-string).trim())" ;
                     } ;
