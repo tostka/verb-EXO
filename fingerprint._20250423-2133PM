@@ -104,7 +104,6 @@ Connect-SC:ob
 Connect-SC:PipelineVariable
 Connect-SC:pv
 convert-ADUserRecipientType:ADUser
-convert-ADUserRecipientType:domaincontroller
 convert-ADUserRecipientType:showDebug
 convert-ADUserRecipientType:whatIf
 convert-ADUserRecipientType:Verbose
@@ -380,7 +379,6 @@ reconnect-exo2:ob
 reconnect-exo2:PipelineVariable
 reconnect-exo2:pv
 revert-ADuserRecipientType:ADUser
-revert-ADuserRecipientType:domaincontroller
 revert-ADuserRecipientType:showDebug
 revert-ADuserRecipientType:whatIf
 revert-ADuserRecipientType:Verbose
@@ -527,7 +525,6 @@ Connect-EXO:ob
 Connect-EXO:PipelineVariable
 Connect-EXO:pv
 convert-ADUserRecipientTypeRemoteSharedMailbox:ADUser
-convert-ADUserRecipientTypeRemoteSharedMailbox:domaincontroller
 convert-ADUserRecipientTypeRemoteSharedMailbox:showDebug
 convert-ADUserRecipientTypeRemoteSharedMailbox:whatIf
 convert-ADUserRecipientTypeRemoteSharedMailbox:Verbose
@@ -553,7 +550,6 @@ convert-ADUserRecipientTypeRemoteSharedMailbox:ob
 convert-ADUserRecipientTypeRemoteSharedMailbox:PipelineVariable
 convert-ADUserRecipientTypeRemoteSharedMailbox:pv
 convert-ADUserRecipientTypeRemoteUserMailbox:ADUser
-convert-ADUserRecipientTypeRemoteUserMailbox:domaincontroller
 convert-ADUserRecipientTypeRemoteUserMailbox:showDebug
 convert-ADUserRecipientTypeRemoteUserMailbox:whatIf
 convert-ADUserRecipientTypeRemoteUserMailbox:Verbose
