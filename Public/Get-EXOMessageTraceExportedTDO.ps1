@@ -18,6 +18,8 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:47 PM 5/1/2025 getting Status:GettingStatus on SAP confirmation passes, added Get-xoMessageTraceDetail pass on last 20 of the set, seems to expose actual delivery resolution wihere Get-xoMessageTrace has the bozo status. 
+        Aggregates findings of the 20 and adds them to the returned vari. updated CBH with output sample 
     * 9:35 AM 4/23/2025 reduced MessageTraceDetailLimit default from 100-> 20 (too time consuming, if not really needed), flipped it's effect to filtering last xx, not first.
         added alias: 'Get-EXOMessageTraceTDO', matches concept on Get-MessageTrackingLogTDO() naming. 
     * 6:08 PM 4/22/2025 post cmw testing, spliced over updated svc_conn block, full write-log() (simplified lacks success lvl etc);
@@ -211,7 +213,77 @@ function Get-EXOMessageTraceExportedTDO {
         PS> if(gv $vn -ea 0){rv $vn} ;
         PS> if($tmsgs = Get-EXOMessageTraceExportedTDO @pltGxMT){sv -na $vn -va $tmsgs ;
         PS> write-host "(assigned to `$$vn)"} ;
-        Splatted demo
+
+            ...
+            14:51:33:Raw sender/recipient events:1850
+            14:51:33:(1850 events | export-csv d:\scripts\logs\900881_x2xxxx,Txxxxx-xxxxxx.xxxxxxx@xxxx.com-EXOMsgTrc,TO_xxxxxxx@xxxx.com-2d-20250429-1951-run20250501-1451.csv)
+            14:51:34:export-csv'd to:
+            D:\scripts\logs\900881_x2xxxx,Txxxxx-xxxxxx.xxxxxxx@xxxx.com-EXOMsgTrc,TO_xxxxxxx@xxxx.com-2d-20250429-1951-run20250501-1451.csv
+            14:51:34:(adding $hReports.MTMessages)
+            14:51:34:(adding $hReports.MTMessagesCSVFile:d:\scripts\logs\900881_x2xxxx,Txxxxx-xxxxxx.xxxxxxx@xxxx.com-EXOMsgTrc,TO_xxxxxxx@xxxx.com-2d-20250429-1951-run20250501-1451.csv)
+            14:51:34:
+            #*------v Status DISTRIB v------
+
+            14:51:34:
+            Count Name
+            ----- ----
+              963 Resolved
+              881 Delivered
+                5 FilteredAsSpam
+                1 GettingStatus
+            14:51:34:
+
+            #*------^ Status DISTRIB ^------
+
+            14:51:34:
+
+            ## Status Definitions:
+            Resolved The message was redirected to the new recipient address based on an Active Directory lookup. When this happens, the original recipient address will be listed in a separate row in the message trace along with the final delivery status for the message.
+            Delivered The message was delivered to its destination.
+            FilteredAsSpam The message was marked as spam (and moved to the mailbox 'Junk Email' folder).
+            GettingStatus The message is waiting for status update.
+
+            14:51:34:
+
+            #*------v MOST RECENT MATCH v------
+
+            14:51:34:
+            ReceivedLocal    : 5/1/2025 2:49:11 PM
+            Status           : Resolved
+            SenderAddress    : xxxxxxx@xx-xxxxxxx.xxx
+            RecipientAddress : xxxxxxx@xxxx.com
+            Subject          : FW: help per below, need detail
+            14:51:34:
+
+            #*------^ MOST RECENT MATCH ^------
+
+            WARNING: 14:51:34:Status:GettingStatus returned on some traces - INDETERMINANT STATUS THOSE ITEMS (PENDING TRACKABLE LOGGING), RERUN IN A FEW MINS TO GET FUNCTIONAL DATA! (EXO-SIDE ISSUE)
+            14:51:34:
+
+            #*------v GettingStatus's Attempt to Re-Resolve via Get-xoMessageTraceDetail (up to last 20 messages) v------
+
+            14:51:40:
+
+            ===#1: MsgId: <CH2PR04MB6619FCF5E2194B8622AAB01EED822@CH2PR04MB6619.namprd04.prod.outlook.com> : Status:GettingStatus
+            Received            SenderAddress           RecipientAddress Subject
+            --------            -------------           ---------------- -------
+            5/1/2025 2:01:05 PM xxxxx.xxxxxxxx@xxxx.com xxxxxxx@xxxx.com xxxxxxxxxx xxxxxxxx xxxxxx      FW: xxxx - xxxxxxx  xxxxxx xxxx 40643310
+            DetailDisposition:
+            Date                Event  Detail
+            ----                -----  ------
+            5/1/2025 2:01:06 PM Submit The message was submitted.
+            14:51:40:
+
+            #*------^  GettingStatus's Attempt to Re-Resolve via Get-xoMessageTraceDetail (up to last 20 messages)  ^------
+
+            14:51:40:(log file confirmed)
+            14:51:40:1850 matches output to:
+            'd:\scripts\logs\900881_x2xxxx,Txxxxx-xxxxxx.xxxxxxx@xxxx.com-EXOMsgTrc,TO_xxxxxxx@xxxx.com-2d-20250429-1951-run20250501-1451.csv'
+            (copied to CB)
+            14:51:40:(Returning summary object to pipeline)
+            14:51:40:(exporting $hReports summary object to xml:d:\scripts\logs\900881_x2xxxx,Txxxxx-xxxxxx.xxxxxxx@xxxx.com-EXOMsgTrc,TO_xxxxxxx@xxxx.com-2d-20250429-1951-run20250501-1451.xml)
+
+        Splatted demo, depict some common output profile features (conditional on content in the trace)
         .EXAMPLE
         PS> $pltGxMT=[ordered]@{
         PS>     Ticket = '99999' ;
@@ -3513,6 +3585,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
 
                 } ; 
 
+                #region statFAIL ; #*------v statFAIL v------
                 if($mFails = $msgs | ?{$_.status -eq 'Failed'} | select -last $MessageTraceDetailLimit){
                     $smsg = "Expanded analysis on last $($MessageTraceDetailLimit) Status:Failed messages..." ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
@@ -3916,6 +3989,9 @@ $(
                     } ;  # loop-E
 
                 } ;
+                #endregion statFAIL ; #*------^ END statFAIL ^------
+
+                #region statQUAR ; #*------v statQUAR v------
                 if(-not $NoQuarCheck -AND ($mQuars = $msgs | ?{$_.status -eq 'Quarantined'})){
                     $hReports.add('MsgsQuar',$mQuars) ;
                     $ofileQ = $ofile.replace('-EXOMsgTrc,','QUARMsgs,') ;
@@ -3979,12 +4055,125 @@ $(
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     } ;
                 } ;
+                #endregion statQUAR ; #*------^ END statQUAR ^------
 
-                if( $msgs | ?{$_.status -eq 'GettingStatus'}){
+                #region statGETSTAT ; #*------v statGETSTAT  v------
+                if( $mGetStat = $msgs|?{$_.Status -eq 'GettingStatus'}){
                     $smsg = "Status:GettingStatus returned on some traces - INDETERMINANT STATUS THOSE ITEMS (PENDING TRACKABLE LOGGING), RERUN IN A FEW MINS TO GET FUNCTIONAL DATA! (EXO-SIDE ISSUE)" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
+                    $smsg = "`n`n#*------v GettingStatus's Attempt to Re-Resolve via Get-xoMessageTraceDetail (up to last $($MessageTraceDetailLimit) messages) v------`n`n" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+
+                    $midn = 20 ; $namn = 15 ; 
+                    $gsmprcd = 0 ; 
+                    $gsmAggr = @() ;
+                    $prpgMsg = 'Received','SenderAddress','RecipientAddress','Subject' ; 
+                    foreach($gsmsg in ($mGetStat | select -last $MessageTraceDetailLimit)){
+                        $gsmprcd++ ; 
+                        # just dump a quick summary for now
+                        $smsg = "`n`n===#$($gsmprcd): MsgId: $($gsmsg.MessageId) : Status:$($gsmsg.Status)" ; 
+                        $smsg += "`n$(($gsmsg | ft -a $prpgMsg|out-string).trim())" ;
+                        # pop all the values but status, from the getstat event, (use the detail return'd updated)
+                        $pxyEvent = [ordered]@{
+                            Organization        = $gsmsg.Organization ; #$evtd.Organization ;#  toroco.onmicrosoft.com
+                            MessageId           = $gsmsg.MessageId ; #$evtd.MessageId ;#  <ADR50000009071697200005056AEB0091FD089AFCAED106AF4B8@GRAINGER.COM>
+                            Received            = $gsmsg.Received ; #$evtd.Date ;#  4/30/2025 4:48:27 AM
+                            ReceivedLocal       = $gsmsg.ReceivedLocal ;#  4/29/2025 11:48:27 PM
+                            SenderAddress       = $gsmsg.SenderAddress ; #$evtd.SenderAddress ;#  S_BTCEMAIL@GRAINGER.COM
+                            RecipientAddress    = $gsmsg.RecipientAddress ; #$evtd.RecipientAddress ;#  ap@charlesmachineworks.com
+                            Subject             = $gsmsg.Subject ;#  Grainger Inv # 9489372020 PO# 4501043337
+                            Status              = $null ; #$evtd.Event ;#  GettingStatus
+                            ToIP                = $gsmsg.ToIP ;#
+                            FromIP              = $gsmsg.FromIP ;
+                            Size                = $gsmsg.Size ;#  105464
+                            MessageTraceId      = $gsmsg.MessageTraceId ; #$evtd.MessageTraceId ;#  f915afcc-f5ea-4f2a-3e0a-08dd87a23f8e
+                            StartDate           = $gsmsg.StartDate ;#  4/29/2025 3:52:37 PM
+                            EndDate             = $gsmsg.EndDate ;#  5/1/2025 3:52:37 PM
+                            Index               = $gsmsg.Index ;#  9
+                        } ; 
+
+                        if($gsmd = Get-xoMessageTrace -MessageId $gsmsg.MessageId | Get-xoMessageTraceDetail){
+                            # just dump a quick summary
+                            $smsg += "`nDetailDisposition:`n$(($gsmd | ft -a|out-string).trim())" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            $cndx = $gsmsg.Index ; 
+                            foreach($evtd in $gsmd){
+                                <#
+                                $aHndl = @() ; 
+                                $aHndl += @('GettingStatus') ; 
+                                #$aHndl += @($handling[0].Timestamp) ; 
+                                $aHndl += @($gsmsg.Timestamp) ; 
+                                $aHndl += @('SEND') ; 
+                                #$aHndl += @($handling[1].Timestamp) ; 
+                                $aHndl += @($confirmedSEND.Timestamp) ;
+
+                                $aHndl += @('Retried Sent') ; 
+                                #$aHndl += @("{0:dd}d:{0:hh}h:{0:mm}m:{0:ss}s:{0:fff}ms" -f (new-timespan -start $handling[0].Timestamp -end $handling[-1].Timestamp)) ; 
+                                $aHndl += @("{0:dd}d:{0:hh}h:{0:mm}m:{0:ss}s:{0:fff}ms" -f (new-timespan -start $gsmsg.Timestamp -end $confirmedSEND.Timestamp)) ; 
+                                $smsg = "=>$($ahndl -join ' : ')`n`n" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level SUCCESS } else{ write-host -foregroundcolor green $smsg } ;                         
+                                #>
+                                # build a proxy event to add to the msgs table
+                                # will have multiple events - receive & Deliver etc - need to loop below
+                                #$pxyEvent = [ordered]@{
+                                    $pxyEvent.Organization        = if($evtd.Organization){$evtd.Organization} ; 
+                                    $pxyEvent.MessageId           = if($evtd.MessageId){$evtd.MessageId} ;#  <ADR50000009071697200005056AEB0091FD089AFCAED106AF4B8@GRAINGER.COM>
+                                    $pxyEvent.Received            = if($evtd.Date){$evtd.Date} ;#  4/30/2025 4:48:27 AM
+                                    #ReceivedLocal       = if($gsmsg.ReceivedLocal){$gsmsg.ReceivedLocal} ;#  4/29/2025 11:48:27 PM
+                                    $pxyEvent.SenderAddress       = if($evtd.SenderAddress){$evtd.SenderAddress} ;#  S_BTCEMAIL@GRAINGER.COM
+                                    $pxyEvent.RecipientAddress    = if($evtd.RecipientAddress){$evtd.RecipientAddress} ;#  ap@charlesmachineworks.com
+                                    #Subject             = if($gsmsg.Subject){$gsmsg.Subject} ;#  Grainger Inv # 9489372020 PO# 4501043337
+                                    $pxyEvent.Status              = if($evtd.Event){$evtd.Event} ;#  GettingStatus
+                                    $pxyEvent.ToIP                = if((([xml]$evtd.data).root.mep |?{$_.name -match 'MailboxServer|ServerHostName'}).string){
+                                                                          (([xml]$evtd.data).root.mep |?{$_.name -match 'MailboxServer|ServerHostName'}).string ; 
+                                                                    }
+                                    # looked at resolving fqdn's at ms, to ips: there's no external dns support to ptr them
+                                    $pxyEvent.FromIP              = if((([xml]$evtd.data).root.mep |?{$_.name -match 'ClientIP|ClientName'}).string ){
+                                                                          (([xml]$evtd.data).root.mep |?{$_.name -match 'ClientIP|ClientName'}).string 
+                                                                    } ;  
+                                    #Size                = if($gsmsg.Size){} ;#  105464
+                                    $pxyEvent.MessageTraceId      = if($evtd.MessageTraceId){$evtd.MessageTraceId} ;#  f915afcc-f5ea-4f2a-3e0a-08dd87a23f8e
+                                    $pxyEvent.StartDate           = if($evtd.StartDate){$evtd.StartDate} ;#  4/29/2025 3:52:37 PM
+                                    $pxyEvent.EndDate             = if($evtd.EndDate){$evtd.EndDate} ;#  5/1/2025 3:52:37 PM
+                                    $pxyEvent.Index               = $cndx++ ;#  9
+                                #} ; 
+                                
+                                $gsmAggr += [pscustomobject]$pxyEvent ;
+                            } ; 
+
+
+                        }else{
+                            $smsg = "UNABLE TO Get-xoMessageTraceDetail on $($gsmsg.MessageId)$ for:" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        } ; 
+                        <#
+                        } else {
+                            $smsg = "UNABLE TO Get-xoMessageTraceDetail on $($gsmsg.MessageId)$ for:" ; 
+                            $smsg += "`n$(($gsmsg | fl |out-string).trim())" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        }
+                        #>
+
+                        $hReports.add('MsgsGetStatusDetail',$gsmAggr) ;
+
+                        #$smsg = "$($sBnr3.replace('~v','~^').replace('v~','^~'))`n" ;
+                        #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H3 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;   
+                    } ; 
+
+                    $smsg = "`n`n#*------^  GettingStatus's Attempt to Re-Resolve via Get-xoMessageTraceDetail (up to last $($MessageTraceDetailLimit) messages)  ^------`n`n" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor yellow "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+
                 } ;
+                #endregion statGETSTAT  ; #*------^ END statGETSTAT  ^------
 
                 if(test-path -path $ofile){
                     $smsg = "(log file confirmed)" ;
