@@ -18,7 +18,8 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 1:59 PM 5/2/2025 -As gxmtd is now flaking out, adapting the $QuarExpandLimitPerSender support to per-Recipient (when -SenderAddress used), and per-Sender (when -RecipientAddress used), to cut down on repetitive 
+    * 2:28 PM 5/2/2025 main Catch wasn't returning underlying EOM cmdlet errors; added code to -force, dump; 
+        -As gxmtd is now flaking out, adapting the $QuarExpandLimitPerSender support to per-Recipient (when -SenderAddress used), and per-Sender (when -RecipientAddress used), to cut down on repetitive 
             lengthy Get-xoMessageTraceDetail calls. If you want more, push up the QuarExpandLimitPerSender count; cleaned up rem'd code obso'd by pull-GetxoMessageTraceDetail(), along with other broad code rems.
         - functionalized Get-xoMessageTraceDetail w retry (pull-GetxoMessageTraceDetail()) to address null gxmtd back, & retrying pulled, rewrote all Get-xoMessageTraceDetail to use the func
         - updated all supporting core functions, moved functions block to top (matching issues-addressing seen w cmw boxes, unless funcs preloaded - no local mods)
@@ -4341,6 +4342,13 @@ else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ;
         } CATCH {
             $ErrTrapd=$Error[0] ;
+            $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            # it's not outputting the underlying cmdlet error, try to force it :
+            $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
             $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
