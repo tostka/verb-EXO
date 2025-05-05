@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 8.10.2.0
+  Version     : 8.10.3.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -4275,7 +4275,7 @@ function get-AADlicensePlanList {
     * 8:34 AM 2/28/2022 updated CBH example1, added conditional ordered to hash, defaulted Cred to a global varia
     * 11:05 AM 9/16/2021 fixed Examples to functional 
     * 2:06 PM 10/12/2020 ported to verb-AAD
-    * 9:03 AM 8/10/2020 init
+    * 9:03 AM 8.10.3020 init
     .DESCRIPTION
     get-AADlicensePlanList - Resolve Get-AzureADSubscribedSku into an indexed hash of Tenant License detailed specs
     .PARAMETER Raw
@@ -6616,6 +6616,7 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:58 PM 5/5/2025 cx10 was out of date (prompting for manual creds); brought in fresh cbp copies of all internal funcs, and replaced svcs_conn block, logging etc from scratch. Working now, no prompts.
     * 2:28 PM 5/2/2025 main Catch wasn't returning underlying EOM cmdlet errors; added code to -force, dump; 
         -As gxmtd is now flaking out, adapting the $QuarExpandLimitPerSender support to per-Recipient (when -SenderAddress used), and per-Sender (when -RecipientAddress used), to cut down on repetitive 
             lengthy Get-xoMessageTraceDetail calls. If you want more, push up the QuarExpandLimitPerSender count; cleaned up rem'd code obso'd by pull-GetxoMessageTraceDetail(), along with other broad code rems.
@@ -7056,7 +7057,7 @@ function Get-EXOMessageTraceExportedTDO {
     ) ;
     BEGIN{
         
-        #region FUNCTIONS ; #*======v FUNCTIONS v======
+        #region FUNCTIONS_INTERNAL ; #*======v FUNCTIONS_INTERNAL v======
         # Pull the CUser mod dir out of psmodpaths:
         #$CUModPath = $env:psmodulepath.split(';')|?{$_ -like '*\Users\*'} ;
     
@@ -7887,7 +7888,7 @@ function Get-EXOMessageTraceExportedTDO {
             }
         } ; 
         #endregion WRITE_LOG ; #*------^ END write-log  ^------
-   
+    
         #region START_LOG ; #*------v Start-Log v------
         if(-not(get-command start-log -ea 0)){
             function Start-Log {
@@ -7967,7 +7968,7 @@ function Get-EXOMessageTraceExportedTDO {
             }
         } ; 
         #endregion START_LOG ;  ; #*------^ END start-log ^------
-        
+
         #region CONNECT_EXCHANGESERVERTDO ; #*------v Connect-ExchangeServerTDO v------
         if(-not(gci function:Connect-ExchangeServerTDO -ea 0)){
             Function Connect-ExchangeServerTDO {
@@ -8765,16 +8766,355 @@ function Get-EXOMessageTraceExportedTDO {
         }
         #endregion GET_ADEXCHANGESERVERTDO ;#*------^ END Function get-ADExchangeServerTDO ^------ ;
 
-        #region REMOVE_INVALIDVARIABLENAMECHARS ; #*------v Remove-InvalidVariableNameChars v------
-        #*------v Function Remove-InvalidVariableNameChars v------
-        if(-not (gcm Remove-InvalidVariableNameChars -ea 0)){
-            Function Remove-InvalidVariableNameChars ([string]$Name) {
-                ($Name.tochararray() -match '[A-Za-z0-9_]') -join '' | write-output ;
-            };
-        } ;
-        #*------^ END Function Remove-InvalidVariableNameChars ^------
-        #endregion REMOVE_INVALIDVARIABLENAMECHARS ; #*------^ END Remove-InvalidVariableNameChars ^------
+        #region load_ADMS  ; #*------v load-ADMS v------
+        if(-not(gci function:load-ADMS -ea 0)){
         
+            function load-ADMS {
+                <#
+                .NOTES
+                REVISIONS   :
+                * 12:57 PM 8/22/2023 test before calling Add-PSTitleBar (for PRY/dep-less support)
+                .INPUTS
+                None.
+                .OUTPUTS
+                Outputs $True/False load-status
+                .EXAMPLE
+                PS> $ADMTLoaded = load-ADMS ; Write-Debug "`$ADMTLoaded: $ADMTLoaded" ;
+                .EXAMPLE
+                PS> $ADMTLoaded = load-ADMS -Cmdlet get-aduser,get-adcomputer ; Write-Debug "`$ADMTLoaded: $ADMTLoaded" ;
+                Load solely the specified cmdlets from ADMS
+                .EXAMPLE
+                # load ADMS
+                PS> $reqMods+="load-ADMS".split(";") ;
+                PS> if( !(check-ReqMods $reqMods) ) {write-error "$((get-date).ToString("yyyyMMdd HH:mm:ss")):Missing function. EXITING." ; exit ;}  ;
+                PS> write-verbose -verbose:$true  "$((get-date).ToString('HH:mm:ss')):(loading ADMS...)" ;
+                PS> load-ADMS | out-null ;
+                #load-ADMS -cmdlet get-aduser,Set-ADUser,Get-ADGroupMember,Get-ADDomainController,Get-ADObject,get-adforest | out-null ;
+                Demo a load from the verb-ADMS.ps1 module, with opt specific -Cmdlet set
+                .EXAMPLE
+                PS> if(connect-ad){write-host 'connected'}else {write-warning 'unable to connect'}  ;
+                Variant capturing & testing returned (returns true|false), using the alias name (if don't cap|eat return, you'll get a 'True' in console
+                #>
+                [CmdletBinding()]
+                [Alias('connect-AD')]
+                PARAM(
+                    [Parameter(HelpMessage="Specifies an array of cmdlets that this cmdlet imports from the module into the current session. Wildcard characters are permitted[-Cmdlet get-aduser]")]
+                    [ValidateNotNullOrEmpty()]$Cmdlet
+                ) ;
+                $Verbose = ($VerbosePreference -eq 'Continue') ;
+                # focus specific cmdlet loads to SPEED them UP!
+                $tMod = "ActiveDirectory" ;
+                $ModsReg=Get-Module -Name $tMod -ListAvailable ;
+                $ModsLoad=Get-Module -name $tMod ;
+                $pltAD=@{Name=$tMod ; ErrorAction="Stop"; Verbose = ($VerbosePreference -eq 'Continue') } ;
+                if($Cmdlet){$pltAD.add('Cmdlet',$Cmdlet) } ;
+                if ($ModsReg) {
+                    if (!($ModsLoad)) {
+                        $env:ADPS_LoadDefaultDrive = 0 ;
+                        import-module @pltAD;
+                        if(get-command Add-PSTitleBar -ea 0){
+                            Add-PSTitleBar 'ADMS' -verbose:$($VerbosePreference -eq "Continue") ;
+                        } ; 
+                        return $TRUE;
+                    } else {
+                        return $TRUE;
+                    } # if-E ;
+                } else {
+                    Write-Error {"$((get-date).ToString('HH:mm:ss')):($env:computername) does not have AD Mgmt Tools installed!";};
+                    return $FALSE
+                } # if-E ;
+            } ;
+                   
+        } ; 
+        #endregion load_ADMS ; #*----------^END Function load-ADMS ^---------- 
+
+        #region GET_GCFAST ; #*------v get-GCFast v------
+        if(-not(gci function:get-GCFast -ea 0)){
+            function get-GCFast {
+                <#
+                .NOTES
+                REVISIONS   :
+                * 2:39 PM 1/23/2025 added -exclude (exclude array of dcs by name), -ServerPrefix (exclude on leading prefix of name) params, added expanded try/catch, swapped out w-h etc for wlt calls
+                .PARAMETER  Domain
+                Which AD Domain [Domain fqdn]
+                .PARAMETER  Site
+                DCs from which Site name (defaults to AD lookup against local computer's Site)
+                .PARAMETER Exclude
+                Array of Domain controller names in target site/domain to exclude from returns (work around temp access issues)
+                .PARAMETER ServerPrefix
+                Prefix string to filter for, in returns (e.g. 'ABC' would only return DCs with name starting 'ABC')
+                .PARAMETER SpeedThreshold
+                Threshold in ms, for AD Server response time(defaults to 100ms)
+                .INPUTS
+                None. Does not accepted piped input.
+                .OUTPUTS
+                Returns one DC object, .Name is name pointer
+                .EXAMPLE
+                PS> get-gcfast -domain dom.for.domain.com -site Site
+                Lookup a Global domain gc, with Site specified (whether in Site or not, will return remote site dc's)
+                .EXAMPLE
+                PS> get-gcfast -domain dom.for.domain.com
+                Lookup a Global domain gc, default to Site lookup from local server's perspective
+                .EXAMPLE    
+                PS> if($domaincontroller = get-gcfast -Exclude ServerBad -Verbose){
+                PS>     write-warning "Changing DomainControler: Waiting 20seconds, for RelSync..." ;
+                PS>     start-sleep -Seconds 20 ;
+                PS> } ; 
+                Demo acquireing a new DC, excluding a caught bad DC, and waiting before moving on, to permit ADRerplication from prior dc to attempt to ensure full sync of changes. 
+                PS> get-gcfast -ServerPrefix ABC -verbose
+                Demo use of -ServerPrefix to only return DCs with servernames that begin with the string 'ABC'
+                .EXAMPLE
+                PS> $adu=$null ;
+                PS> $Exit = 0 ;
+                PS> Do {
+                PS>     TRY {
+                PS>         $adu = get-aduser -id $rmbx.DistinguishedName -server $domainController -Properties $adprops -ea 0| select $adprops ;
+                PS>         $Exit = $DoRetries ;
+                PS>     }CATCH [System.Management.Automation.RuntimeException] {
+                PS>         if ($_.Exception.Message -like "*ResourceUnavailable*") {
+                PS>             $ErrorTrapped=$Error[0] ;
+                PS>             $smsg = "Failed to exec cmd because: $($ErrorTrapped.Exception.Message )" ;
+                PS>             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                PS>             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                PS>             # re-quire a new DC
+                PS>             $badDC = $domaincontroller ; 
+                PS>             $smsg = "PROBLEM CONTACTING $(domaincontroller)!:Resource unavailable: $($ErrorTrapped.Exception.Message)" ; 
+                PS>             $smsg += "get-GCFast() an alterate DC" ; 
+                PS>             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                PS>             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                PS>             if($domaincontroller = get-gcfast -Exclude $$badDC -Verbose){
+                PS>                 write-warning "Changing DomainController:($($badDC)->$($domaincontroller)):Waiting 20seconds, for ReplSync..." ;
+                PS>                 start-sleep -Seconds 20 ;
+                PS>             } ;                             
+                PS>         }else {
+                PS>             throw $Error[0] ;
+                PS>         } ; 
+                PS>     } CATCH {
+                PS>         $ErrorTrapped=$Error[0] ;
+                PS>         Start-Sleep -Seconds $RetrySleep ;
+                PS>         $Exit ++ ;
+                PS>         $smsg = "Failed to exec cmd because: $($ErrorTrapped)" ;
+                PS>         $smsg += "`nTry #: $Exit" ;
+                PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                PS>         else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                PS>         If ($Exit -eq $DoRetries) {
+                PS>             $smsg =  "Unable to exec cmd!" ;
+                PS>             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                PS>             else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                PS>         } ;
+                PS>         Continue ;
+                PS>     }  ;
+                PS> } Until ($Exit -eq $DoRetries) ;
+                Retry demo that includes aquisition of a new DC, excluding a caught bad DC, and waiting before moving on, to permit ADRerplication from prior dc to attempt to ensure full sync of changes. 
+                #>
+                [CmdletBinding()]
+                PARAM(
+                    [Parameter(Position = 0, Mandatory = $False, HelpMessage = "Optional: DCs from what Site name? (default=Discover)")]
+                        [string]$Site,
+                    [Parameter(HelpMessage = 'Target AD Domain')]
+                        [string]$Domain,
+                    [Parameter(HelpMessage = 'Array of Domain controller names in target site/domain to exclude from returns (work around temp access issues)')]
+                        [string[]]$Exclude,
+                    [Parameter(HelpMessage = "Prefix string to filter for, in returns (e.g. 'ABC' would only return DCs with name starting 'ABC')")]
+                        [string]$ServerPrefix,
+                    [Parameter(HelpMessage = 'Threshold in ms, for AD Server response time(defaults to 100ms)')]
+                        $SpeedThreshold = 100
+                ) ;
+                $Verbose = $($PSBoundParameters['Verbose'] -eq $true)
+                $SpeedThreshold = 100 ;
+                $rgxSpbDCRgx = 'CN=EDCMS'
+                $ErrorActionPreference = 'SilentlyContinue' ; # Set so we don't see errors for the connectivity test
+                $env:ADPS_LoadDefaultDrive = 0 ; 
+                $sName = "ActiveDirectory"; 
+                TRY{
+                    if ( -not(Get-Module | Where-Object { $_.Name -eq $sName }) ) {
+                        $smsg = "Adding ActiveDirectory Module (`$script:ADPSS)" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        $script:AdPSS = Import-Module $sName -PassThru -ea Stop ;
+                    } ;
+                    if (-not $Domain) {
+                        $Domain = (get-addomain -ea Stop).DNSRoot ; # use local domain
+                        $smsg = "Defaulting domain: $Domain";
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    }
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ; 
+
+                # Get all the local domain controllers
+                if ((-not $Site)) {
+                    # if no site, look the computer's Site Up in AD
+                    TRY{
+                        $Site = [System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().Name ;
+                        $smsg = "Using local machine Site: $($Site)";
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ; 
+                } ;
+
+                # gc filter
+                #$LocalDCs = Get-ADDomainController -filter { (isglobalcatalog -eq $true) -and (Site -eq $Site) } ;
+                # ISSUE: ==3:26 pm 3/7/2024: NO LOCAL SITE DC'S IN SPB
+                # os: LOGONSERVER=\\EDCMS8100
+                TRY{
+                    $LocalDCs = Get-ADDomainController -filter { (isglobalcatalog -eq $true) -and (Site -eq $Site) -and (Domain -eq $Domain) } -ErrorAction STOP
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                    else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ; 
+                if( $LocalDCs){
+                    $smsg = "`Discovered `$LocalDCs:`n$(($LocalDCs|out-string).trim())" ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } elseif($Site -eq 'Spellbrook'){
+                    $smsg = "Get-ADDomainController -filter { (isglobalcatalog -eq `$true) -and (Site -eq $($Site)) -and (Domain -eq $($Domain)}"
+                    $smsg += "`nFAILED to return DCs, and `$Site -eq Spellbrook:" 
+                    $smsg += "`ndiverting to $($rgxSpbDCRgx) dcs in entire Domain:" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    TRY{
+                        $LocalDCs = Get-ADDomainController -filter { (isglobalcatalog -eq $true) -and (Domain -eq $Domain) } -EA STOP | 
+                            ?{$_.ComputerObjectDN -match $rgxSpbDCRgx } 
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ; 
+                } ; 
+
+                # any dc filter
+                #$LocalDCs = Get-ADDomainController -filter {(Site -eq $Site)} ;
+
+                $PotentialDCs = @() ;
+                # Check connectivity to each DC against $SpeedThreshold
+                if ($LocalDCs) {
+                    foreach ($LocalDC in $LocalDCs) {
+                        $TCPClient = New-Object System.Net.Sockets.TCPClient ;
+                        $Connect = $TCPClient.BeginConnect($LocalDC.Name, 389, $null, $null) ;
+                        $Wait = $Connect.AsyncWaitHandle.WaitOne($SpeedThreshold, $False) ;
+                        if ($TCPClient.Connected) {
+                            $PotentialDCs += $LocalDC.Name ;
+                            $Null = $TCPClient.Close() ;
+                        } # if-E
+                    } ;
+                    if($Exclude){
+                        $smsg = "-Exclude specified:`n$((($exclude -join ',')|out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        foreach($excl in $Exclude){
+                            $PotentialDCs = $PotentialDCs |?{$_ -ne $excl} ; 
+                        } ; 
+                    } ; 
+                    if($ServerPrefix){
+                        $smsg = "-ServerPrefix specified: $($ServerPrefix)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        $PotentialDCs = $PotentialDCs |?{$_ -match "^$($ServerPrefix)" } ; 
+        
+                    }
+                    write-host -foregroundcolor yellow  
+                    $smsg = "`$PotentialDCs: $PotentialDCs";
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    $DC = $PotentialDCs | Get-Random ;
+
+                    $smsg = "(returning random domaincontroller from result to pipeline:$($DC)" ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    $DC | write-output  ;
+                } else {
+                    write-host -foregroundcolor yellow  "NO DCS RETURNED BY GET-GCFAST()!";
+                    write-output $false ;
+                } ;
+            }  ; 
+        } ; 
+        #endregion GET_GCFAST ; #*------^ END get-GCFast ^------
+
+        #region RESOLVE_NETWORKLOCALTDO ; #*------v resolve-NetworkLocalTDO v------
+        #*------v Function resolve-NetworkLocalTDO v------
+        if(-not(gci function:resolve-NetworkLocalTDO -ea 0)){
+            Function resolve-NetworkLocalTDO {
+                <#
+                .SYNOPSIS
+                resolve-NetworkLocalTDO.ps1 - Retrieve local network interface descriptors, and resolved ip address PTR -> A Record FQDN
+                .NOTES
+                Version     : 0.0.1
+                Author      : Todd Kadrie
+                Website     : http://www.toddomation.com
+                Twitter     : @tostka / http://twitter.com/tostka
+                CreatedDate : 2025-04-28
+                FileName    : resolve-NetworkLocalTDO.ps1
+                License     : MIT License
+                Copyright   : (c) 2025 Todd Kadrie
+                Github      : https://github.com/tostka/verb-XXX
+                Tags        : Powershell
+                AddedCredit : REFERENCE
+                AddedWebsite: URL
+                AddedTwitter: URL
+                REVISIONS
+                .DESCRIPTION
+                resolve-NetworkLocalTDO.ps1 - Retrieve local network interface descriptors, and resolved ip address PTR -> A Record FQDN                
+                .INPUTS
+                None. Does not accepted piped input.(.NET types, can add description)
+                .OUTPUTS
+                System.PsCustomObject summary of useful Nic descriptors                
+                .EXAMPLE
+                PS> $netsettings = resolve-NetworkLocalTDO ; 
+                Demo run
+                .LINK
+                https://github.com/tostka/verb-Network
+                #>                
+                [CmdletBinding()]
+                Param () ;
+                BEGIN{
+                    $rgxIP4Addr = "(?:\d{1,3}\.){3}\d{1,3}" ;
+                    $rgxIP6Addr = "^((([0-9A-Fa-f]{1,4}:){1,6}:)|(([0-9A-Fa-f]{1,4}:){7}))([0-9A-Fa-f]{1,4})$" ; 
+                    $rgxIP4AddrAuto = "169\.254\.\d{1,3}\.\d{1,3}" ;  
+                    $prpNS = 'DNSHostName','ServiceName',@{N="DNSServerSearchOrder";E={"$($_.DNSServerSearchOrder)"}}, 
+                        @{N='IPAddress';E={$_.IPAddress}},@{N='DefaultIPGateway';E={$_.DefaultIPGateway}} ;
+                } ; 
+                PROCESS {
+                    $nicsettings = [ordered]@{ DNSHostName = $null ;  ServiceName = $null ;  DNSServerSearchOrder = $null ;  IPAddress = $null ;  DefaultIPGateway = $null ;  Fqdn = $null ;  }  ;                    
+                    TRY{
+                        $ret = Get-WMIObject Win32_NetworkAdapterConfiguration -Computername localhost -ea STOP|
+                             ? {$_.IPEnabled -match "True"} | Select -property $prpNS ; 
+                        $nicsettings.DNSHostName = $ret.DNSHostName; 
+                        $nicsettings.ServiceName = $ret.ServiceName;  
+                        $nicsettings.DNSServerSearchOrder = $ret.DNSServerSearchOrder;  
+                        $nicsettings.IPAddress = $ret.IPAddress;  
+                        $nicsettings.DefaultIPGateway = $ret.DefaultIPGateway;  
+                        if($nicSettings.ipaddress | ?{$_ -MATCH $rgxIP4Addr -AND $_ -notmatch $rgxIP4AddrAuto} ){
+                            $nicsettings.fqdn = (resolve-dnsname -name ($nicSettings.ipaddress | ?{$_ -MATCH $rgxIP4Addr -AND $_ -notmatch $rgxIP4AddrAuto} ) -type ptr).namehost | select -first 1 ;   
+                        } ; 
+                        [pscustomobject]$nicsettings | write-output ; 
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ;                     
+                } ; 
+            }
+        } ; 
+        #*------^ END Function resolve-NetworkLocalTDO ^------
+        #endregion RESOLVE_NETWORKLOCALTDO ; #*------^ END resolve-NetworkLocalTDO ^------
+
         #region OUT_CLIPBOARD ; #*------v out-Clipboard v------
         if(-not(gci function:out-Clipboard -ea 0)){
             Function out-Clipboard {
@@ -8870,6 +9210,17 @@ function Get-EXOMessageTraceExportedTDO {
             } ;             
         } ; 
         #endregion CONVERTFROM_MARKDOWNTABLE ; #*------^ END convertFrom-MarkdownTable ^------
+
+        #region REMOVE_INVALIDVARIABLENAMECHARS ; #*------v Remove-InvalidVariableNameChars v------
+        #*------v Function Remove-InvalidVariableNameChars v------
+        if(-not (gcm Remove-InvalidVariableNameChars -ea 0)){
+            Function Remove-InvalidVariableNameChars ([string]$Name) {
+                ($Name.tochararray() -match '[A-Za-z0-9_]') -join '' | write-output ;
+            };
+        } ;
+        #*------^ END Function Remove-InvalidVariableNameChars ^------
+        #endregion REMOVE_INVALIDVARIABLENAMECHARS ; #*------^ END Remove-InvalidVariableNameChars ^------
+        
 
         #region INITIALIZE_EXOSTATUSTABLE ; #*------v Initialize-exoStatusTable v------
         #*------v Initialize-exoStatusTable.ps1 v------
@@ -9048,10 +9399,9 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         } ;
         #endregion pull-GetxoMessageTraceDetail ; #*------^ END pull-GetxoMessageTraceDetail ^------
 
-        #endregion FUNCTIONS ; #*======^ END FUNCTIONS ^======
-        
+        #endregion FUNCTIONS_INTERNAL ; #*======^ END FUNCTIONS_INTERNAL ^======
 
-        #region CONSTANTS_AND_ENVIRO #*======v CONSTANTS_AND_ENVIRO v======
+        #region CONSTANTS_AND_ENVIRO ; #*======v CONSTANTS_AND_ENVIRO v======
         #region ENVIRO_DISCOVER ; #*------v ENVIRO_DISCOVER v------
         $Verbose = [boolean]($VerbosePreference -eq 'Continue') ; 
         $rPSCmdlet = $PSCmdlet ; # an object that represents the cmdlet or advanced function that's being run. Available on functions w CmdletBinding (& $args will not be available). (Blank on non-CmdletBinding/Non-Adv funcs).
@@ -9112,7 +9462,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         };     
         #>
         #endregion PsParams ; #*------^ END PSPARAMS ^------
-    
+
         #endregion ENVIRO_DISCOVER ; #*------^ END ENVIRO_DISCOVER ^------
         #region TLS_LATEST_FORCE ; #*------v TLS_LATEST_FORCE v------
         $CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
@@ -9132,6 +9482,27 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
             } ;
         } ;
         #endregion TLS_LATEST_FORCE ; #*------^ END TLS_LATEST_FORCE ^------
+    
+        #region PARAMHELP ; #*------v PARAMHELP  v------
+        # if you want no params -OR -help to run get-help, use:
+        #if ($help -OR (-not $rPSCmdlet.MyInvocation.ExpectingInput) -AND (($PSParameters| measure-object).count -eq 0)) {
+        # on blank specific param -or -help
+        #if (-not $Header -OR $HELP) {
+        # if you only want -help to run get-help
+        if ($HELP) {
+            if($MyInvocation.MyCommand.Name.length -gt 0){
+                Get-Help -Name "$($MyInvocation.MyCommand.Name)" -full ; 
+                # also could run using native -? == get-help [command] (avoiding as invoke-expression is stigmatized for sec)
+                # also note -? only runs default gh output, not full or some other variant. And cmdlet -? -full etc doesn't work
+                #Invoke-Expression -Command "$($MyInvocation.MyCommand.Name) -?"
+            }elseif($PSCommandPath.length -gt 0){
+                Get-Help -Name "$($PSCommandPath)" -full ; 
+            }elseif($CmdletName.length -gt 0){
+                Get-Help -Name "$($CmdletName)" -full ; 
+            } ; 
+            break ; #Exit  ; 
+        }; 
+        #endregion PARAMHELP  ; #*------^ END PARAMHELP  ^------  
 
         #region COMMON_CONSTANTS ; #*------v COMMON_CONSTANTS v------
     
@@ -9149,7 +9520,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         if(-not $SCConnectionUri){$SCConnectionUri = 'https://ps.compliance.protection.outlook.com'} ; 
         #$rgxADDistNameGAT = ",$(($TORMeta.UnreplicatedOU -split ',' | select -skip 1 ) -join ',')" 
         #$rgxADDistNameAT = ",$(($TORMeta.UnreplicatedOU -split ',' | select -skip 2 ) -join ',')"
-        
+
         write-verbose "Coerce configured but blank Resultsize to Unlimited" ; 
         if(get-variable -name resultsize -ea 0){
             if( ($null -eq $ResultSize) -OR ('' -eq $ResultSize) ){$ResultSize = 'unlimited' }
@@ -9170,7 +9541,9 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         [array]$SmtpAttachment = $null ;
         #write-verbose "start-Timer:Master" ; 
         $swM = [Diagnostics.Stopwatch]::StartNew() ;
+        # $ByPassLocalExchangeServerTest = $true # rough in, code exists below for exempting service/regkey testing on this variable status. Not yet implemented beyond the exemption code, ported in from orig source.
         #endregion COMMON_CONSTANTS ; #*------^ END COMMON_CONSTANTS ^------
+    
         #region LOCAL_CONSTANTS ; #*------v LOCAL_CONSTANTS v------
 
         #$prpGXMTfta = 'ReceivedLocal','Status','SenderAddress','RecipientAddress','Subject','MessageId' ;
@@ -9200,7 +9573,8 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         $rgxFailConfRmExtBlock = 'ConfRm-External-Mail-Rejection' ; 
         $rgxFailSecBlock = '^Security(\s-\s|-)' ; 
 
-        #endregion LOCAL_CONSTANTS ; #*------^ END LOCAL_CONSTANTS ^------        
+        #endregion LOCAL_CONSTANTS ; #*------^ END LOCAL_CONSTANTS ^------  
+          
         #region ENCODED_CONTANTS ; #*------v ENCODED_CONTANTS v------
         # ENCODED CONsTANTS & SUPPORT FUNCTIONS:
         #region 2B4 ; #*------v 2B4 v------
@@ -9226,6 +9600,34 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                 if(-not $TOR_logon_SID){$TOR_logon_SID = 'VE9ST1xrYWRyaXRzcw==' | fb4 } ; 
                 $logon_SID = $TOR_logon_SID ; 
             }
+            $env:COMPUTERNAME{
+                $smsg = "%USERDOMAIN% -EQ %COMPUTERNAME%: $($env:computername) => non-domain-connected, likely edge role Ex server!" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                if($WorkgroupName = (Get-WmiObject -Class Win32_ComputerSystem).Workgroup){
+                    $smsg = "WorkgroupName:$($WorkgroupName)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                }
+                if(($isLocalExchangeServer = (Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v14\Setup')) -or (
+                        $isLocalExchangeServer = (Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup')) -or
+                            $ByPassLocalExchangeServerTest){
+                            $smsg = "We are on Exchange Server"
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            $IsEdgeTransport = $false
+                            if((Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v14\EdgeTransportRole') -or (Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\EdgeTransportRole')){
+                                $smsg = "We are on Exchange Edge Transport Server"
+                                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                $IsEdgeTransport = $true
+                            } ; 
+                } else {
+                    $isLocalExchangeServer = $false 
+                    $IsEdgeTransport = $false ;
+                } ;
+            } ; 
             default{
                 $smsg = "$($env:userdomain):UNRECOGIZED/UNCONFIGURED USER DOMAIN STRING!" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
@@ -9235,125 +9637,185 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
             }
         } ; 
         #endregion ENCODED_CONTANTS ; #*------^ END ENCODED_CONTANTS ^------
-
-        #endregion CONSTANTS_AND_ENVIRO ; #*------^ END CONSTANTS_AND_ENVIRO ^------
+    
+        #endregion CONSTANTS_AND_ENVIRO ; #*======^ CONSTANTS_AND_ENVIRO ^======
         
         # moved FUNCTIONS block up top of BEGIN
 
-        #region START-LOG-HOLISTIC #*------v START-LOG-HOLISTIC v------
-        # Single log for script/function example that accomodates detect/redirect from AllUsers scope'd installed code, and hunts a series of drive letters to find an alternate logging dir (defers to profile variables)
-        #${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ;
-        if(!(get-variable LogPathDrives -ea 0)){$LogPathDrives = 'd','c' };
-        foreach($budrv in $LogPathDrives){if(test-path -path "$($budrv):\scripts" -ea 0 ){break} } ;
-        if(!(get-variable rgxPSAllUsersScope -ea 0)){
-            $rgxPSAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps(((d|m))*)1|dll)$" ;
-        } ;
-        if(!(get-variable rgxPSCurrUserScope -ea 0)){
-            $rgxPSCurrUserScope="^$([regex]::escape([Environment]::GetFolderPath('MyDocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps((d|m)*)1|dll)$" ;
-        } ;
-        $pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag=$null ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($whatif) ;} ;
-        # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
-        #$pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag=$null ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($WhatIfPreference) ;} ;
-        #$pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag="$($ticket)-$($TenOrg)-LASTPASS-" ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($WhatIfPreference) ;} ;
-        #$pltSL.Tag = $ModuleName ; 
-        if($ticket){$pltSL.Tag = $ticket} ; 
-        if($script:rPSCommandPath){ $prxPath = $script:rPSCommandPath }
-        elseif($script:PSCommandPath){$prxPath = $script:PSCommandPath}
-        if($rMyInvocation.MyCommand.Definition){$prxPath2 = $rMyInvocation.MyCommand.Definition }
-        elseif($MyInvocation.MyCommand.Definition){$prxPath2 = $MyInvocation.MyCommand.Definition } ; 
-        if($prxPath){
-            if(($prxPath -match $rgxPSAllUsersScope) -OR ($prxPath -match $rgxPSCurrUserScope)){
-                $bDivertLog = $true ; 
-                switch -regex ($prxPath){
-                    $rgxPSAllUsersScope{$smsg = "AllUsers"} 
-                    $rgxPSCurrUserScope{$smsg = "CurrentUser"}
-                } ;
-                $smsg += " context script/module, divert logging into [$budrv]:\scripts" 
-                write-verbose $smsg  ;
-                if($bDivertLog){
-                    if((split-path $prxPath -leaf) -ne $cmdletname){
-                        # function in a module/script installed to allusers|cu - defer name to Cmdlet/Function name
-                        $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
-                    } else {
-                        # installed allusers|CU script, use the hosting script name
-                        $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath -leaf)) ;
-                    }
-                } ;
-            } else {
-                $pltSL.Path = $prxPath ;
+        #region START_LOG_OPTIONS #*======v START_LOG_OPTIONS v======
+        $useSLogHOl = $true ; # one or 
+        $useSLogSimple = $false ; #... the other
+        $useTransName = $false ; # TRANSCRIPTNAME
+        $useTransPath = $false ; # TRANSCRIPTPATH
+        $useTransRotate = $false ; # TRANSCRIPTPATHROTATE
+        $useStartTrans = $false ; # STARTTRANS
+        #region START_LOG_HOLISTIC #*------v START_LOG_HOLISTIC v------
+        if($useSLogHOl){
+            # Single log for script/function example that accomodates detect/redirect from AllUsers scope'd installed code, and hunts a series of drive letters to find an alternate logging dir (defers to profile variables)
+            #${CmdletName} = $rPSCmdlet.MyInvocation.MyCommand.Name ;
+            if(-not (get-variable LogPathDrives -ea 0)){$LogPathDrives = 'd','c' };
+            foreach($budrv in $LogPathDrives){if(test-path -path "$($budrv):\scripts" -ea 0 ){break} } ;
+            if(-not (get-variable rgxPSAllUsersScope -ea 0)){
+                $rgxPSAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps(((d|m))*)1|dll)$" ;
             } ;
-       }elseif($prxPath2){
-            if(($prxPath2 -match $rgxPSAllUsersScope) -OR ($prxPath2 -match $rgxPSCurrUserScope) ){
-                 $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath2 -leaf)) ;
-            } elseif(test-path $prxPath2) {
-                $pltSL.Path = $prxPath2 ;
-            } elseif($cmdletname){
-                $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($cmdletname).ps1") ;
-            } else {
-                $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$CMDLETNAME, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
+            if(-not (get-variable rgxPSCurrUserScope -ea 0)){
+                $rgxPSCurrUserScope="^$([regex]::escape([Environment]::GetFolderPath('MyDocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps((d|m)*)1|dll)$" ;
+            } ;
+            $pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag=$null ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($whatif) ;} ;
+            # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
+            #$pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag=$null ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($WhatIfPreference) ;} ;
+            #$pltSL=[ordered]@{Path=$null ;NoTimeStamp=$false ;Tag="$($ticket)-$($TenOrg)-LASTPASS-" ;showdebug=$($showdebug) ; Verbose=$($VerbosePreference -eq 'Continue') ; whatif=$($WhatIfPreference) ;} ;
+            #$pltSL.Tag = $ModuleName ; 
+            if($ticket){$pltSL.Tag = $ticket} ; 
+            if($rvEnv.isScript){
+                write-host "`$script:PSCommandPath:$($script:PSCommandPath)" ;
+                write-host "`$PSCommandPath:$($PSCommandPath)" ;
+                if($rvEnv.PSCommandPathproxy){ $prxPath = $rvEnv.PSCommandPathproxy }
+                elseif($script:PSCommandPath){$prxPath = $script:PSCommandPath}
+                elseif($rPSCommandPath){$prxPath = $rPSCommandPath} ; 
+            } ; 
+            if($rvEnv.isFunc){
+                if($rvEnv.FuncDir -AND $rvEnv.FuncName){
+                       $prxPath = join-path -path $rvEnv.FuncDir -ChildPath $rvEnv.FuncName ; 
+                } ; 
+            } ; 
+            if(-not $rvEnv.isFunc){
+                # under funcs, this is the scriptblock of the func, not a path
+                if($rvEnv.MyInvocationproxy.MyCommand.Definition){$prxPath2 = $rvEnv.MyInvocationproxy.MyCommand.Definition }
+                elseif($rvEnv.MyInvocationproxy.MyCommand.Definition){$prxPath2 = $rvEnv.MyInvocationproxy.MyCommand.Definition } ; 
+            } ; 
+            if($prxPath){
+                if(($prxPath -match $rgxPSAllUsersScope) -OR ($prxPath -match $rgxPSCurrUserScope)){
+                    $bDivertLog = $true ; 
+                    switch -regex ($prxPath){
+                        $rgxPSAllUsersScope{$smsg = "AllUsers"} 
+                        $rgxPSCurrUserScope{$smsg = "CurrentUser"}
+                    } ;
+                    $smsg += " context script/module, divert logging into [$budrv]:\scripts" 
+                    write-verbose $smsg  ;
+                    if($bDivertLog){
+                        if((split-path $prxPath -leaf) -ne $rvEnv.CmdletName){
+                            # function in a module/script installed to allusers|cu - defer name to Cmdlet/Function name
+                            $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($rvEnv.CmdletName).ps1") ;
+                        } else {
+                            # installed allusers|CU script, use the hosting script name
+                            $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath -leaf)) ;
+                        }
+                    } ;
+                } else {
+                    $pltSL.Path = $prxPath ;
+                } ;
+            }elseif($prxPath2){
+                if(($prxPath2 -match $rgxPSAllUsersScope) -OR ($prxPath2 -match $rgxPSCurrUserScope) ){
+                        $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath2 -leaf)) ;
+                } elseif(test-path $prxPath2) {
+                    $pltSL.Path = $prxPath2 ;
+                } elseif($rvEnv.CmdletName){
+                    $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath "$($rvEnv.CmdletName).ps1") ;
+                } else {
+                    $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$rvEnv.CmdletName, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    BREAK ;
+                } ; 
+            } else{
+                $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$rvEnv.CmdletName, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug 
                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 BREAK ;
-            } ; 
-        } else{
-            $smsg = "UNABLE TO RESOLVE A FUNCTIONAL `$CMDLETNAME, FROM WHICH TO BUILD A START-LOG.PATH!" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } #Error|Warn|Debug 
-            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            BREAK ;
-        }  ;
-        write-verbose "start-Log w`n$(($pltSL|out-string).trim())" ; 
-        $logspec = start-Log @pltSL ;
-        $error.clear() ;
-        TRY {
-            if($logspec){
-                #$logging=$logspec.logging ;
-                $logging= $false ; # explicitly turned logfile writing off, just want to use it's path for exports
-                $logfile=$logspec.logfile ;
-                $transcript=$logspec.transcript ;
-                <# 2:30 PM 9/27/2024 no transcript, just want solid logging path discovery
-                $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
-                if($stopResults){
-                    $smsg = "Stop-transcript:$($stopResults)" ; 
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            }  ;
+            write-verbose "start-Log w`n$(($pltSL|out-string).trim())" ; 
+            $logspec = start-Log @pltSL ;
+            $error.clear() ;
+            TRY {
+                if($logspec){
+                    $logging=$logspec.logging ;
+                    $logfile=$logspec.logfile ;
+                    $transcript=$logspec.transcript ;
+                    $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+                    if($stopResults){
+                        $smsg = "Stop-transcript:$($stopResults)" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    } ; 
+                    $startResults = start-Transcript -path $transcript ;
+                    if($startResults){
+                        $smsg = "start-transcript:$($startResults)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    } ; 
+                } else {throw "Unable to configure logging!" } ;
+            } CATCH [System.Management.Automation.PSNotSupportedException]{
+                if($host.name -eq 'Windows PowerShell ISE Host'){
+                    $smsg = "This version of $($host.name):$($host.version) does *not* support native (start-)transcription" ; 
+                } else { 
+                    $smsg = "This host does *not* support native (start-)transcription" ; 
                 } ; 
-                $startResults = start-Transcript -path $transcript ;
-                if($startResults){
-                    $smsg = "start-transcript:$($startResults)" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                } ; 
-                #>
-            } else {throw "Unable to configure logging!" } ;
-        } CATCH [System.Management.Automation.PSNotSupportedException]{
-            if($host.name -eq 'Windows PowerShell ISE Host'){
-                $smsg = "This version of $($host.name):$($host.version) does *not* support native (start-)transcription" ; 
-            } else { 
-                $smsg = "This host does *not* support native (start-)transcription" ; 
-            } ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        } CATCH {
-            $ErrTrapd=$Error[0] ;
-            $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-            else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        } ;
-        #endregion START-LOG-HOLISTIC #*------^ END START-LOG-HOLISTIC ^------
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } CATCH {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ;
+        } ; 
+        #endregion START_LOG_HOLISTIC #*------^ END START_LOG_HOLISTIC ^------
+        #endregion START_LOG_OPTIONS #*======^ START_LOG_OPTIONS ^======
 
-
+        #region NETWORK_INFO ; #*======v NETWORK_INFO v======
+        $netsettings = resolve-NetworkLocalTDO ; 
+        #endregion NETWORK_INFO ; #*======^ END NETWORK_INFO ^======
+    
         #region SERVICE_CONNECTIONS #*======v SERVICE_CONNECTIONS v======
         # PRETUNE STEERING separately *before* pasting in balance of region
-        #*------v STEERING VARIS v------
+        # THIS BLOCK DEPS ON VERB-* FANCY CRED/AUTH HANDLING MODULES THAT *MUST* BE INSTALLED LOCALLY TO FUNCTION
+        # NOTE: *DOES* INCLUDE *PARTIAL* DEP-LESS $useExopNoDep=$true OPT THAT LEVERAGES Connect-ExchangeServerTDO, VS connect-ex2010 & CREDS ARE ASSUMED INHERENT TO THE ACCOUNT) 
+        # Connect-ExchangeServerTDO HAS SUBSTANTIAL BENEFIT, OF WORKING SEAMLESSLY ON EDGE SERVER AND RANGE OF DOMAIN-=CONNECTED EXOP ROLES
         $useO365 = $true ;
         $useEXO = $true ; 
         $UseOP=$true ; 
         $UseExOP=$true ;
         $useExopNoDep = $true ; # switch to use Connect-ExchangeServerTDO, vs connect-ex2010 (creds are assumed inherent to the account)
+        $ExopVers = 'Ex2010' # 'Ex2019','Ex2016','Ex2013','Ex2010','Ex2007','Ex2003','Ex2000', Null for All versions
+        if($Version){
+            $ExopVers = $Version ; #defer to local script $version if set
+        } ; 
         $useForestWide = $true ; # flag to trigger cross-domain/forest-wide code in AD & EXoP
-        $UseOPAD = $true ; 
+        $UseOPAD = $false ; 
         $UseMSOL = $false ; # should be hard disabled now in o365
-        $UseAAD = $true  ; 
+        $UseAAD = $true ; 
+        if($env:userdomain -eq $env:computername){
+            $isNonDomainServer = $true ; 
+            $UseOPAD = $false ; 
+        } 
+        if(get-service MSExchangeTransport -ea 0){
+            $UseExOP = $true ; 
+            if( ($isLocalExchangeServer = (Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v14\Setup')) -or
+                    ($isLocalExchangeServer = (Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup')) -or $ByPassLocalExchangeServerTest)
+                {
+                    if((Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v14\EdgeTransportRole') -or
+                            (Test-Path 'HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\EdgeTransportRole')) {
+                        $smsg = "We are on Exchange Edge Transport Server"
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        $IsEdgeTransport = $true ; 
+                        if($IsEdgeTransport -AND $psise){
+                            $smsg = "powershell_ISE UNDER Exchange Edge Transport role!" 
+                            $smsg += "`nThis script is likely to fail the get-messagetrackingLog calls with Access Denied errors"
+                            $smsg += "`nif run with this combo."
+                            $smsg += "`nEXIT POWERSHELL ISE, AND RUN THIS DIRECTLY UNDER EMS FOR EDGE USE"; 
+                            $smsg += "`n(bug appears to be a conflict in Remote EMS v EMS access permissions, not resolved yet)" ; 
+                            write-warning $msgs ; 
+                        } ;                     
+                    
+                    } else {
+                        $IsEdgeTransport = $false ; 
+                    } ; 
+                } ; 
+        }else{
+            $isLocalExchangeServer = $false ; 
+        } ; 
         $useO365 = [boolean]($useO365 -OR $useEXO -OR $UseMSOL -OR $UseAAD)
         $UseOP = [boolean]($UseOP -OR $UseExOP -OR $UseOPAD) ;
         #*------^ END STEERING VARIS ^------
@@ -9384,6 +9846,19 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
             switch -regex ($env:USERDOMAIN){
                 ([regex]('(' + (( @($TORMeta.legacyDomain,$CMWMeta.legacyDomain)  |foreach-object{[regex]::escape($_)}) -join '|') + ')')).tostring() {$TenOrg = $env:USERDOMAIN.substring(0,3).toupper() } ;
                 $TOLMeta.legacyDomain {$TenOrg = 'TOL' }
+                $env:COMPUTERNAME {
+                    # non-domain-joined, no domain, but the $netsettings.fqdn has a dns suffix that can be steered.
+                    if($netsettings.fqdn){
+                    switch -regex (($netsettings.fqdn.split('.') | select -last 2 ) -join '.'){
+                      'toro\.com$' {$tenorg = 'TOR' ; } ; 
+                      '(charlesmachineworks\.com|cmw\.internal)$' { $TenOrg = 'CMW'} ; 
+                      '(torolab\.com|snowthrower\.com)$'  { $TenOrg = 'TOL'} ; 
+                      default {throw "UNRECOGNIZED DNS SUFFIX!:$(($netsettings.fqdn.split('.') | select -last 2 ) -join '.')" ; break ; } ;
+                    } ; 
+                    }else{
+                        throw "NIC.ip $($netsettings.ipaddress) does not PTR resolve to a DNS A with a full fqdn!" ; 
+                    } ; 
+                } ; 
                 default {throw "UNRECOGNIZED `$env:USERDOMAIN!:$($env:USERDOMAIN)" ; exit ; } ;
             } ; 
         } ; 
@@ -9685,10 +10160,16 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                         verbose  = $($rPSBoundParameters['Verbose'] -eq $true)
                         Credential = $pltRX10.Credential ; 
                     } ;
+                    if($ExopVers){
+                        $pltCcX10.add('Version',$ExopVers) ; 
+                        write-verbose "(Adding specified -Version:$($ExopVers) to `$pltCcX10)"
+                    } ; 
                     # 5:15 PM 4/22/2025 on CMW, have to patch version to Ex2016
                     #if($env:userdomain -eq 'CMW'){
                     if($TenOrg -eq 'CMW'){
-                        $pltCcX10.add('version','Ex2016') ; 
+                        if($pltCcX10.keys -contains 'Version'){
+                            $pltCcX10.version = 'Ex2016' ; 
+                        } else { $pltCcX10.add('version','Ex2016') } ;
                     } ; 
                     $smsg = "Connect-ExchangeServerTDO w`n$(($pltCcX10|out-string).trim())" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -9741,47 +10222,53 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         }  ;  # if-E $UseOP
         #endregion GENERIC_EXOP_CREDS_&_SRVR_CONN #*------^ END GENERIC EXOP CREDS & SRVR CONN BP ^------
-    
+
         #region UseOPAD #*------v UseOPAD v------
         if($UseOP -OR $UseOPAD){
-            #region GENERIC_ADMS_CONN_&_XO #*------v GENERIC ADMS CONN & XO  v------
-            $smsg = "(loading ADMS...)" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            # always capture load-adms return, it outputs a $true to pipeline on success
-            $ADMTLoaded = load-ADMS -Verbose:$FALSE ;
-            # 9:32 AM 4/20/2023 trimmed disabled/fw-borked cross-org code
-            TRY {
-                if(-not(Get-ADDomain  -ea STOP).DNSRoot){
-                    $smsg = "Missing AD Connection! (no (Get-ADDomain).DNSRoot returned)" ; 
-                    throw $smsg ; 
-                    $smsg | write-warning  ; 
-                } ; 
-                $objforest = get-adforest -ea STOP ; 
-                # Default new UPNSuffix to the UPNSuffix that matches last 2 elements of the forestname.
-                $forestdom = $UPNSuffixDefault = $objforest.UPNSuffixes | ?{$_ -eq (($objforest.name.split('.'))[-2..-1] -join '.')} ; 
-                if($useForestWide){
-                    #region  ; #*------v OPTIONAL CODE TO ENABLE FOREST-WIDE AD GC QRY SUPPORT v------
-                    $smsg = "(`$useForestWide:$($useForestWide)):Enabling AD Forestwide)" ; 
-                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    $smsg = 'Set-AdServerSettings -ViewEntireForest `$True' ;
-                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    #TK 9:44 AM 10/6/2022 need org wide for rolegrps in parent dom (only for onprem RBAC, not EXO)
-                    $GcFwide = "$((Get-ADDomainController -Discover -Service GlobalCatalog).hostname):3268" ;        
-                    #endregion  ; #*------^ END  OPTIONAL CODE TO ENABLE FOREST-WIDE AD GC QRY SUPPORT  ^------
-                } ;    
-            } CATCH {
-                $ErrTrapd=$Error[0] ;
-                $smsg = $ErrTrapd ;
-                $smsg += "`n";
-                $smsg += $ErrTrapd.Exception.Message ;
-                if ($logging) { _write-log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
-                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                CONTINUE ;
-            } ;        
-            #endregion GENERIC_ADMS_CONN_&_XO #*------^ END GENERIC ADMS CONN & XO ^------
+            if($isNonDomainServer){
+                $smsg = "(non-Domain-connected server:Skipping GENERIC ADMS CONN) "  
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            }else {
+                #region GENERIC_ADMS_CONN_&_XO #*------v GENERIC ADMS CONN & XO  v------
+                $smsg = "(loading ADMS...)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                # always capture load-adms return, it outputs a $true to pipeline on success
+                $ADMTLoaded = load-ADMS -Verbose:$FALSE ;
+                # 9:32 AM 4/20/2023 trimmed disabled/fw-borked cross-org code
+                TRY {
+                    if(-not(Get-ADDomain  -ea STOP).DNSRoot){
+                        $smsg = "Missing AD Connection! (no (Get-ADDomain).DNSRoot returned)" ; 
+                        throw $smsg ; 
+                        $smsg | write-warning  ; 
+                    } ; 
+                    $objforest = get-adforest -ea STOP ; 
+                    # Default new UPNSuffix to the UPNSuffix that matches last 2 elements of the forestname.
+                    $forestdom = $UPNSuffixDefault = $objforest.UPNSuffixes | ?{$_ -eq (($objforest.name.split('.'))[-2..-1] -join '.')} ; 
+                    if($useForestWide){
+                        #region  ; #*------v OPTIONAL CODE TO ENABLE FOREST-WIDE AD GC QRY SUPPORT v------
+                        $smsg = "(`$useForestWide:$($useForestWide)):Enabling AD Forestwide)" ; 
+                        if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $smsg = 'Set-AdServerSettings -ViewEntireForest `$True' ;
+                        if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #TK 9:44 AM 10/6/2022 need org wide for rolegrps in parent dom (only for onprem RBAC, not EXO)
+                        $GcFwide = "$((Get-ADDomainController -Discover -Service GlobalCatalog).hostname):3268" ;        
+                        #endregion  ; #*------^ END  OPTIONAL CODE TO ENABLE FOREST-WIDE AD GC QRY SUPPORT  ^------
+                    } ;    
+                } CATCH {
+                    $ErrTrapd=$Error[0] ;
+                    $smsg = $ErrTrapd ;
+                    $smsg += "`n";
+                    $smsg += $ErrTrapd.Exception.Message ;
+                    if ($logging) { _write-log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    CONTINUE ;
+                } ;        
+                #endregion GENERIC_ADMS_CONN_&_XO #*------^ END GENERIC ADMS CONN & XO ^------
+            } ; 
         } else {
             $smsg = "(`$UseOP:$($UseOP))" ; 
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -9792,11 +10279,15 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         # use new get-GCFastXO cross-org dc finde
         # default to Op_ExADRoot forest from $TenOrg Meta
         #if($UseOP -AND -not $domaincontroller){
-        if($UseOP -AND -not (get-variable domaincontroller -ea 0)){
+        if($UseOP -AND -not $isNonDomainServer -AND -not (get-variable domaincontroller -ea 0)){
             #$domaincontroller = get-GCFastXO -TenOrg $TenOrg -subdomain ((get-variable -name "$($TenOrg)Meta").value['OP_ExADRoot']) -verbose:$($verbose) |?{$_.length};
             # need to debug the above, credential issue?
             # just get it done
             $domaincontroller = get-GCFast
+        }elseif($isNonDomainServer){
+            $smsg = "(non-ADDomain-connected, skipping divert to EXO group resolution)" ; 
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
         }  else { 
             # have to defer to get-azuread, or use EXO's native cmds to poll grp members
             # TODO 1/15/2021
@@ -9805,7 +10296,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
             if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         } ; 
-        if($useForestWide -AND -not $GcFwide){
+        if(-not $isNonDomainServer -AND $useForestWide -AND -not $GcFwide){
             #region  ; #*------v OPTIONAL CODE TO ENABLE FOREST-WIDE ACTIVEDIRECTORY SUPPORT: v------
             $smsg = "`$GcFwide = Get-ADDomainController -Discover -Service GlobalCatalog" ;
             if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -9874,6 +10365,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         #>
         #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
         #endregion SERVICE_CONNECTIONS #*======^ END SERVICE_CONNECTIONS ^======
+
       
         # Configure the Get-xoMessageTrace splat 
         $pltGXMT=[ordered]@{
@@ -29258,7 +29750,7 @@ function test-xoMailboxHasEWSAccess {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test-Uri,convert-ADUserRecipientTypeRemoteSharedMailbox,convert-ADUserRecipientTypeRemoteUserMailbox,convert-exoMailboxTypeSharedMailbox,convert-exoMailboxTypeUserMailbox,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxoTOL,cxoTOR,Disconnect-EXO,get-AADlicensePlanList,get-ADUsersWithSoftDeletedxoMailboxes,get-ExoGxMTEventType,get-ExoMailboxLicenses,get-ExoMessageTraceEventType,Get-EXOMessageTraceExportedTDO,resolve-EnvironmentTDO,write-log,Start-Log,Connect-ExchangeServerTDO,_connect-ExOP,get-ADExchangeServerTDO,Remove-InvalidVariableNameChars,out-Clipboard,convertFrom-MarkdownTable,Initialize-exoStatusTable,pull-GetxoMessageTraceDetail,2b4,2b4c,fb4,get-ExoMessageTraceSourceType,get-EXOMsgTraceDetailed,Remove-InvalidVariableNameChars,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,get-XOMailboxFolderList,Get-xoMailboxFolderPermissionsRecursive,get-XOMailboxFolderPermissionsSummary,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,Reconnect-EXO,remove-EXOLicense,Reset-xoMailboxFolderPermissionsRecursive,resolve-AppIDToCBAFriendlyName,resolve-Name,resolve-user,2b4,2b4c,fb4,resolve-RMbxForwards,Resolve-xoRcps,rxoTOL,rxoTOR,test-EXOConnectionTDO,test-ExoDnsRecordTDO,test-EXOIsLicensed,test-EXOv2Connection,test-xoMailbox,_cleanup,test-xoMailboxHasEWSAccess -Alias *
+Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test-Uri,convert-ADUserRecipientTypeRemoteSharedMailbox,convert-ADUserRecipientTypeRemoteUserMailbox,convert-exoMailboxTypeSharedMailbox,convert-exoMailboxTypeUserMailbox,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxoTOL,cxoTOR,Disconnect-EXO,get-AADlicensePlanList,get-ADUsersWithSoftDeletedxoMailboxes,get-ExoGxMTEventType,get-ExoMailboxLicenses,get-ExoMessageTraceEventType,Get-EXOMessageTraceExportedTDO,resolve-EnvironmentTDO,write-log,Start-Log,Connect-ExchangeServerTDO,_connect-ExOP,get-ADExchangeServerTDO,load-ADMS,get-GCFast,resolve-NetworkLocalTDO,out-Clipboard,convertFrom-MarkdownTable,Remove-InvalidVariableNameChars,Initialize-exoStatusTable,pull-GetxoMessageTraceDetail,2b4,2b4c,fb4,get-ExoMessageTraceSourceType,get-EXOMsgTraceDetailed,Remove-InvalidVariableNameChars,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,get-XOMailboxFolderList,Get-xoMailboxFolderPermissionsRecursive,get-XOMailboxFolderPermissionsSummary,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,Reconnect-EXO,remove-EXOLicense,Reset-xoMailboxFolderPermissionsRecursive,resolve-AppIDToCBAFriendlyName,resolve-Name,resolve-user,2b4,2b4c,fb4,resolve-RMbxForwards,Resolve-xoRcps,rxoTOL,rxoTOR,test-EXOConnectionTDO,test-ExoDnsRecordTDO,test-EXOIsLicensed,test-EXOv2Connection,test-xoMailbox,_cleanup,test-xoMailboxHasEWSAccess -Alias *
 
 
 
