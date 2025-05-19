@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 8.10.4.0
+  Version     : 8.11.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -2188,6 +2188,7 @@ if(-not (get-childitem function:connect-O365Services -ea 0)){
         AddedWebsite:
         AddedTwitter:
         REVISIONS
+        * 1:01 PM 5/19/2025 rem'd $prefVaris dump (blank values, throws errors)
         * 3:34 PM 5/16/2025 spliced over local dep internal_funcs (out of the main paramt block) ; fixed typo in return vari name ret_ccO365S
         * 8:16 AM 5/15/2025 init
         .DESCRIPTION
@@ -2764,7 +2765,7 @@ if(-not (get-childitem function:connect-O365Services -ea 0)){
             $rPSBoundParameters = $PSBoundParameters ;
             #>
             #region PREF_VARI_DUMP ; #*------v PREF_VARI_DUMP v------
-            $script:prefVaris = @{
+            <#$script:prefVaris = @{
                 whatifIsPresent = $whatif.IsPresent
                 whatifPSBoundParametersContains = $rPSBoundParameters.ContainsKey('WhatIf') ;
                 whatifPSBoundParameters = $rPSBoundParameters['WhatIf'] ;
@@ -2785,6 +2786,7 @@ if(-not (get-childitem function:connect-O365Services -ea 0)){
                 VerbosePSBoundParametersUnboundArgumentContains = '-Verbose' -in $rPSBoundParameters.UnboundArguments
             } ;
             write-verbose "`n$(($script:prefVaris.GetEnumerator() | Sort-Object Key | Format-Table Key,Value -AutoSize|out-string).trim())`n" ;
+            #>
             #endregion PREF_VARI_DUMP ; #*------^ END PREF_VARI_DUMP ^------
             #region RV_ENVIRO ; #*------v RV_ENVIRO v------
             <#
@@ -31173,8 +31175,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU91y5q1B+LUJlGhFrgXKQH7z5
-# 8xWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUTSd0hGr2NGSH9uN5H0oOG65+
+# AIKgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -31189,9 +31191,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSMnpD6
-# bXR3U25ODbT5LB9xU37jpjANBgkqhkiG9w0BAQEFAASBgB4RpkMexo39u1xT0uMi
-# XteQDdXsar0cQ+Oi5k8qhxtEx2U9P0sWSl+JAz4ZLCtsoFGbcFhn/Bkgfq0Cma2F
-# fuIL71lseW+fDZfElnmXu9jBG0hDq6ohuKNzhg1MqyfA9L9vQBakEq2jB1daGo4n
-# WjEHkC4rA1TZYuYmHGqkrIcz
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTDjdiM
+# y+GkYNukpGiQEY/21ubA6DANBgkqhkiG9w0BAQEFAASBgGoZJlwD7Xod99Cimeci
+# oefVV43sg1qvZTywkbxk5woQ3uks13Y7Iv9apSuS84ZSkW8A9vMds93n9MqzmWg+
+# MtWd+OmYrcgIvn0+NaagnTVGqBIWXZT1zrctXRT1FnAzL4Tx3vaTVd+w3nr9Ms3O
+# /BNoCocxkJReR2cvtm9evQIA
 # SIG # End signature block

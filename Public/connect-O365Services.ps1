@@ -1,6 +1,6 @@
 ﻿# connect-O365Services.ps1
 
-#region CONNECT_O365SERVICES ; #*------v connect-O365Services v------
+#region CONNECT_O365SERVICES ; #*======v connect-O365Services v======
 if(-not (get-childitem function:connect-O365Services -ea 0)){
     function connect-O365Services {
         <#
@@ -21,6 +21,7 @@ if(-not (get-childitem function:connect-O365Services -ea 0)){
         AddedWebsite:
         AddedTwitter:
         REVISIONS
+        * 1:01 PM 5/19/2025 rem'd $prefVaris dump (blank values, throws errors)
         * 3:34 PM 5/16/2025 spliced over local dep internal_funcs (out of the main paramt block) ; fixed typo in return vari name ret_ccO365S
         * 8:16 AM 5/15/2025 init
         .DESCRIPTION
@@ -597,7 +598,7 @@ if(-not (get-childitem function:connect-O365Services -ea 0)){
             $rPSBoundParameters = $PSBoundParameters ;
             #>
             #region PREF_VARI_DUMP ; #*------v PREF_VARI_DUMP v------
-            $script:prefVaris = @{
+            <#$script:prefVaris = @{
                 whatifIsPresent = $whatif.IsPresent
                 whatifPSBoundParametersContains = $rPSBoundParameters.ContainsKey('WhatIf') ;
                 whatifPSBoundParameters = $rPSBoundParameters['WhatIf'] ;
@@ -618,6 +619,7 @@ if(-not (get-childitem function:connect-O365Services -ea 0)){
                 VerbosePSBoundParametersUnboundArgumentContains = '-Verbose' -in $rPSBoundParameters.UnboundArguments
             } ;
             write-verbose "`n$(($script:prefVaris.GetEnumerator() | Sort-Object Key | Format-Table Key,Value -AutoSize|out-string).trim())`n" ;
+            #>
             #endregion PREF_VARI_DUMP ; #*------^ END PREF_VARI_DUMP ^------
             #region RV_ENVIRO ; #*------v RV_ENVIRO v------
             <#
@@ -1411,5 +1413,5 @@ if(-not (get-childitem function:connect-O365Services -ea 0)){
         } ; # END-E
     } ;
 } ;
-#endregion CONNECT_O365SERVICES ; #*------^ END connect-O365Services ^------
+#endregion CONNECT_O365SERVICES ; #*======^ END CONNECT_O365SERVICES ^======
 
