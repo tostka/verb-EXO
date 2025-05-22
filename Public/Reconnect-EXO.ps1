@@ -17,6 +17,7 @@ Function Reconnect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 2:53 PM 5/22/2025 retiring separate reconnect-exo(), in favor of shifting to an alias of connect-exo(): started a rewrite to update with -UPN, but then found myself copying *all* of the cxo code in: no point if it's just a full repro of cxo - just alias rxo into cxo, and move on ; So lets try disabling this, and re-aliasing cxo
     * 3:11 PM 7/15/2024 needed to change CHKPREREQ to check for presence of prop, not that it had a value (which fails as $false); hadn't cleared $MetaProps = ...,'DOESNTEXIST' ; confirmed cxo working non-based
     *1:44 PM 7/9/2024 passes hybrid xo/s&c, with variant prefixes (other than hard-req that prefix cc indicates an s&c conn); 
          un-remmed cc-specific $UserRole default (steers into SID);  sub'd in silent for w-v
