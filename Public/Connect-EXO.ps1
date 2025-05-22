@@ -17,6 +17,10 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    *2:48 PM 5/22/2025 rolled reconnect-exo into an alias of this (found updating it, that I was copying most of cxo's logic over, no point wo local baseicauth creds being moved anymore); 
+        dbgd working cxo, rxo, csc & rsc, looks functional. put through a build, anduse it with Invoke-SCMailboxFolderContentPurgeV2.ps1; 
+        -credential should work (though modernAuth wouldn't permit); -userprincipalname works; userRole specs work; SC connections appear to work. Put everything through this, instead of running bespoke code
+         made some changes for full -userprincipalname support (as Prvw/S&C doesn't support CBA for discovery-tied commands: have to use native upn connects)
     * 12:34 PM 10/29/2024 splicing back updates from Invoke-SCMailboxFolderContentPurge.ps1, incl abil to do prefixless (so have to pull the -prefix as a driver), checking Connect-IPPSSession it's still cited as "cmdlet in the Exchange Online PowerShell module to connect to Security & Compliance PowerShell using modern authentication ": SC is the ideal conn
     * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
     * 3:11 PM 7/15/2024 needed to change CHKPREREQ to check for presence of prop, not that it had a value (which fails as $false); hadn't cleared $MetaProps = ...,'DOESNTEXIST' ; confirmed cxo working non-based
@@ -119,7 +123,7 @@ Function Connect-EXO {
     .PARAMETER connectPurview
     Switch to connect to Security & Compliance ('Purview') Powershell via Connect-IPPSSession[-connectPurview]
     .PARAMETER SCDefaultPrefix
-    Default Prefix/ModulePrefix to be used for connections to Security & Compliance ('Purview') Powershell via Connect-IPPSSession[-SCDefaultPrefix 'cc']
+    Default Prefix/ModulePrefix to be used for connections to Security & Compliance ('Purview') Powershell via Connect-IPPSSession[-SCDefaultPrefix 'sc']
     .PARAMETER UserRole
     Credential Optional User Role spec for credential discovery (wo -Credential)(SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]
     .PARAMETER TenOrg
@@ -183,7 +187,8 @@ Function Connect-EXO {
     .LINK
     #>
     [CmdletBinding(DefaultParameterSetName='UPN')]
-    [Alias('cxo','cxo2','Connect-EXO2','Connect-Purview','Connect-SC' )]
+    # add rxo aliases here, drop rxo as a separate function
+    [Alias('cxo','cxo2','Connect-EXO2','Connect-Purview','Connect-SC','Reconnect-EXO','Reconnect-Purview','Reconnect-SC' )]
     PARAM(
         # try pulling all the ParameterSetName's - just need to get through it now. - no got through it with a defaultparametersetname (avoids 
         [Parameter(HelpMessage = "[verb]-PREFIX[command] PREFIX string for clearly marking cmdlets sourced in this connection (defaults to xo, assert -Prefix:`$null to suppress any prefix use) [-Prefix tag]")]
@@ -196,7 +201,7 @@ Function Connect-EXO {
         [Parameter(HelpMessage = "Switch to connect to Security & Compliance ('Purview') Powershell via Connect-IPPSSession[-connectPurview]")]
             [Alias('ConnectSC')]
             [switch]$connectPurview,
-        [Parameter(HelpMessage = "Default Prefix/ModulePrefix to be used for connections to Security & Compliance ('Purview') Powershell via Connect-IPPSSession[-SCDefaultPrefix 'cc']")]
+        [Parameter(HelpMessage = "Default Prefix/ModulePrefix to be used for connections to Security & Compliance ('Purview') Powershell via Connect-IPPSSession[-SCDefaultPrefix 'sc']")]
             [string] $SCDefaultPrefix = 'sc',
         [Parameter(Mandatory = $false, HelpMessage = "Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]")]
             # sourced from get-admincred():#182: $targetRoles = 'SID', 'CSID', 'ESVC','CSVC','UID','ESvcCBA','CSvcCBA','SIDCBA' ; 
@@ -352,11 +357,20 @@ Function Connect-EXO {
         } ;
         #*======^ END FUNCTIONS ^======
 
-        if($rMyInvocation.Line -match 'Connect-(Purview|SC)' ){
-            $smsg = "Connect-EXO() invoked using Connect-Purview Alias:" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
-            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+        # 'Reconnect-EXO','Reconnect-Purview','Reconnect-SC'
+        if($ConnectPurview -OR ($rMyInvocation.Line -match 'Connect-(Purview|SC)' )){
+            if($rMyInvocation.Line -match 'Connect-(Purview|SC)' ){
+                $smsg = "Connect-EXO() invoked using Connect-Purview Alias:" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            }
+            if($ConnectPurview){
+                $smsg = "Connect-EXO() invoked using -ConnectPurview" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            }
             $smsg = "Set:-ConnectPurview:`$true" ; 
             if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -384,7 +398,7 @@ Function Connect-EXO {
             # disable prefix spec, unless actually blanked (e.g. centrally spec'd in profile).
             if (-not $Prefix) {
                 $Prefix = 'xo' ; # 4:31 PM 7/29/2020 MS has RESERVED use of the 'exo' prefix [facepalm]
-                #$Prefix = 'cc' ; # Prvw variant
+                #$Prefix = 'sc' ; # Prvw variant
                 $smsg = "(asserting default Prefix:$($Prefix)" ;
                 if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
@@ -394,11 +408,11 @@ Function Connect-EXO {
             }
         } ; 
         <#
-        if($Prefix -eq 'cc'){
+        if($Prefix -eq 'sc'){
             # build in hybrid xo & Prvw support, switch on the prefix spec
-            $usePrvwConn = $true ; 
+            $ConnectPurview = $true ; 
         }; 
-        if($usePrvwConn){
+        if($ConnectPurview){
             # respec userrole
             $UserRole = @('SID') ; 
             $sTitleBarTag = @("Prvw") ;
@@ -423,8 +437,6 @@ Function Connect-EXO {
         } ; 
         #>
 
-        #if(-not $rgxConnectionUriEXO){$rgxConnectionUriEXO = 'https://outlook\.office365\.com'} ; 
-        #if(-not $rgxConnectionUriPrvw){$rgxConnectionUriPrvw = 'https://ps\.compliance\.protection\.outlook\.com'} ; 
         if(-not $isBased){
             # default to most basic rudimentary connection
             $connections = Get-ConnectionInformation -ErrorAction SilentlyContinue
@@ -467,7 +479,7 @@ Function Connect-EXO {
         } else {
 
             # transplat fr rxo ---
-            if(-not $Credential){
+            if(-not $Credential -AND -not $UserPrincipalName){
                 if($UserRole){
                     $smsg = "Using specified -UserRole:$( $UserRole -join ',' )" ;
                     if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -511,32 +523,51 @@ Function Connect-EXO {
                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                     break ; 
                 } ; 
+            }elseif($UserPrincipalName){
+                # convert UPN to cred for get-tenanttag handling
+                $UpnCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ($UserPrincipalName,(convertto-securestring -string "passworddummy" -asplaintext -force)) ;
+                $TenOrg = get-TenantTag -Credential $UpnCredential ;
+            }elseif($Credential){
+                $TenOrg = get-TenantTag -Credential $Credential ;
             }elseif(-not $Credential -AND -not $isBased){    
-                $smsg = "Missing Profile config to drive connection automation, defa" ; 
+                $smsg = "Missing Profile config to drive connection automation, defaults" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
             } else { 
                 # test-exotoken only applies if $UseConnEXO  $false
-                $TenOrg = get-TenantTag -Credential $Credential ;
+                #$TenOrg = get-TenantTag -Credential $Credential ;
             } ;
             # build the cred etc once, for all below:
+
             $pltCXO=[ordered]@{
-                Credential = $Credential ;
+                #Credential = $Credential ;
                 verbose = $($verbose) ; 
                 erroraction = 'STOP' ;
             } ;
+            if($Credential){
+                $pltCXO.add('Credential',$Credential) ;
+                $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ; 
+            } elseif($UserPrincipalName){
+                $pltCXO.add('UserPrincipalName',$UserPrincipalName) ;
+                $uRoleReturn = resolve-UserNameToUserRole -Credential $UpnCredential ; 
+            } else {
+            
+            } ; 
             if((gcm connect-EXO).Parameters.keys -contains 'silent'){
                 $pltCXO.add('Silent',$silent) ;
             } ;
 
-            $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential ; 
             if($credential.username -match $rgxCertThumbprint){
                 $certTag = $uRoleReturn.TenOrg ; 
             } ; 
             # ---
 
-            $MFA = get-TenantMFARequirement -Credential $Credential ;
+            if($UserPrincipalName){
+                $MFA = get-TenantMFARequirement -Credential $UpnCredential  ;
+            }else{
+                $MFA = get-TenantMFARequirement -Credential $Credential ;
+            } ; 
 
             # 12:08 PM 8/2/2022 scrap the msal.net material: it's fundementally incompatible with EXO - sure you can pull and auth a token into the PS EXO clientid, but you can't spec a prefix on the returned cmdlets.
             # 4:45 PM 7/7/2022 workaround msal.ps bug: always ipmo it FIRST: "Get-msaltoken : The property 'Authority' cannot be found on this object. Verify that the property exists."
@@ -794,8 +825,8 @@ Function Connect-EXO {
         
             #$bExistingPrvwGood
             #if ($bExistingEXOGood -eq $false) {
-            # $UseConnEXO indicates it's a MinNoWinRMVersino, not necc xo-only conn; $usePrvwConn indicates it's a prefix cc/Prvw connection, solely
-            if( ($usePrvwConn -AND ($bExistingPrvwGood -eq $false)) -OR (-not($usePrvwConn) -AND $bExistingEXOGood -eq $false) ){
+            # $UseConnEXO indicates it's a MinNoWinRMVersino, not necc xo-only conn; $ConnectPurview indicates it's a prefix cc/Prvw connection, solely
+            if( ($ConnectPurview -AND ($bExistingPrvwGood -eq $false)) -OR (-not($ConnectPurview) -AND $bExistingEXOGood -eq $false) ){
                 # open a new EXOv2 session
                 if(-not $UseConnEXO){
                 
@@ -867,7 +898,7 @@ Function Connect-EXO {
                     # 9:43 AM 8/2/2022 add defaulted prefix spec
                     
                     if($Prefix){
-                        if($usePrvwConn -OR $ConnectPurview){
+                        if($ConnectPurview -OR $ConnectPurview){
                             $smsg = "(adding specified  Connect-IPPSSession -Prefix:$($Prefix))" ; 
                         } else { 
                             $smsg = "(adding specified Connect-ExchangeOnline -Prefix:$($Prefix))" ; 
@@ -1028,7 +1059,7 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                     } ;
 
-                    if($usePrvwConn){
+                    if($ConnectPurview -OR $ConnectPurview){
                         $smsg = "connect-IPPSSession w`n$(($pltCEO|out-string).trim())" ; 
                     } else { 
                         $smsg = "Connect-ExchangeOnline w`n$(($pltCEO|out-string).trim())" ; 
@@ -1036,7 +1067,7 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
                     if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
                     TRY {
-                        if($usePrvwConn -OR $ConnectPurview){
+                        if($ConnectPurview){
                             connect-IPPSSession @pltCEO ;
                         } else {
                             Connect-ExchangeOnline @pltCEO ;
