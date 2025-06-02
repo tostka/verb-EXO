@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 8.11.2.0
+  Version     : 9.0.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -998,7 +998,7 @@ Function Connect-EXO {
     * 9:56 AM 11/10/2020 variant of cxo2, that has direct ported-in low-level code from the ExchangeOnlineManagement:connect-ExchangeOnlin(). debugs functional so far, haven't tested concurrent CCMS + EXO overlap & tokens yet. 
     * 8:30 AM 10/22/2020 ren'd $TentantTag -> $TenOrg, swapped looping meta resolve with 1-liner approach ; added AcceptedDom caching to the middle status test (suppress one more get-exoaccepteddomain call if possible)
     * 4:41 PM 10/8/2020 implemented AcceptedDomain caching, in connect-exo2 to match rxo2
-    * 1:18 PM 8/11/2020 fixed typo in *broken *closed varis in use; updated ExoV1 conn filter, to specificly target v1 (old matched v1 & v2) ; trimmed entire rem'd MFA block ; added trailing test-EXOToken confirm
+    * 1:18 PM 9.0.0020 fixed typo in *broken *closed varis in use; updated ExoV1 conn filter, to specificly target v1 (old matched v1 & v2) ; trimmed entire rem'd MFA block ; added trailing test-EXOToken confirm
     * 12:57 PM 8/4/2020 sorted ExchangeOnlineMgmt mod issues (splatting wo using splat char), if MS hadn't completely rewritten the access, this rewrite wouldn't have been necessary in the 1st place. I'm not looking forward to the org wide rewrites to recode verb-exoNoun -> verb-xoNoun, to accomodate the breaking-change blocking -Prefix 'exo'. ; # 1:04 PM 8/4/2020 cute: now the above error's stopped occuring on the problem tenant. Can't do further testing of the workaround, unless/until it breaks again ; * 2:39 PM 8/4/2020 fixed -match "^(Session|WinRM)\d*" rgx (lacked ^, mismatched EXOv2 conns)
     * 12:20 PM 7/29/2020 rewrite/port from connect-EXO to replace import-pssession with new connect-ExchangeOnline cmdlet (supports MFA natively) - #127 # *** LEFT OFF HERE 5:01 PM 7/29/2020 *** not sure if it supports allowclobber, if it's actually wrapping pssession, it sure as shit does!
     * 11:21 AM 7/28/2020 added Credential -> AcceptedDomains Tenant validation, also testing existing conn, and skipping reconnect unless unhealthy or wrong tenant to match credential
@@ -2204,20 +2204,22 @@ function connect-O365Services {
         .SYNOPSIS
         connect-O365Services - logic wrapper for my histortical scriptblock that resolves creds, svc avail and relevent status, to connect to range of Services (in o365)
         .NOTES
-        Version     : 0.0.
+        Version     : 0.0.2
         Author      : Todd Kadrie
         Website     : http://www.toddomation.com
         Twitter     : @tostka / http://twitter.com/tostka
-        CreatedDate : 2024-06-07
+        CreatedDate : 2025-06-02
         FileName    : connect-O365Services
         License     : MIT License
-        Copyright   : (c) 2024 Todd Kadrie
-        Github      : https://github.com/tostka/verb-AAD
+        Copyright   : (c) 2025 Todd Kadrie
+        Github      : https://github.com/tostka/verb-EXO
         Tags        : Powershell,AzureAD,Authentication,Test
         AddedCredit :
         AddedWebsite:
-        AddedTwitter:
+        AddedTwitter: 
         REVISIONS
+        *8:17 PM 6/1/2025 debugs functional for useexo & usesc now; 
+        *11:40 AM 5/29/2025 hybrid the two vers to one latest; cleaned out unused CBH params
         * 5:00 PM 5/23/2025 added useSC support, and UPN auth; updated connect-exo() to support upn properly; rolled reconnect-exo into an alias of connect-exo ; 
         * 4:38 PM 5/22/2025 made XoPSummary non-mand; added -useSC and code for connectivity, including use of -userprincipalname
         * 2:52 PM 5/19/2025 rem'd $prefVaris dump (blank values, throws errors); updated get-CodeProfileAST.ps1(); rv rem'd OP switch params
@@ -2229,21 +2231,10 @@ function connect-O365Services {
         Pre-resolved local environrment summary (product of output of verb-io\resolve-EnvironmentTDO())[-EnvSummary `$rvEnv]
         .PARAMETER NetSummary
         Pre-resolved local network summary (product of output of verb-network\resolve-NetworkLocalTDO())[-NetSummary `$netsettings]
-        .PARAMETER XoPSummary
-        Pre-resolved local ExchangeServer summary (product of output of verb-ex2010\test-LocalExchangeInfoTDOO())[-XoPSummary `$lclExOP]
         .PARAMETER useEXO
-        Connect to O365 ExchangeOnlineManagement[-useEXO]
+        Connect to O365 ExchangeOnlineManagement)[-useEXO]
         .PARAMETER useSC
         Connect to O365 Security & Compliance/Purview)[-useSC]
-        .PARAMETER UseExOP
-        Connect to OnPrem ExchangeManagementShell(Remote (Local,Edge))[-UseExOP]
-        .PARAMETER useExopNoDep
-        Connect to OnPrem ExchangeManagementShell using No Dependancy options)[-useEXO]
-        .PARAMETER ExopVers
-        Connect to OnPrem ExchangeServer version (Ex2019|Ex2016|Ex2013|Ex2010|Ex2007|Ex2003|Ex2000). An array represents a min/max range of all between; null indicates all versions returned by verb-Ex2010\get-ADExchangeServerTDO())[-useEXO]
-        XOP Switch to set ForestWide Exchange EMS scope(e.g. Set-AdServerSettings -ViewEntireForest `$True)[-useForestWide]
-        .PARAMETER UseOPAD
-        Connect to OnPrem ActiveDirectory powershell module)[-UseOPAD]
         .PARAMETER UseMSOL
         Connect to O365 MSOnline powershell module)[-UseMSOL]
         .PARAMETER UseAAD
@@ -2258,8 +2249,8 @@ function connect-O365Services {
         Tenant Tag (3-letter abbrebiation)[-TenOrg 'XYZ']
         .PARAMETER Credential
         Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]
-        .PARAMETER UserPrincipalName
-        Use specific UserPrincipalName for service connections (defaults to Tenant-defined SvcAccount)[-UserPrincipalName LOGON@DOMAIN.COM]
+        .PARAMETER AdminAccount
+        Use specific AdminAccount for service connections (defaults to Tenant-defined SvcAccount)[-AdminAccount LOGON@DOMAIN.COM]
         .PARAMETER UserRole
         Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]
         .PARAMETER useEXOv2
@@ -2268,8 +2259,6 @@ function connect-O365Services {
         Silent output (suppress status echos)[-silent]
         .PARAMETER MGPermissionsScope
         Optional Array of MG Permission Names(avoids manual discovery against configured cmdlets)[-MGPermissionsScope @('Domain.Read.All','Domain.ReadWrite.All','Directory.Read.All') ]
-        .PARAMETER useExOPVers
-        String array to indicate target OnPrem Exchange Server version to target with connections, if an array, will be assumed to reflect a span of versions to include, connections will aways be to a random server of the latest version specified (Ex2000|Ex2003|Ex2007|Ex2010|Ex2000|Ex2003|Ex2007|Ex2010|Ex2016|Ex2019), used with verb-Ex2010\get-ADExchangeServerTDO() dyn location via ActiveDirectory.[-useExOPVers @('Ex2010','Ex2016')]")]
         .INPUTS
         Does not accept piped input
         .OUTPUTS
@@ -2282,51 +2271,117 @@ function connect-O365Services {
         Typical function pass, using get-command to return the definition/scriptblock for the subject function.
         .EXAMPLE
         PS> write-verbose "Typically from the BEGIN{} block of an Advanced Function, or immediately after PARAM() block" ;
-        PS> $Verbose = [boolean]($VerbosePreference -eq 'Continue') ;
-        PS> $rPSCmdlet = $PSCmdlet ; 
-        PS> $rPSScriptRoot = $PSScriptRoot ; 
-        PS> $rPSCommandPath = $PSCommandPath ; 
-        PS> $rMyInvocation = $MyInvocation ; 
-        PS> $rPSBoundParameters = $PSBoundParameters ; 
-        PS> $pltRvEnv=[ordered]@{
-        PS>     PSCmdletproxy = $rPSCmdlet ; 
-        PS>     PSScriptRootproxy = $rPSScriptRoot ; 
-        PS>     PSCommandPathproxy = $rPSCommandPath ; 
-        PS>     MyInvocationproxy = $rMyInvocation ;
-        PS>     PSBoundParametersproxy = $rPSBoundParameters
-        PS>     verbose = [boolean]($PSBoundParameters['Verbose'] -eq $true) ; 
-        PS> } ;
-        PS> $smsg = "resolve-EnvironmentTDO w`n$(($pltRVEnv|out-string).trim())" ; 
-        PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        PS> $rvEnv = resolve-EnvironmentTDO @pltRVEnv ; 
-        PS> $smsg = "`$rvEnv returned:`n$(($rvEnv |out-string).trim())" ; 
-        PS> if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-        PS> else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        PS> $netsettings = resolve-NetworkLocalTDO ; 
-        PS> $lclExOP = test-LocalExchangeInfoTDO ; 
-        PS> $pltCco365Svcs=[ordered]@{
-        PS>     EnvSummary = $rvEnv ;
-        PS>     NetSummary = $netsettings ;
-        PS>     XoPSummary = $lclExOP ;
-        PS>     useEXO = $true ;
-        PS>     UseMSOL = $false ;
-        PS>     UseAAD = $false ;
-        PS>     UseMG = $true ;
-        PS>     TenOrg = $global:o365_TenOrgDefault ;
-        PS>     Credential = $null ;
-        PS>     UserRole = @('SID','CSVC') ;
-        PS>     # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
-        PS>     useEXOv2 = $true ;
-        PS>     silent = $false ;
-        PS>     MGPermissionsScope = $null ;
-        PS>     MGCmdlets = $null ;
-        PS> } ;
-        PS> $smsg = "connect-O365Services w`n$(($pltCco365Svcs|out-string).trim())" ;
-        PS> if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        PS> $ret_ccO365S = connect-O365Services @pltCco365Svcs ; 
+        PS> #region CONNECT_O365SERVICES ; #*======v CONNECT_O365SERVICES v======
+        PS> #$useO365 = $true ; 
+        PS> if($useO365){
+        PS>     $pltCco365Svcs=[ordered]@{
+        PS>         # environment parameters:
+        PS>         EnvSummary = $rvEnv ; 
+        PS>         NetSummary = $netsettings ; 
+        PS>         XoPSummary = $lclExOP ; 
+        PS>         # service choices
+        PS>         useEXO = $true ;
+        PS>         useSC = $true ; 
+        PS>         UseMSOL = $false ;
+        PS>         UseAAD = $false ;
+        PS>         UseMG = $false ;
+        PS>         # Service Connection parameters
+        PS>         TenOrg = $TenOrg ; # $global:o365_TenOrgDefault ; 
+        PS>         Credential = $Credential ;
+        PS>         AdminAccount = $AdminAccount ; 
+        PS>         #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
+        PS>         UserRole = $UserRole ; # @('SID','CSVC') ;
+        PS>         # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
+        PS>         silent = $silent ;
+        PS>         MGPermissionsScope = $MGPermissionsScope ;
+        PS>         MGCmdlets = $MGCmdlets ;
+        PS>     } ;
+        PS>     write-verbose "(Purge no value keys from splat)" ; 
+        PS>     $mts = $pltCco365Svcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
+        PS>     if((get-command connect-O365Services -EA STOP).parameters.ContainsKey('whatif')){
+        PS>         $pltCco365SvcsnDSR.add('whatif',$($whatif))
+        PS>     } ; 
+        PS>     $smsg = "connect-O365Services w`n$(($pltCco365Svcs|out-string).trim())" ; 
+        PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        PS>     $ret_ccSO365 = connect-O365Services @pltCco365Svcs ; 
+        PS>     
+        PS>     #region CONFIRM_SPLAT2RETURN ; #*------v CONFIRM_SPLAT2RETURN v------
+        PS>     # matches each: $plt.useXXX:$true to matching returned $ret.hasXXX:$true 
+        PS>     $vplt = $pltCco365Svcs ; $vret = 'ret_ccSO365' ; $ACtionCommand = 'connect-O365Services' ; $vtests = @() ; $vFailMsgs = @()  ; 
+        PS>     $vplt.GetEnumerator() |?{$_.key -match '^use' -ANd $_.value -match $true} | foreach-object{
+        PS>         $pltkey = $_ ;
+        PS>         $smsg = "$(($pltkey | ft -HideTableHeaders name,value|out-string).trim())" ; 
+        PS>         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+        PS>         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        PS>         $tprop = $pltkey.name -replace '^use','has';
+        PS>         if($rProp = (gv $vret).Value.psobject.properties | ?{$_.name -match $tprop}){
+        PS>             $smsg = "$(($rprop | ft -HideTableHeaders name,value |out-string).trim())" ; 
+        PS>             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+        PS>             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        PS>             if($rprop.Value -eq $pltkey.value){
+        PS>                 $vtests += $true ; 
+        PS>                 $smsg = "Validated: $($pltKey.name):$($pltKey.value) => $($rprop.name):$($rprop.value)" ;
+        PS>                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
+        PS>                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        PS>                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+        PS>             } else {
+        PS>                 $smsg = "NOT VALIDATED: $($pltKey.name):$($pltKey.value) => $($rprop.name):$($rprop.value)" ;
+        PS>                 $vtests += $false ; 
+        PS>                 $vFailMsgs += "`n$($smsg)" ; 
+        PS>                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+        PS>                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        PS>             };
+        PS>         } else{
+        PS>             $smsg = "Unable to locate: $($pltKey.name):$($pltKey.value) to any matching $($rprop.name)!)" ;
+        PS>             $smsg = "" ; 
+        PS>             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+        PS>             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        PS>         } ; 
+        PS>     } ; 
+        PS>     if($vtests -notcontains $false){
+        PS>         $smsg = "==> $($ACtionCommand): confirmed specified connections *all* successful " ; 
+        PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
+        PS>         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        PS>         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+        PS>     } else {
+        PS>         $smsg = "==> $($ACtionCommand): FAILED SOME SPECIFIED CONNECTIONS" ; 
+        PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+        PS>         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        PS>         $smsg = "MISSING SOME KEY CONNECTIONS. DO YOU WANT TO IGNORE, AND CONTINUE WITH CONNECTED SERVICES?" ;
+        PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+        PS>         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        PS>         #-=-=-=-=-=-=-=-=
+        PS>         $sdEmail.SMTPSubj = "FAIL Rpt:$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"
+        PS>         $sdEmail.SmtpBody = "`n===Processing Summary:" ;
+        PS>         if($vFailMsgs){
+        PS>             $sdEmail.SmtpBody += "`n$(($vFailMsgs|out-string).trim())" ; 
+        PS>         } ; 
+        PS>         $sdEmail.SmtpBody += "`n" ;
+        PS>         if($SmtpAttachment){
+        PS>             $sdEmail.SmtpAttachment = $SmtpAttachment
+        PS>             $sdEmail.smtpBody +="`n(Logs Attached)" ;
+        PS>         };
+        PS>         $sdEmail.SmtpBody += "Pass Completed $([System.DateTime]::Now)" ;
+        PS>         $smsg = "Send-EmailNotif w`n$(($sdEmail|out-string).trim())" ;
+        PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+        PS>         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        PS>         Send-EmailNotif @sdEmail ;
+        PS>         $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ;
+        PS>         if ($bRet.ToUpper() -eq "YYY") {
+        PS>             $smsg = "(Moving on), WITH THE FOLLOW PARTIAL CONNECTION STATUS" ;
+        PS>             $smsg += "`n`n$(($ret_CcOPSvcs|out-string).trim())" ; 
+        PS>             write-host -foregroundcolor green $smsg  ;
+        PS>         } else {
+        PS>             throw $smsg ; 
+        PS>             break ; #exit 1
+        PS>         } ;         
+        PS>     } ; 
+        PS>     #endregion CONFIRM_SPLAT2RETURN ; #*------^ END CONFIRM_SPLAT2RETURN ^------
+        PS> } ; 
+        PS> #endregion CONNECT_O365SERVICES ; #*======^ END CONNECT_O365SERVICES ^======
         Demo leveraging verb-io\resolve-EnvironmentTDO(), verb-network\resolve-NetworkLocalTDO() & verb-ex2010\test-LocalExchangeInfoTDO() to provide relevent inputs
         .LINK
-        https://bitbucket.org/tostka/verb-dev/
+        https://github.com/tostka/verb-EXO
         #>
         ##Requires -Modules AzureAD, verb-AAD
         [CmdletBinding()]
@@ -2338,8 +2393,6 @@ function connect-O365Services {
                 $EnvSummary, # $rvEnv
             [Parameter(Mandatory=$true,HelpMessage="Pre-resolved local network summary (product of output of verb-network\resolve-NetworkLocalTDO())[-NetSummary `$netsettings]")]
                 $NetSummary, # $netsettings
-            [Parameter(Mandatory=$false,HelpMessage="Pre-resolved local ExchangeServer summary (product of output of verb-ex2010\test-LocalExchangeInfoTDOO())[-XoPSummary `$lclExOP]")]
-                $XoPSummary, # $lclExOP = test-LocalExchangeInfoTDO ;
             # service choices
             [Parameter(HelpMessage="Connect to O365 ExchangeOnlineManagement)[-useEXO]")]
                 [switch]$useEXO,
@@ -2358,8 +2411,8 @@ function connect-O365Services {
                 [string]$TenOrg = $global:o365_TenOrgDefault,
             [Parameter(Mandatory = $false, HelpMessage = "Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]")]
                 [System.Management.Automation.PSCredential]$Credential,
-            [Parameter(Mandatory = $false, HelpMessage = "Use specific UserPrincipalName for service connections (defaults to Tenant-defined SvcAccount)[-UserPrincipalName LOGON@DOMAIN.COM]")]
-                [string]$UserPrincipalName,
+            [Parameter(Mandatory = $false, HelpMessage = "Use specific AdminAccount for service connections (defaults to Tenant-defined SvcAccount)[-AdminAccount LOGON@DOMAIN.COM]")]
+                    [string]$AdminAccount,
             [Parameter(Mandatory = $false, HelpMessage = "Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]")]
                 # sourced from get-admincred():#182: $targetRoles = 'SID', 'CSID', 'ESVC','CSVC','UID','ESvcCBA','CSvcCBA','SIDCBA' ;
                 #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
@@ -2403,13 +2456,28 @@ function connect-O365Services {
                     CreatedDate : 3:56 PM 12/8/2019
                     FileName    : get-CodeProfileAST.ps1
                     License     : MIT License
-                    Copyright   : (c) 2019 Todd Kadrie
-                    Github      : https://github.com/tostka
+                    Copyright   : (c) 2025 Todd Kadrie
+                    Github      : https://github.com/tostka/verb-dev
                     AddedCredit :
                     AddedWebsite:
                     AddedTwitter:
                     REVISIONS
+                    * 10:57 AM 5/19/2025 add: CBH for more extensive code profiling demo (for targeting action-verb cmds in code, from specific modules); fixed some missing CBH info.
                     * 4:11 PM 5/15/2025 add psv2-ordered compat
+                    * 10:43 AM 5/14/2025 added SSP-suppressing -whatif:/-confirm:$false to nv's
+                    * 12:10 PM 5/6/2025 added -ScriptBlock, and logic to process either file or scriptblock; added examples demoing resolve Microsoft.Graph module cmdlet permissions from a file, 
+                        and connect-MGGraph with the resolved dynamic permissions scope. 
+                        Added try/catch
+                    * 8:44 AM 5/20/2022 flip output hash -> obj; renamed $fileparam -> $path; fliped $path from string to sys.fileinfo; 
+                        flipped AST call to include asttokens in returns; added verbose echos - runs 3m on big .psm1's (125 funcs)
+                    # 12:30 PM 4/28/2022 ren get-ScriptProfileAST -> get-CodeProfileAST, aliased original name (more descriptive, as covers .ps1|.psm1), add extension validator for -File; ren'd -File -> Path, aliased: 'PSPath','File', strongly typed [string] (per BP).
+                    # 1:01 PM 5/27/2020 moved alias: profile-FileAST win func
+                    # 5:25 PM 2/29/2020 ren profile-FileASt -> get-ScriptProfileAST (aliased orig name)
+                    # * 7:50 AM 1/29/2020 added Cmdletbinding
+                    * 9:04 AM 12/30/2019 profile-FileAST: updated CBH: added .INPUTS & OUTPUTS, including hash properties returned
+                    * 3:56 PM 12/8/2019 INIT
+                    .DESCRIPTION
+                    get-CodeProfileAST - Parse and return script/module/function compoonents, Module using Language.FunctionDefinitionAst parser
                     .PARAMETER  File
                     Path to script/module file
                     .PARAMETER scriptblock
@@ -2437,6 +2505,100 @@ function connect-O365Services {
                     * Parameters : Details on all Parameters in the file
                     * Functions : Details on all Functions in the file
                     * VariableAssignments : Details on all Variables assigned in the file
+                    .EXAMPLE
+                    PS> $ASTProfile = get-CodeProfileAST -File c:\pathto\script.ps1 -All -showdebug:$($showdebug) -verbose:$VerbosePreference -whatif:$($whatif) ;
+                    Profile a file, and return the raw $ASTProfile object to the piepline (default behavior)
+                    PS> $ASTProfile = get-CodeProfileAST -File c:\pathto\script.ps1 -All -showdebug:$($showdebug) -verbose:$VerbosePreference -whatif:$($whatif) ;
+                    PS> $sb = [scriptblock]::Create((gc 'c:\pathto\script.ps1' -raw))  ; 
+                    PS> $ASTProfile = get-CodeProfileAST  = get-CodeProfileAST -scriptblock $sb -All ;     
+                    Profile a scriptblock (created by loading a file into a scriptblock variable )
+                    .EXAMPLE
+                    PS> $FunctionNames = (get-CodeProfileAST -File c:\usr\work\exch\scripts\verb-dev.ps1 -Functions).functions.name ;
+                    Return the Functions within the specified script, and select the name properties of the functions object returned.
+                    .EXAMPLE
+                    PS> $AliasAssignments = (get-CodeProfileAST -File c:\usr\work\exch\scripts\verb-dev.ps1 -Aliases).Aliases.extent.text;
+                    Return the set/new-Alias commands from the specified script, selecting the full syntax of the command
+                    .EXAMPLE
+                    PS> $WhatifLines = ((get-CodeProfileAST -File c:\usr\work\exch\scripts\verb-dev.ps1 -GenericCommands).GenericCommands | ?{$_.extent -like '*whatif*' } | select -expand extent).text
+                    Return any GenericCommands from the specified script, that have whatif within the line
+                    .EXAMPLE
+                    PS> $cmdlets = @() ; 
+                    PS> $rgxVNfilter = "\w+-mg\w+" ; 
+                    PS> (((get-CodeProfileAST -File D:\scripts\new-MGDomainRegTDO.ps1  -GenericCommands).GenericCommands |?{$_.extent -match "-mg"}).extent.text).Split([Environment]::NewLine) |%{
+                    PS>     $thisLine = $_ ; 
+                    PS>     if($thisLine -match $rgxVNfilter){
+                    PS>         $cmdlets += $matches[0] ; 
+                    PS>     } ; 
+                    PS> } ; 
+                    PS> write-verbose "Normalize & unique names"; 
+                    PS> $cmdlets = $cmdlets | %{get-command -name $_| select -expand name } | select -unique ; ; 
+                    PS> $cmdlets ; 
+                    PS> $PermsRqd = @() ; 
+                    PS> $cmdlets |%{
+                    PS>     write-host -NoNewline '.' ; 
+                    PS>     $PermsRqd += Find-MgGraphCommand -command $_ -ea STOP| Select -First 1 -ExpandProperty Permissions | Select -Unique name ; 
+                    PS> } ; 
+                    PS> write-host -foregroundcolor yellow "]" ; 
+                    PS> $PermsRqd = $PermsRqd.name | select -unique ;
+                    PS> $smsg = "Connect-mgGraph -scope`n`n$(($PermsRqd|out-string).trim())" ;
+                    PS> $smsg += "`n`n(Perms reflects Cmdlets:$($Cmdlets -join ','))" ;
+                    PS> write-host $smsg ;
+                    PS> $ccResults = Connect-mgGraph -scope $PermsRqd -ea STOP ;    
+                    Demo processing a script file for [verb]-MG[noun] cmdlets (e.g. that are part of Microsoft.Graph module), 
+                        - normalize the names via gcm, and select uniques, 
+                        - Then use MG module's Find-MgGraphCommand to resolve required Permissions, 
+                        - Then run Connect-mgGraph dynamically scoped to the necessary permissions. 
+                    .EXAMPLE
+                    PS> $bRet = (get-CodeProfileAST -File c:\usr\work\exch\scripts\verb-dev.ps1 -All) ;
+                    PS> $bRet.functions.name ;
+                    PS> $bret.variables.extent.text
+                    PS> $bret.aliases.extent.text
+                    Return ALL variant objects - Functions, Parameters, Variables, aliases, GenericCommands - from the specified script, and output the function names, variable names, and alias assignement commands
+                    .EXAMPLE
+                    PS> $GCmds = (get-CodeProfileAST -File .\new-MGDomainRegTDO.ps1 -GenericCommands).GenericCommands ;
+                    PS> $rgxverbNounNames = "\b\w+\-\w+\b" ;
+                    PS> # match extents with verb-noun substrings
+                    PS> $CmdletNames = @() ;
+                    PS> ($GCmds|?{$_.extent -match $rgxverbNounNames}) | %{
+                    PS>   $isolatedlines = $_ ;
+                    PS>   # isolate the actual verb-noun substrings
+                    PS>   $CmdletNames += $isolatedlines.extent.text | %{if($_ -match $rgxverbNounNames){ $matches[0]}}
+                    PS> } ; 
+                    PS> # unique the list
+                    PS> #$CmdletNames = $CmdletNames | select -unique | sort ; # isn't unbiqueing for some reason (passes dupes), use group
+                    PS> $CmdletNames = $CmdletNames | group | select -expand  name | sort ;
+                    PS> # resolve each to a source (and properly case the name), or default source to 'unresolved' if fails gcm (note function [Alias()] names in use will come back with $null source: they gcm, but there's no source to return)
+                    PS> $ResolvedCmds = $CmdletNames | %{    
+                    PS>     $thiscmd = $_ ;
+                    PS>     $hsCmdSummary = [ordered]@{'name'=$null;'source'=$null;'verb'=$null;'noun'=$null; CommandType=$null} ;
+                    PS>     if($rvGcm = gcm $thiscmd  -ea 0){
+                    PS>         $hsCmdSummary.name = $rvGcm.name ; $hsCmdSummary.source = $rvGcm.source ;;
+                    PS>         $hsCmdSummary.verb = $rvGcm.verb ; $hsCmdSummary.noun = $rvGcm.noun ; $hsCmdSummary.CommandType=$rvGcm.CommandType ;
+                    PS>     }else {
+                    PS>         # fake it from what we know
+                    PS>         $hsCmdSummary.name = $thiscmd  ; $hsCmdSummary.source = 'UNRESOLVED' ;
+                    PS>         $hsCmdSummary.verb,$hsCmdSummary.noun = $thiscmd.split('-');
+                    PS>         $hsCmdSummary.CommandType="UNRESOLVED" ;
+                    PS>     };
+                    PS>     [pscustomobject]$hsCmdSummary ;
+                    PS> } | sort source,name ;
+                    PS> $ResolvedCmds| ft -a ;
+
+                        name                         source                                       verb        noun                  CommandType
+                        ----                         ------                                       ----        ----                  -----------
+                        Out-Clipboard                                                                                                     Alias
+                        Resolve-DnsName              DnsClient                                    Resolve     DnsName                    Cmdlet
+                        New-MgDomain                 Microsoft.Graph.Identity.DirectoryManagement New         MgDomain                 Function
+                        ForEach-Object               Microsoft.PowerShell.Core                    ForEach     Object                     Cmdlet
+                        Write-Degug                  UNRESOLVED                                   Write       Degug                  UNRESOLVED
+                        ...
+
+                    PS> $ResolvedCmds | ? verb -ne 'get' | ft -a  ; 
+                    AST parse out all verb-noun format generic commands from a source (regex demarced on word boundaries) ; unique the returned strings, then resolve each against a source/module, w verb,noun,source & commandtype. 
+                    Goal is to profile code for updates around source modules, and types of verb (action/change verbs, for adding shouldproceses support, etc). 
+                    Trailing command outputs the non-'Get' verb items.
+                    .LINK
+                    https://github.com/tostka/verb-dev
                     #>
                     [CmdletBinding()]
                     [Alias('get-ScriptProfileAST')]
@@ -2570,8 +2732,7 @@ function connect-O365Services {
                     AddedTwitter: 
                     REVISIONS
                     * 1:49 PM 5/14/2025 add: -cmdlets, bypasses AST parsing cuts right to find-mgGraphCommand expansion; additional verbose status echos (as it's returning very limited set of perms)
-                    .DESCRIPTION
-                    wrapper for verb-dev\get-codeprofileAST() that parses [verb]-MG[noun] cmdlets from a specified -file or -scriptblock, and reseolves the necessary connect-mgGraph -scope permissions, using the Find-MgGraphCommand command.
+                    
                     .PARAMETER  File
                     Path to script/module file to be parsed for matching cmdlets[-Path path-to\script.ps1]
                     .PARAMETER scriptblock
@@ -2582,10 +2743,7 @@ function connect-O365Services {
                     Regular expression filter to match commands solely in matching Module (defaults 'Microsoft\.Graph')[-CommandFilterRegex 'Microsoft\.Graph\.Identity\.DirectoryManagement\s\s\s']
                     .PARAMETER Cmdlets
                     MGGraph cmdlet names to be Find-MgGraphCommand'd into delegated access -scope permissions (bypasses ASTParser discovery)
-                    .INPUTS
-                    Does not accept piped input
-                    .OUTPUTS
-                    None (records transcript file)
+                    
                     #>  
                     [CmdletBinding()]
                     ## PSV3+ whatif support:[CmdletBinding(SupportsShouldProcess)]
@@ -2734,66 +2892,8 @@ function connect-O365Services {
             #endregion FUNCTIONS_INTERNAL ; #*======^ END FUNCTIONS_INTERNAL ^======
 
             #region CONSTANTS_AND_ENVIRO ; #*======v CONSTANTS_AND_ENVIRO v======
-            #region ENVIRO_DISCOVER ; #*------v ENVIRO_DISCOVER v------
-            <#
-            $Verbose = [boolean]($VerbosePreference -eq 'Continue') ;
-            $rPSCmdlet = $PSCmdlet ; # an object that represents the cmdlet or advanced function that's being run. Available on functions w CmdletBinding (& $args will not be available). (Blank on non-CmdletBinding/Non-Adv funcs).
-            $rPSScriptRoot = $PSScriptRoot ; # the full path of the executing script's parent directory., PS2: valid only in script modules (.psm1). PS3+:it's valid in all scripts. (Funcs: ParentDir of the file that hosts the func)
-            $rPSCommandPath = $PSCommandPath ; # the full path and filename of the script that's being run, or file hosting the funct. Valid in all scripts.
-            $rMyInvocation = $MyInvocation ; # populated only for scripts, function, and script blocks.
-            # - $MyInvocation.MyCommand.Name returns name of a function, to identify the current command,  name of the current script (pop'd w func name, on Advfuncs)
-            # - Ps3+:$MyInvocation.PSScriptRoot : full path to the script that invoked the current command. The value of this property is populated only when the caller is a script (blank on funcs & Advfuncs)
-            # - Ps3+:$MyInvocation.PSCommandPath : full path and filename of the script that invoked the current command. The value of this property is populated only when the caller is a script (blank on funcs & Advfuncs)
-            #     ** note: above pair contain information about the _invoker or calling script_, not the current script
-            $rPSBoundParameters = $PSBoundParameters ;
-            #>
-            #region PREF_VARI_DUMP ; #*------v PREF_VARI_DUMP v------
-            <# rem'd can cause errors if come through with blank values; enable when need to examin pref status while actively coding
-            $script:prefVaris = @{
-                whatifIsPresent = $whatif.IsPresent
-                whatifPSBoundParametersContains = $rPSBoundParameters.ContainsKey('WhatIf') ;
-                whatifPSBoundParameters = $rPSBoundParameters['WhatIf'] ;
-                WhatIfPreferenceIsPresent = $WhatIfPreference.IsPresent ; # -eq $true
-                WhatIfPreferenceValue = $WhatIfPreference;
-                WhatIfPreferenceParentScopeValue = (Get-Variable WhatIfPreference -Scope 1).Value ;
-                ConfirmPSBoundParametersContains = $rPSBoundParameters.ContainsKey('Confirm') ;
-                ConfirmPSBoundParameters = $rPSBoundParameters['Confirm'];
-                ConfirmPreferenceIsPresent = $ConfirmPreference.IsPresent ; # -eq $true
-                ConfirmPreferenceValue = $ConfirmPreference ;
-                ConfirmPreferenceParentScopeValue = (Get-Variable ConfirmPreference -Scope 1).Value ;
-                VerbosePSBoundParametersContains = $rPSBoundParameters.ContainsKey('Confirm') ;
-                VerbosePSBoundParameters = $rPSBoundParameters['Verbose'] ;
-                VerbosePreferenceIsPresent = $VerbosePreference.IsPresent ; # -eq $true
-                VerbosePreferenceValue = $VerbosePreference ;
-                VerbosePreferenceParentScopeValue = (Get-Variable VerbosePreference -Scope 1).Value;
-                VerboseMyInvContains = '-Verbose' -in $rPSBoundParameters.UnboundArguments ;
-                VerbosePSBoundParametersUnboundArgumentContains = '-Verbose' -in $rPSBoundParameters.UnboundArguments
-            } ;
-            write-verbose "`n$(($script:prefVaris.GetEnumerator() | Sort-Object Key | Format-Table Key,Value -AutoSize|out-string).trim())`n" ;
-            #>
-            #endregion PREF_VARI_DUMP ; #*------^ END PREF_VARI_DUMP ^------
-            #region RV_ENVIRO ; #*------v RV_ENVIRO v------
-            <#
-            $pltRvEnv=[ordered]@{
-                PSCmdletproxy = $rPSCmdlet ;
-                PSScriptRootproxy = $rPSScriptRoot ;
-                PSCommandPathproxy = $rPSCommandPath ;
-                MyInvocationproxy = $rMyInvocation ;
-                PSBoundParametersproxy = $rPSBoundParameters
-                verbose = [boolean]($PSBoundParameters['Verbose'] -eq $true) ;
-            } ;
-            write-verbose "(Purge no value keys from splat)" ;
-            $mts = $pltRVEnv.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 -whatif:$false -confirm:$false;
-            $smsg = "resolve-EnvironmentTDO w`n$(($pltRVEnv|out-string).trim())" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            $rvEnv = resolve-EnvironmentTDO @pltRVEnv ;
-            $smsg = "`$rvEnv returned:`n$(($rvEnv |out-string).trim())" ;
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
-            #>
-            #endregion RV_ENVIRO ; #*------^ END RV_ENVIRO ^------
+            
             #region NETWORK_INFO ; #*======v NETWORK_INFO v======
-            #$NetSummary = resolve-NetworkLocalTDO ;
             if($env:Userdomain){
                 switch($env:Userdomain){
                     'CMW'{
@@ -2824,38 +2924,6 @@ function connect-O365Services {
                 } ;
             } ;  # $env:Userdomain-E
             #endregion NETWORK_INFO ; #*======^ END NETWORK_INFO ^======
-            #region TEST_EXOPLOCAL ; #*------v TEST_EXOPLOCAL v------
-            #
-            #$XoPSummary = test-LocalExchangeInfoTDO ;
-            write-verbose "Expand returned NoteProperty properties into matching local variables" ;
-            if($host.version.major -gt 2){
-                $XoPSummary.PsObject.Properties | ?{$_.membertype -eq 'NoteProperty'} | foreach-object{set-variable -name $_.name -value $_.value -verbose -whatif:$false -Confirm:$false ;} ;
-            }else{
-                write-verbose "Psv2 lacks the above expansion capability; just create simpler variable set" ;
-                $ExVers = $XoPSummary.ExVers ; $isLocalExchangeServer = $XoPSummary.isLocalExchangeServer ; $IsEdgeTransport = $XoPSummary.IsEdgeTransport ;
-            } ;
-            #endregion TEST_EXOPLOCAL ; #*------^ END TEST_EXOPLOCAL ^------
-            #
-
-            #endregion ENVIRO_DISCOVER ; #*------^ END ENVIRO_DISCOVER ^------
-            #region TLS_LATEST_FORCE ; #*------v TLS_LATEST_FORCE v------
-            $CurrentVersionTlsLabel = [Net.ServicePointManager]::SecurityProtocol ; # Tls, Tls11, Tls12 ('Tls' == TLS1.0)  ;
-            write-verbose "PRE: `$CurrentVersionTlsLabel : $($CurrentVersionTlsLabel )" ;
-            # psv6+ already covers, test via the SslProtocol parameter presense
-            if ('SslProtocol' -notin (Get-Command Invoke-RestMethod).Parameters.Keys) {
-                $currentMaxTlsValue = [Math]::Max([Net.ServicePointManager]::SecurityProtocol.value__,[Net.SecurityProtocolType]::Tls.value__) ;
-                write-verbose "`$currentMaxTlsValue : $($currentMaxTlsValue )" ;
-                $newerTlsTypeEnums = [enum]::GetValues('Net.SecurityProtocolType') | Where-Object { $_ -gt $currentMaxTlsValue }
-                if($newerTlsTypeEnums){
-                    write-verbose "Appending upgraded/missing TLS `$enums:`n$(($newerTlsTypeEnums -join ','|out-string).trim())" ;
-                } else {
-                    write-verbose "Current TLS `$enums are up to date with max rev available on this machine" ;
-                };
-                $newerTlsTypeEnums | ForEach-Object {
-                    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
-                } ;
-            } ;
-            #endregion TLS_LATEST_FORCE ; #*------^ END TLS_LATEST_FORCE ^------
 
             #region COMMON_CONSTANTS ; #*------v COMMON_CONSTANTS v------
 
@@ -2908,12 +2976,12 @@ function connect-O365Services {
             ) ;
             #>
             $tDepModules = @() ; 
-            if($useEXO){$tDepModules += @("ExchangeOnlineManagement;https://www.powershellgallery.com/packages/ExchangeOnlineManagement/")} ; 
-            if($UseMSOL){$tDepModules += @("MSOnline;https://www.powershellgallery.com/packages/MSOnline/")} ; 
-            if($UseAAD){$tDepModules += @("AzureAD;https://www.powershellgallery.com/packages/AzureAD/")} ; 
-            if($useEXO){$tDepModules += @("ExchangeOnlineManagement;https://www.powershellgallery.com/packages/ExchangeOnlineManagement/")} ; 
-            if($UseMG){$tDepModules += @("Microsoft.Graph.Authentication;https://www.powershellgallery.com/packages/Microsoft.Graph/")} ; 
-            if($UseOPAD){$tDepModules += @("ActiveDirectory;get-windowscapability -name RSAT* -Online | ?{$_.name -match 'Rsat\.ActiveDirectory'} | %{Add-WindowsCapability -online -name $_.name}")} ; 
+            if($useEXO){$tDepModules += @("ExchangeOnlineManagement;https://www.powershellgallery.com/packages/ExchangeOnlineManagement/;Get-xoOrganizationConfig",'verb-exo;localRepo;connect-exo')} ;
+            if($UseMSOL){$tDepModules += @("MSOnline;https://www.powershellgallery.com/packages/MSOnline/;Get-MsolDomain")} ;
+            if($UseAAD){$tDepModules += @("AzureAD;https://www.powershellgallery.com/packages/AzureAD/;Get-AzureADTenantDetail")} ;
+            if($UseExOP){$tDepModules += @('verb-Ex2010;localRepo;Connect-Ex2010')} ;
+            if($UseMG){$tDepModules += @("Microsoft.Graph.Authentication;https://www.powershellgallery.com/packages/Microsoft.Graph/;Get-MgOrganization")} ;
+            if($UseOPAD){$tDepModules += @("ActiveDirectory;get-windowscapability -name RSAT* -Online | ?{$_.name -match 'Rsat\.ActiveDirectory'} | %{Add-WindowsCapability -online -name $_.name};Get-ADDomain")} ;
 
             $prpMGConnDeleg = 'Account','ClientId','TenantId','AuthType','ContextScope' ; 
             $prpMGConnCBA = 'CertificateSubjectName','CertificateThumbprint','Certificate' ; 
@@ -2945,22 +3013,16 @@ function connect-O365Services {
 
             #region TEST_MODS ; #*------v TEST_MODS v------
             if($tDepModules){
-                foreach($tmod in $tDepModules){
-                    $tmodName,$tmodURL = $tmod.split(';') ;
-                    if (-not(Get-Module $tmodName -ListAvailable)) {
-                        $smsg = "This script requires a recent version of the $($tmodName) PowerShell module. Download it here:`n$($tmodURL )";
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn }
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-                        return
-                    } else {
-                        write-verbose "$tModName confirmed available" ;
-                    } ;
-                } ;
+                if( (test-ModulesAvailable -ModuleSpecifications $tDepModules) -contains $false ){
+                    $smsg += "MISSING DEPENDANT MODULE!(see errors above)" ;
+                    $smsg += "`n(may require provisioning internal function versions for this niche)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                } ; 
             } ;
             #endregion TEST_MODS ; #*------^ END TEST_MODS ^------
 
-                
+            
             # return status obj
             <#
             $ret_ccO365S = [ordered]@{
@@ -2988,15 +3050,6 @@ function connect-O365Services {
             $useO365 = $true ;
             $useEXO = $true ;
             $useSC = $TRUE ; 
-            $UseOP=$true ;
-            $UseExOP=$true ;
-            $useExopNoDep = $true ; # switch to use Connect-ExchangeServerTDO, vs connect-ex2010 (creds are assumed inherent to the account)
-            $ExopVers = 'Ex2010' # 'Ex2019','Ex2016','Ex2013','Ex2010','Ex2007','Ex2003','Ex2000', Null for All versions
-            if($Version){
-                $ExopVers = $Version ; #defer to local script $version if set
-            } ;
-            $useForestWide = $true ; # flag to trigger cross-domain/forest-wide code in AD & EXoP
-            $UseOPAD = $true ;
             $UseMSOL = $false ; # should be hard disabled now in o365
             $UseAAD = $false  ;
             $UseMG = $true ;
@@ -3023,7 +3076,7 @@ function connect-O365Services {
                     write-warning $msgs ;
                 } ;
             } ;
-            $useO365 = [boolean]($useO365 -OR $useEXO -or $useSC -OR $UseMSOL -OR $UseAAD -OR $UseMG)
+            $useO365 = [boolean]($useO365 -OR $useEXO -or $useSC -OR $UseMSOL -OR $UseAAD -OR $UseMG) ; 
             $UseOP = [boolean]($UseOP -OR $UseExOP -OR $UseOPAD) ;
             #*------^ END STEERING VARIS ^------
             #*------v EXO V2/3 steering constants v------
@@ -3045,17 +3098,17 @@ function connect-O365Services {
                 }else {
                     $TenOrg = get-TenantTag -Credential $Credential ;
                 }
-            } elseif(-not($tenOrg) -and $UserPrincipalName){
-                $smsg = "(unconfigured `$TenOrg: asserting from UserPrincipalName)" ;
-                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                # convert UPN to cred for get-tenanttag handling
-                $tmpCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ($UserPrincipalName,(convertto-securestring -string "passworddummy" -asplaintext -force)) ;
-                if((get-command get-TenantTag).Parameters.keys -contains 'silent'){
-                    $TenOrg = get-TenantTag -Credential $tmpCredential -silent ;;
-                }else {
-                    $TenOrg = get-TenantTag -Credential $tmpCredential ;
-                }
+            } elseif(-not($tenOrg) -and $AdminAccount){
+                    $smsg = "(unconfigured `$TenOrg: asserting from AdminAccount)" ;
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    # convert UPN to cred for get-tenanttag handling
+                    $tmpCredential = New-Object -TypeName System.Management.Automation.PSCredential -ArgumentList ($AdminAccount,(convertto-securestring -string "passworddummy" -asplaintext -force)) ;
+                    if((get-command get-TenantTag).Parameters.keys -contains 'silent'){
+                        $TenOrg = get-TenantTag -Credential $tmpCredential -silent ;;
+                    }else {
+                        $TenOrg = get-TenantTag -Credential $tmpCredential ;
+                    }
             } else {
                 # if not using Credentials or a TargetTenants/TenOrg loop, default the $TenOrg on the $env:USERDOMAIN
                 $smsg = "(unconfigured `$TenOrg & *NO* `$Credential: fallback asserting from `$env:USERDOMAIN)" ;
@@ -3106,16 +3159,15 @@ function connect-O365Services {
                     Silent = $($silent) ; 
                     #Verbose = ($PSBoundParameters['Verbose'] -eq $true); 
                 } ;
-                if($UserPrincipalName){
-                    $pltCXO.add('UserPrincipalName',$UserPrincipalName) ; 
+                if($AdminAccount){
+                    $pltCXO.add('UserPrincipalName',$AdminAccount) ; 
                 } ; 
                 if($Credential){
                     $pltCXO.add('Credential',$Credential) ; 
                 } ; 
-                if(-not ($UserPrincipalName -OR $Credential) -AND $UserRole){
+                if(-not ($AdminAccount -OR $Credential) -AND $UserRole){
                     $pltCXO.add('UserRole',$UserRole) ; 
                 } ; 
-                    
                 $smsg = "Connect-EXO w`n$(($pltCXO|out-string).trim())" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
@@ -3129,7 +3181,6 @@ function connect-O365Services {
             #region useSC ; #*------v useSC v------
             # 1:29 PM 9/15/2022 as of MFA & v205, have to load EXO *before* any EXOP, or gen get-steppablepipeline suffix conflict error
             if($useSC){
-
                 $pltCSC = [ordered]@{
                     Prefix = $SCDefaultPrefix ;
                     TenOrg = $TenOrg ; 
@@ -3137,13 +3188,13 @@ function connect-O365Services {
                     Silent = $($silent) ; 
                     #Verbose = ($PSBoundParameters['Verbose'] -eq $true); 
                 } ;
-                if($UserPrincipalName){
-                    $pltCSC.add('UserPrincipalName',$UserPrincipalName) ; 
+                if($AdminAccount){
+                    $pltCSC.add('UserPrincipalName',$AdminAccount) ; 
                 } ; 
                 if($Credential){
                     $pltCSC.add('Credential',$Credential) ; 
                 } ; 
-                if(-not ($UserPrincipalName -OR $Credential) -AND $UserRole){
+                if(-not ($AdminAccount -OR $Credential) -AND $UserRole){
                     $pltCSC.add('UserRole',$UserRole) ; 
                 } ; 
                 $smsg = "Connect-SC (Connect-IPPSSession Purview) w`n$(($pltCSC|out-string).trim())" ; 
@@ -3160,9 +3211,7 @@ function connect-O365Services {
             if($useEXO -OR $useSC){
                 $XOconnections = test-exoconnectiontdo ; 
                 foreach($xcon in $XOconnections){
-                    #if($xcon.connection -ANd $xcon.isXO -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){$ret_rxo = $xcon; $ret_ccO365S.hasEXO = $true}else {$ret_rxo = $null ; $ret_ccO365S.hasEXO = $false } ;
                     if($xcon.connection -ANd $xcon.isXO -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){$ret_rxo = $xcon; $ret_ccO365S.hasEXO = $true} # else {$ret_rxo = $null ; $ret_ccO365S.hasEXO = $false } ;
-                    #if($xcon.connection -ANd $xcon.isSC -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){$ret_rSC = $xcon; $ret_ccO365S.hasSC = $true}else {$ret_rSC = $null; $ret_ccO365S.hasSC = $false } ;
                     if($xcon.connection -ANd $xcon.isSC -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){$ret_rSC = $xcon; $ret_ccO365S.hasSC = $true} # else {$ret_rSC = $null; $ret_ccO365S.hasSC = $false } ;
                 } ; 
             } ; 
@@ -3202,18 +3251,6 @@ function connect-O365Services {
             #region CONNECT_MG ; #*------v CONNECT_MG v------
             #$UseMG = $false;
             if($UseMG){
-                <# Find-MgGraphCommand -command Get-MgUser | Select -First 1 -ExpandProperty Permissions
-
-                $Cmdlets = 'Get-MgUser','Get-MgSubscribedSku';
-                $prpMgu = 'BusinessPhones','DisplayName','GivenName','JobTitle','Mail','MobilePhone','OfficeLocation','Surname','UserPrincipalName' ;
-                $PermsRqd = @() ; $Cmdlets |%{$PermsRqd += Find-MgGraphCommand -command $_ -ea STOP| Select -First 1 -ExpandProperty Permissions | Select -Unique name ; } ; $PermsRqd = $PermsRqd.name | select -unique ;
-                $smsg = "Connect-mgGraph -scope`n`n$(($PermsRqd|out-string).trim())" ;
-                $smsg += "`n`n(Perms reflects Cmdlets:$($Cmdlets -join ','))" ;
-                write-host $smsg ;
-                Connect-mgGraph -scope $PermsRqd -ea STOP ;
-
-                $prpMgu = 'BusinessPhones','DisplayName','GivenName','JobTitle','Mail','MobilePhone','OfficeLocation','Surname','UserPrincipalName' ;
-                #>
                 if(-not $MGPermissionsScope){
                     if(gi function:get-MGCodeCmdletPermissionsTDO -ea 0){
                         $pltGMGP=[ordered]@{
@@ -3370,7 +3407,6 @@ function connect-O365Services {
                 } ; 
             } ;  # if-E $useMG
             #endregion CONNECT_MG ; #*------^ END CONNECT_MG ^------
-
             <# defined above
             # EXO connection
             $pltRXO = @{
@@ -3394,7 +3430,6 @@ function connect-O365Services {
             #>
             #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
             #endregion SERVICE_CONNECTIONS #*======^ END SERVICE_CONNECTIONS ^======
-
         } ; # PROC-E
         END {
             $swM.Stop() ;
@@ -4733,7 +4768,7 @@ function copy-XPermissionGroupToCloudOnly {
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
     * 3:51 PM 8/17/2021 added $MembersCloudOnly | select -unique - kept leaking in duplicates in the inputs.
-    * 1:40 PM 8/11/2021 ADDED & debugged -Mailbox param (spec target of grants), and code to add-mailboxperm/add-(ad|recipient)permission to OP or EXO target mailbox, and more detailed follow up dump report. Ran against exo-mailbox wio issues. Need to dbug against a still onprem mbx next.
+    * 1:40 PM 9.0.0021 ADDED & debugged -Mailbox param (spec target of grants), and code to add-mailboxperm/add-(ad|recipient)permission to OP or EXO target mailbox, and more detailed follow up dump report. Ran against exo-mailbox wio issues. Need to dbug against a still onprem mbx next.
     * 2:19 PM 8/3/2021 step-debugged, looks functional ; init 
     .DESCRIPTION
     copy-XPermissionGroupToCloudOnly.ps1 - Copy an onprem replicated Mail-Enabled Security Group, used for Mailbox Access grants, to a cloud-only EXO DistributionGroup, to grant EXO perms to foreign-hybrid multi-HCW federated objects in the tenant
@@ -30227,8 +30262,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUInqu+yrNJyuctaWnMw1Daw5K
-# j2OgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUQGmXKOYs+VrCKCL+DHKCdUGX
+# hYygggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -30243,9 +30278,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTmsoAu
-# oD12EBj1QCzh0GgLqxE3bzANBgkqhkiG9w0BAQEFAASBgGKQv6lX7jbdbSXxgXt1
-# hEq+NAOtZ4W7BVENgxqx8I04F5o/G6YGCVlC2u0LypUixji2B/PlfTBHbFjbL/FB
-# JaUJPO2Oi66d2Iz6OasJosgY6MnaNnFn8oeWziLqSzx1ux2jAtfk/iyus43+kMSo
-# ynfXCOCgdV850c9BMQqUcM3J
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRzoh1A
+# VnKtSsqmL7sjUumsljog2jANBgkqhkiG9w0BAQEFAASBgHLpVMuQbkH89+AIDZ4C
+# AHghRqhvmsuRjfrlhfvToO+diO++FNAzqrgKR12nICk5EYmSs0RKPNTMhcC1aPVk
+# WpJJYU8JJrv5etMYFa9sMV1bLYs0IRrbPwvXAyxnGaFfXmGdgCAHLfQIZFrM9jEY
+# raX0WiYp2ArlWsh8dh7PME4R
 # SIG # End signature block
