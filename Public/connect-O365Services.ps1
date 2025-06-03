@@ -21,7 +21,7 @@
         AddedWebsite:
         AddedTwitter: 
         REVISIONS
-        *8:17 PM 6/1/2025 debugs functional for useexo & usesc now; 
+        * 10:28 AM 6/2/2025 CBH updated looping o365 connect demo block;  debugs functional for useexo & usesc now; 
         *11:40 AM 5/29/2025 hybrid the two vers to one latest; cleaned out unused CBH params
         * 5:00 PM 5/23/2025 added useSC support, and UPN auth; updated connect-exo() to support upn properly; rolled reconnect-exo into an alias of connect-exo ; 
         * 4:38 PM 5/22/2025 made XoPSummary non-mand; added -useSC and code for connectivity, including use of -userprincipalname
@@ -73,21 +73,19 @@
         PS> $PermsRqd = connect-O365Services -scriptblock (gcm -name connect-O365Services).definition ;
         Typical function pass, using get-command to return the definition/scriptblock for the subject function.
         .EXAMPLE
-        PS> write-verbose "Typically from the BEGIN{} block of an Advanced Function, or immediately after PARAM() block" ;
-        PS> #region CONNECT_O365SERVICES ; #*======v CONNECT_O365SERVICES v======
+        PS> #region CALL_CONNECT_O365SERVICES ; #*======v CALL_CONNECT_O365SERVICES v======
         PS> #$useO365 = $true ; 
         PS> if($useO365){
         PS>     $pltCco365Svcs=[ordered]@{
         PS>         # environment parameters:
         PS>         EnvSummary = $rvEnv ; 
         PS>         NetSummary = $netsettings ; 
-        PS>         XoPSummary = $lclExOP ; 
         PS>         # service choices
         PS>         useEXO = $true ;
-        PS>         useSC = $true ; 
+        PS>         useSC = $false ; 
         PS>         UseMSOL = $false ;
         PS>         UseAAD = $false ;
-        PS>         UseMG = $false ;
+        PS>         UseMG = $true ;
         PS>         # Service Connection parameters
         PS>         TenOrg = $TenOrg ; # $global:o365_TenOrgDefault ; 
         PS>         Credential = $Credential ;
@@ -106,82 +104,99 @@
         PS>     } ; 
         PS>     $smsg = "connect-O365Services w`n$(($pltCco365Svcs|out-string).trim())" ; 
         PS>     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        PS>     $ret_ccSO365 = connect-O365Services @pltCco365Svcs ; 
-        PS>     
-        PS>     #region CONFIRM_SPLAT2RETURN ; #*------v CONFIRM_SPLAT2RETURN v------
-        PS>     # matches each: $plt.useXXX:$true to matching returned $ret.hasXXX:$true 
-        PS>     $vplt = $pltCco365Svcs ; $vret = 'ret_ccSO365' ; $ACtionCommand = 'connect-O365Services' ; $vtests = @() ; $vFailMsgs = @()  ; 
-        PS>     $vplt.GetEnumerator() |?{$_.key -match '^use' -ANd $_.value -match $true} | foreach-object{
-        PS>         $pltkey = $_ ;
-        PS>         $smsg = "$(($pltkey | ft -HideTableHeaders name,value|out-string).trim())" ; 
-        PS>         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-        PS>         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        PS>         $tprop = $pltkey.name -replace '^use','has';
-        PS>         if($rProp = (gv $vret).Value.psobject.properties | ?{$_.name -match $tprop}){
-        PS>             $smsg = "$(($rprop | ft -HideTableHeaders name,value |out-string).trim())" ; 
+        PS>     # add rertry on fail, up to $DoRetries
+        PS>     $Exit = 0 ; # zero out $exit each new cmd try/retried
+        PS>     # do loop until up to 4 retries...
+        PS>     Do {
+        PS>         $smsg = "connect-O365Services w`n$(($pltCco365Svcs|out-string).trim())" ; 
+        PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        PS>         $ret_ccSO365 = connect-O365Services @pltCco365Svcs ; 
+        PS>         #region CONFIRM_CCEXORETURN ; #*------v CONFIRM_CCEXORETURN v------
+        PS>         # matches each: $plt.useXXX:$true to matching returned $ret.hasXXX:$true 
+        PS>         $vplt = $pltCco365Svcs ; $vret = 'ret_ccSO365' ; $ACtionCommand = 'connect-O365Services' ; $vtests = @() ; $vFailMsgs = @()  ; 
+        PS>         $vplt.GetEnumerator() |?{$_.key -match '^use' -ANd $_.value -match $true} | foreach-object{
+        PS>             $pltkey = $_ ;
+        PS>             $smsg = "$(($pltkey | ft -HideTableHeaders name,value|out-string).trim())" ; 
         PS>             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
         PS>             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-        PS>             if($rprop.Value -eq $pltkey.value){
-        PS>                 $vtests += $true ; 
-        PS>                 $smsg = "Validated: $($pltKey.name):$($pltKey.value) => $($rprop.name):$($rprop.value)" ;
-        PS>                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
-        PS>                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        PS>                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-        PS>             } else {
-        PS>                 $smsg = "NOT VALIDATED: $($pltKey.name):$($pltKey.value) => $($rprop.name):$($rprop.value)" ;
-        PS>                 $vtests += $false ; 
-        PS>                 $vFailMsgs += "`n$($smsg)" ; 
+        PS>             $tprop = $pltkey.name -replace '^use','has';
+        PS>             if($rProp = (gv $vret).Value.psobject.properties | ?{$_.name -match $tprop}){
+        PS>                 $smsg = "$(($rprop | ft -HideTableHeaders name,value |out-string).trim())" ; 
+        PS>                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+        PS>                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        PS>                 if($rprop.Value -eq $pltkey.value){
+        PS>                     $vtests += $true ; 
+        PS>                     $smsg = "Validated: $($pltKey.name):$($pltKey.value) => $($rprop.name):$($rprop.value)" ;
+        PS>                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
+        PS>                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        PS>                     #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+        PS>                 } else {
+        PS>                     $smsg = "NOT VALIDATED: $($pltKey.name):$($pltKey.value) => $($rprop.name):$($rprop.value)" ;
+        PS>                     $vtests += $false ; 
+        PS>                     $vFailMsgs += "`n$($smsg)" ; 
+        PS>                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+        PS>                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        PS>                 };
+        PS>             } else{
+        PS>                 $smsg = "Unable to locate: $($pltKey.name):$($pltKey.value) to any matching $($rprop.name)!)" ;
+        PS>                 $smsg = "" ; 
         PS>                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
         PS>                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-        PS>             };
-        PS>         } else{
-        PS>             $smsg = "Unable to locate: $($pltKey.name):$($pltKey.value) to any matching $($rprop.name)!)" ;
-        PS>             $smsg = "" ; 
+        PS>             } ; 
+        PS>         } ; 
+        PS>         if($vtests -notcontains $false){
+        PS>             $smsg = "==> $($ACtionCommand): confirmed specified connections *all* successful " ; 
+        PS>             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
+        PS>             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        PS>             #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+        PS>             $Exit = $DoRetries ;
+        PS>         } else {
+        PS>             $smsg = "==> $($ACtionCommand): FAILED SOME SPECIFIED CONNECTIONS" ; 
         PS>             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
         PS>             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        PS>             $smsg = "MISSING SOME KEY CONNECTIONS. DO YOU WANT TO IGNORE, AND CONTINUE WITH CONNECTED SERVICES?" ;
+        PS>             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+        PS>             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        PS>             $Exit ++ ;
+        PS>             $smsg = "Try #: $Exit" ;
+        PS>             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } 
+        PS>             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        PS>             #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+        PS>             if($Exit -eq $DoRetries){
+        PS>                 $smsg = "Unable to exec cmd!"; 
+        PS>                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+        PS>                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        PS>                 #-=-=-=-=-=-=-=-=
+        PS>                 $sdEmail.SMTPSubj = "FAIL Rpt:$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"
+        PS>                 $sdEmail.SmtpBody = "`n===Processing Summary:" ;
+        PS>                 if($vFailMsgs){
+        PS>                     $sdEmail.SmtpBody += "`n$(($vFailMsgs|out-string).trim())" ; 
+        PS>                 } ; 
+        PS>                 $sdEmail.SmtpBody += "`n" ;
+        PS>                 if($SmtpAttachment){
+        PS>                     $sdEmail.SmtpAttachment = $SmtpAttachment
+        PS>                     $sdEmail.smtpBody +="`n(Logs Attached)" ;
+        PS>                 };
+        PS>                 $sdEmail.SmtpBody += "Pass Completed $([System.DateTime]::Now)" ;
+        PS>                 $smsg = "Send-EmailNotif w`n$(($sdEmail|out-string).trim())" ;
+        PS>                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+        PS>                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+        PS>                 Send-EmailNotif @sdEmail ;
+        PS>                 $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ;
+        PS>                 if ($bRet.ToUpper() -eq "YYY") {
+        PS>                     $smsg = "(Moving on), WITH THE FOLLOW PARTIAL CONNECTION STATUS" ;
+        PS>                     $smsg += "`n`n$(($ret_CcOPSvcs|out-string).trim())" ; 
+        PS>                     write-host -foregroundcolor green $smsg  ;
+        PS>                 } else {
+        PS>                     throw $smsg ; 
+        PS>                     break ; #exit 1
+        PS>                 } ;  
+        PS>             } ;        
         PS>         } ; 
-        PS>     } ; 
-        PS>     if($vtests -notcontains $false){
-        PS>         $smsg = "==> $($ACtionCommand): confirmed specified connections *all* successful " ; 
-        PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
-        PS>         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        PS>         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-        PS>     } else {
-        PS>         $smsg = "==> $($ACtionCommand): FAILED SOME SPECIFIED CONNECTIONS" ; 
-        PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-        PS>         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-        PS>         $smsg = "MISSING SOME KEY CONNECTIONS. DO YOU WANT TO IGNORE, AND CONTINUE WITH CONNECTED SERVICES?" ;
-        PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-        PS>         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-        PS>         #-=-=-=-=-=-=-=-=
-        PS>         $sdEmail.SMTPSubj = "FAIL Rpt:$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"
-        PS>         $sdEmail.SmtpBody = "`n===Processing Summary:" ;
-        PS>         if($vFailMsgs){
-        PS>             $sdEmail.SmtpBody += "`n$(($vFailMsgs|out-string).trim())" ; 
-        PS>         } ; 
-        PS>         $sdEmail.SmtpBody += "`n" ;
-        PS>         if($SmtpAttachment){
-        PS>             $sdEmail.SmtpAttachment = $SmtpAttachment
-        PS>             $sdEmail.smtpBody +="`n(Logs Attached)" ;
-        PS>         };
-        PS>         $sdEmail.SmtpBody += "Pass Completed $([System.DateTime]::Now)" ;
-        PS>         $smsg = "Send-EmailNotif w`n$(($sdEmail|out-string).trim())" ;
-        PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-        PS>         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-        PS>         Send-EmailNotif @sdEmail ;
-        PS>         $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ;
-        PS>         if ($bRet.ToUpper() -eq "YYY") {
-        PS>             $smsg = "(Moving on), WITH THE FOLLOW PARTIAL CONNECTION STATUS" ;
-        PS>             $smsg += "`n`n$(($ret_CcOPSvcs|out-string).trim())" ; 
-        PS>             write-host -foregroundcolor green $smsg  ;
-        PS>         } else {
-        PS>             throw $smsg ; 
-        PS>             break ; #exit 1
-        PS>         } ;         
-        PS>     } ; 
-        PS>     #endregion CONFIRM_SPLAT2RETURN ; #*------^ END CONFIRM_SPLAT2RETURN ^------
-        PS> } ; 
-        PS> #endregion CONNECT_O365SERVICES ; #*======^ END CONNECT_O365SERVICES ^======
+        PS>         #endregion CONFIRM_CCEXORETURN ; #*------^ END CONFIRM_CCEXORETURN ^------
+        PS>     } Until ($Exit -eq $DoRetries) ; 
+        PS> } ; #  useO365-E
+        PS> #endregion CALL_CONNECT_O365SERVICES ; #*======^ END CALL_CONNECT_O365SERVICES ^======
         Demo leveraging verb-io\resolve-EnvironmentTDO(), verb-network\resolve-NetworkLocalTDO() & verb-ex2010\test-LocalExchangeInfoTDO() to provide relevent inputs
         .LINK
         https://github.com/tostka/verb-EXO
