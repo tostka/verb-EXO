@@ -661,6 +661,7 @@ Connect-EXO:PipelineVariable
 Connect-EXO:pv
 connect-O365Services:EnvSummary
 connect-O365Services:NetSummary
+connect-O365Services:XoPSummary
 connect-O365Services:useEXO
 connect-O365Services:useSC
 connect-O365Services:UseMSOL
@@ -668,7 +669,7 @@ connect-O365Services:UseAAD
 connect-O365Services:UseMG
 connect-O365Services:TenOrg
 connect-O365Services:Credential
-connect-O365Services:AdminAccount
+connect-O365Services:UserPrincipalName
 connect-O365Services:UserRole
 connect-O365Services:useEXOv2
 connect-O365Services:silent
