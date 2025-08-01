@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 2:24 PM 8/1/2025 pulled unused whpassfail defs
     * 10:55 AM 4/15/2025 updated added param -ResolveForwards:
         -  to expand MailContacts into object that forwards the contact (net of MsgTracese that show the contact as a leaf recipient, informs *who* forwarded to the contact) ; 
         - new func: resolve-RMbxForwards() pulls all Rmbxs w ForwardingAddress populated, 
@@ -885,31 +886,6 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             }
         } ; 
         #endregion ENCODED_CONTANTS ; #*------^ END ENCODED_CONTANTS ^------
-    
-        #region WHPASSFAIL ; #*------v WHPASSFAIL v------
-        $whPASS = @{
-        Object = "$([Char]8730) PASS" ;
-        ForegroundColor = 'Green' ;
-        NoNewLine = $true ;
-        } ;
-        $whFAIL = @{
-            # light diagonal cross: ╳ U+2573 DOESN'T RENDER IN PS, use it if WinTerm
-            'Object'= if ($env:WT_SESSION) { "$([Char]8730) FAIL"} else {' X FAIL'};
-            ForegroundColor = 'RED' ;
-            NoNewLine = $true ;
-        } ;
-        <#
-        # inline pass/fail color-coded w char
-        $smsg = "Testing:THING" ; 
-        $Passed = $true ; 
-        Write-Host "$($smsg)... " -NoNewline ; 
-        if($Passed){Write-Host @whPASS} else {write-host @whFAIL} ; 
-        Write-Host " (Done)" ;
-        # out: Test:Thing... √ PASS (Done) | Test:Thing...  X FAIL (Done)
-        #>
-        $psPASS = "$([Char]8730) PASS" ; 
-        $psFAIL = if ($env:WT_SESSION) { "$([Char]8730) FAIL"} else {' X FAIL'} ;
-        #endregion WHPASSFAIL ; #*------^ END WHPASSFAIL ^------
     
         #endregion CONSTANTS_AND_ENVIRO ; #*------^ END CONSTANTS_AND_ENVIRO ^------
 
