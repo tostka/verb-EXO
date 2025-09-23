@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:45 PM 9/23/2025 removed err-source connect-exo2 call (retured) ; added expanded mobile device reporting, testing Microsoft Nativ esync protocol (Outlook|REST clienttype) tests, explciit 'EAS' stigma tagging in outputs (wastes time t-shooting unsupported 3rd-party clients; given Security formally prefers OLM client over otheres).
     * 2:24 PM 8/1/2025 pulled unused whpassfail defs
     * 10:55 AM 4/15/2025 updated added param -ResolveForwards:
         -  to expand MailContacts into object that forwards the contact (net of MsgTracese that show the contact as a leaf recipient, informs *who* forwarded to the contact) ; 
@@ -282,6 +283,8 @@ function resolve-user {
     switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]
     .PARAMETER ResolveForwards
     switch to resolve MailContact email addresses against the population of forwarded RemoteMailbox objects(XO-only)[-ResolveForwards]
+    .PARAMETER xoMobileDeviceOLDThreshold
+    Integer days since LastSyncAttemptTime that classifies a MobileDevice as xoMobileDeviceStatsOLD (defaults to 30)[-xoMobileDeviceOLDThreshold 45]
     .PARAMETER rgxAccentedNameChars
     Regular Expression that identifies input 'user' strings that should have diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]
     .PARAMETER TenOrg
@@ -522,6 +525,8 @@ function resolve-user {
             [switch]$getPerms,
         [Parameter(HelpMessage="switch to resolve MailContact email addresses against the population of forwarded RemoteMailbox objects(XO-only)[-ResolveForwards]")]
             [switch]$ResolveForwards,
+        [Parameter(HelpMessage="Integer days since LastSyncAttemptTime that classifies a MobileDevice as xoMobileDeviceStatsOLD (defaults to 30)[-xoMobileDeviceOLDThreshold 45]")]
+            [int]$xoMobileDeviceOLDThreshold = 30,
         [Parameter(HelpMessage="Regular Expression that identifies input 'user' strings that should have diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]")]
             [ValidateNotNullOrEmpty()]
             [regex]$rgxAccentedNameChars = "[^a-zA-Z0-9\s\.\(\)\{\}\/\&\$\#\@\,\`"\'\’\:\–_-]",
@@ -806,10 +811,20 @@ function resolve-user {
                 @{Name='DevOs';Expression={$_.DeviceOS }},@{Name='ClntType';Expression={$_.ClientType }},
                 @{Name='DevID';Expression={$_.DeviceID }} ; 
             # shorten times: (get-date '6/20/2021 1:45:34 AM' -format 'M/d/yy H:mmtt');
+            <#
             $propsMobL2 = @{Name='1stSyncTime';Expression={(get-date $_.FirstSyncTime -format 'M/d/yy H:mmtt') }},
                 @{Name='LastSyncTime';Expression={(get-date $_.LastSyncAttemptTime -format 'M/d/yy H:mmtt') }},
                 @{Name='LastSuccSync';Expression={(get-date $_.LastSuccessSync -format 'M/d/yy H:mmtt') }},
                 @{Name='#Folders';Expression={$_.NumberOfFoldersSynced }} ; 
+            #>
+            # converttimes to local
+            $propsMobL2 = @{Name='1stSyncTime';Expression={(get-date $_.FirstSyncTime.ToLocalTime() -format 'M/d/yy H:mm') }},
+                @{Name='LastSyncTime';Expression={(get-date $_.LastSyncAttemptTime.ToLocalTime() -format 'M/d/yy H:mm') }},
+                @{Name='LastSuccSync';Expression={(get-date $_.LastSuccessSync.ToLocalTime() -format 'M/d/yy H:mm') }},
+                @{Name='#Folders';Expression={$_.NumberOfFoldersSynced }} ; 
+            # add for tight summaries
+            $prpEASDevs = 'DeviceFriendlyName','ClientType',@{Name='LastSyncTime';Expression={(get-date $_.LastSyncAttemptTime.ToLocalTime() -format 'M/d/yy H:mm') }},
+                @{Name='LastSuccSync';Expression={(get-date $_.LastSuccessSync.ToLocalTime() -format 'M/d/yy H:mm') }} ; 
         } ; 
         if($getQuotaUsage){
 
@@ -925,6 +940,60 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             $hshForwards | write-output 
         } ; 
         #*------^ END Function resolve-RMbxForwards ^------
+
+        #endregion GET_XOMOBILEDATA ; #*------^ END get-xoMobileData ^------
+        function get-xoMobileData {
+            <#
+            .SYNOPSIS
+            Runs EXO get-xoMobildDevice qrys, and parses results into approp $hSum properties (single common function to reduce dupe queries)
+            .EXAMPLE
+            PS> get-xoMobileData ;             
+            .NOTES
+            VERSION:
+            * 10:52 AM 9/23/2025init
+            #>
+            # 
+            if($xmbx){
+                $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
+                if($verbose){
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-verbose $smsg } ;
+                } ;
+                #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ;
+                # wasn't getting data back: shift to the .xomailbox.ExchangeGuid.guid, it's 100% going to hit and return data
+                $xoMobileDeviceStats +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP | sort LastSuccesssync -Descending ;
+            }else{
+                $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
+                if($verbose){
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-verbose $smsg } ;
+                } ;
+                #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ;
+                # wasn't getting data back: shift to the .xomailbox.ExchangeGuid.guid, it's 100% going to hit and return data
+                $xoMobileDeviceStats = +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP | sort LastSuccesssync -Descending ;
+            }
+            #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP ;
+            $hsum.xoMobileDeviceStats  +=  @($xoMobileDeviceStats | ?{$_.LastSyncAttemptTime -ge (get-date).adddays(-1 * $xoMobileDeviceOLDThreshold)})
+            $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
+            $hsum.xoMobileDeviceStatsOLD  +=  @($xoMobileDeviceStats | ?{$_.LastSyncAttemptTime -lt (get-date).adddays(-1 * $xoMobileDeviceOLDThreshold)})
+            $smsg += "`nxoMobileDeviceStatsOLD Count:$(($hsum.xoMobileDeviceStatsOLD|measure).count)" ;
+            $hsum.xoMobileOutlookClients += @($xoMobileDeviceStats | ?{$_.DeviceType -match 'Outlook'}) ;
+            $hsum.xoMobileOtherClients += @($xoMobileDeviceStats | ?{$_.DeviceType -notmatch 'Outlook'}) ;
+            $hsum.xoMobileOMSyncTypes += @(($hsum.xoMobileOutlookClients | group ClientType | select -expand Name ) -join ';')
+            if($hsum.xoMobileOMSyncTypes -match 'REST'){
+                $smsg += "`nUser has one or more *legacy* 'REST' Outlook Mobile clients" ;
+            }elseif($hsum.xoMobileOMSyncTypes -match 'Outlook'){
+                $smsg += "`nUser has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients" ;
+            } ;
+            if($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'}){ ;
+                $smsg += "`nUser has one or more device-vendor-provided 'ExchangeActiveSync' Mobile clients!" ;
+                $smsg += "`nPLEASE NOTE: BY POLICY EAS CLIENTS ARE *BEST EFFORT* supported:"
+                $smsg += "`nWHERE ISSUES ARE EXPERIENCED WITH LEGACY EAS/ACTIVESYNC CLIENTS," ;
+                $smsg += "`nUSERS SHOULD BE URGED TO MOVE TO SUPPORTED MS OUTLOOK MOBILE FOR IOS OR ANDROID CLIENTS" ;
+            }
+            write-host -foregroundcolor green $smsg ;
+        } ; 
+        #endregion GET_XOMOBILEDATA ; #*------^ END get-xoMobileData ^------
 
         #endregion FUNCTIONS ; #*======^ END FUNCTIONS ^======
 
@@ -1176,8 +1245,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         #region useEXO ; #*------v useEXO v------
         # 1:29 PM 9/15/2022 as of MFA & v205, have to load EXO *before* any EXOP, or gen get-steppablepipeline suffix conflict error
         if($useEXO){
-            if ($script:useEXOv2 -OR $useEXOv2) { reconnect-eXO2 @pltRXOC }
-            else { reconnect-EXO @pltRXOC } ;
+            reconnect-EXO @pltRXOC ;
         } else {
             $smsg = "(`$useEXO:$($useEXO))" ; 
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -1945,12 +2013,22 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             $procd++ ;
             write-verbose "processing:$($usr)" ;
             if($getMobile){
+                
                 $smsg = "(-getMobile:retrieving user xo MobileDevices)" ; 
                 if($verbose){
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose $smsg } ; 
                 } ; 
                 $hsum.add('xoMobileDeviceStats',$null) ; 
+                $hsum.add('xoMobileDeviceStatsOLD',$null) ; 
+                # 9:22 AM 9/23/2025 add xoMobileOutlookClients, xoMobileOMSyncTypes, reflecting supported Outlook Mobile client & the ClientType spec in use for the OLM 'Microsoft's native sync technology'
+                # add xoMobileDeviceTypes, xoMobileOtherSyncTypes to make iphone/android types immed vis
+                $hsum.add('xoMobileOutlookClients',$null) ; 
+                $hsum.add('xoMobileOtherClients',$null) ; 
+                $hsum.add('xoMobileOMSyncTypes',$null) ; 
+                $hsum.add('xoMobileDeviceTypes',$null) ; 
+                $hsum.add('xoMobileOtherSyncTypes',$null) ; 
+                
             } ; 
             if($getQuotaUsage){
                 $smsg = "(-getQuotaUsage:retrieving user xo Mailbox*Statistics & Effective Quotas)" ; 
@@ -2739,6 +2817,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                         } ;
                                         #region xogetMobile ; #*------v xogetMobile v------
                                         if($getMobile){
+                                            get-xoMobileData ; 
+                                            <#
                                             $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
                                             if($verbose){
                                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -2749,6 +2829,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                             $hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.ExchangeGuid.guid -ea STOP ; 
                                             $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
                                             write-host -foregroundcolor green $smsg ;
+                                            #>
                                         } ; 
                                         #endregion xogetMobile ; #*------^ END xogetMobile ^------
                                         #region xogetQuotaUsage ; #*------v getQuotaUsage v------
@@ -3417,6 +3498,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             } ;
             #region xogetMobile ; #*------v xogetMobile v------
             if($getMobile){
+                get-xoMobileData ; 
+                <#
                 $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
                 if($verbose){
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -3424,9 +3507,28 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 } ; 
                 #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ; 
                 # wasn't getting data back: shift to the .xomailbox.ExchangeGuid.guid, it's 100% going to hit and return data 
-                $hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP ; 
+                $xoMobileDeviceStats = +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP | sort LastSuccesssync -Descending ; 
+                #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP ; 
+                $hsum.xoMobileDeviceStats  +=  @($xoMobileDeviceStats | ?{$_.LastSyncAttemptTime -ge (get-date).adddays(-1 * $xoMobileDeviceOLDThreshold)})
                 $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
+                $hsum.xoMobileDeviceStatsOLD  +=  @($xoMobileDeviceStats | ?{$_.LastSyncAttemptTime -lt (get-date).adddays(-1 * $xoMobileDeviceOLDThreshold)})
+                $smsg += "`nxoMobileDeviceStatsOLD Count:$(($hsum.xoMobileDeviceStatsOLD|measure).count)" ;
+                $hsum.xoMobileOutlookClients += @($xoMobileDeviceStats | ?{$_.DeviceType -match 'Outlook'}) ; 
+                $hsum.xoMobileOtherClients += @($xoMobileDeviceStats | ?{$_.DeviceType -notmatch 'Outlook'}) ; 
+                $hsum.xoMobileOMSyncTypes += @(($hsum.xoMobileOutlookClients | group ClientType | select -expand Name ) -join ';')
+                if($hsum.xoMobileOMSyncTypes -match 'REST'){
+                    $smsg += "`nUser has one or more *legacy* 'REST' Outlook Mobile clients" ;
+                }elseif($hsum.xoMobileOMSyncTypes -match 'Outlook'){
+                    $smsg += "`nUser has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients" ;
+                } ; 
+                if($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'}){ ; 
+                    $smsg += "`nUser has one or more device-vendor-provided 'ExchangeActiveSync' Mobile clients!" ;
+                    $smsg += "`nPLEASE NOTE: BY POLICY EAS CLIENTS ARE *BEST EFFORT* supported:"
+                    $smsg += "`nWHERE ISSUES ARE EXPERIENCED WITH LEGACY EAS/ACTIVESYNC CLIENTS," ;
+                    $smsg += "`nUSERS SHOULD BE URGED TO MOVE TO SUPPORTED MS OUTLOOK MOBILE FOR IOS OR ANDROID CLIENTS" ;
+                }
                 write-host -foregroundcolor green $smsg ;
+                #>
             } ; 
             #endregion xogetMobile ; #*------^ END xogetMobile ^------
             #region xogetQuotaUsage2 ; #*------v xogetQuotaUsage2 v------
@@ -3912,6 +4014,103 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                 } ;
                 #endregion OUTPUT_PERMS ; #*------^ END OUTPUT_PERMS ^------
+                #region OUTPUT_MOBILE ; #*------v OUTPUT_MOBILE v------
+                if($getMobile){
+                    write-host -foreground yellow "===`$hsum.xoMobileDeviceStats: " #-nonewline;
+
+                    $ino = 0 ;
+                    if($hsum.xoMobileDeviceStats){
+                        #$smsg = "ACTIVE:(LastSyncAttemptTime -LT $($xoMobileDeviceOLDThreshold)d)" ; 
+                        #write-host -foregroundcolor yellow $smsg ;
+                        foreach($xmob in $hsum.xoMobileDeviceStats){
+                            $ino++ ;
+                            if($hsum.xoMobileDeviceStats -is [system.array]){
+                                    write-host -foreground yellow "=get-xMob$($ino):(active)> " #-nonewline;
+                            } else {
+                                write-host -foreground yellow "=get-xMobileDev:(active)> " #-nonewline;
+                            } ;
+                            $smsg = "$(($xmob | select $propsMobL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            $smsg += "`n$(($xmob | select $propsMobL2 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            write-host $smsg ;
+                        } ;
+                    } ; 
+                    if($hsum.xoMobileDeviceStats){
+                        #$smsg = "INACTIVE:(LastSyncAttemptTime -GT $($xoMobileDeviceOLDThreshold)d)" ; 
+                        #write-host -foregroundcolor gray $smsg ;
+                        foreach($xmob in $hsum.xoMobileDeviceStatsOLD){
+                            $ino++ ;
+                            if($hsum.xoMobileDeviceStats -is [system.array]){
+                                    write-host -foreground yellow "=get-xMob$($ino):(inactive)> " #-nonewline;
+                            } else {
+                                write-host -foreground yellow "=get-xMobileDev:(inactive)> " #-nonewline;
+                            } ;
+                            $smsg = "$(($xmob | select $propsMobL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            $smsg += "`n$(($xmob | select $propsMobL2 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            write-host -foregroundcolor gray $smsg ;
+                        } ;
+                    } ; 
+                    if($hsum.xoMobileOutlookClients){                        
+                        $smsg = "+++Supported Outlook Mobile Clients: $($($hsum.xoMobileOutlookClients|measure).count)" ; 
+                        <#
+                        foreach($xmob in $hsum.xoMobileOutlookClients){
+                            $ino++ ;
+                            if($hsum.xoMobileDeviceStats -is [system.array]){
+                                    write-host -foreground yellow "=get-xMob$($ino):> " #-nonewline;
+                            } else {
+                                write-host -foreground yellow "=get-xMobileDev:> " #-nonewline;
+                            } ;
+                            $smsg = "$(($xmob | select $propsMobL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            $smsg += "`n$(($xmob | select $propsMobL2 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            write-host $smsg ;
+                        } ;
+                        #>
+                        $smsg += "`n$(($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'} | ft -a $prpEASDevs|out-string).trim())" ; 
+                        if($hsum.xoMobileOMSyncTypes){
+                            $smsg += "`n-----`$hsum.xoMobileOMSyncTypes: $($hsum.xoMobileOMSyncTypes)" ; 
+                            write-host -foregroundcolor green $smsg ;
+                            if($hsum.xoMobileOMSyncTypes -match 'REST'){
+                                $smsg += "`nUser has one or more *legacy* 'REST' Outlook Mobile clients" ;
+                            }elseif($hsum.xoMobileOMSyncTypes -match 'Outlook'){
+                                $smsg += "`nUser has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients" ;
+                            } ;
+                        } ; 
+                        write-host -foregroundcolor green $smsg ;
+                    }else{
+                        write-verbose "(no Outlook Mobile clients returned)" ; 
+                    } ; 
+                    if($hsum.xoMobileOtherClients){
+                        $smsg = "---NON-Outlook Mobile Clients:(phone-vendor-supported)" ; 
+                        <#
+                        foreach($xmob in $hsum.xoMobileOtherClients){
+                            $ino++ ;
+                            if($hsum.xoMobileDeviceStats -is [system.array]){
+                                    write-host -foreground yellow "=get-xMob$($ino):> " #-nonewline;
+                            } else {
+                                write-host -foreground yellow "=get-xMobileDev:> " #-nonewline;
+                            } ;
+                            $smsg = "$(($xmob | select $propsMobL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            $smsg += "`n$(($xmob | select $propsMobL2 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            write-host $smsg ;
+                        } ;
+                        #>
+                        $smsg += "`n$(($hsum.xoMobileOtherClients| ft -a $prpEASDevs|out-string).trim())" ;                         
+                        write-host -foregroundcolor RED $smsg ;
+                        if($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'}){ ;
+                            $smsg = "`nThe following devices use device-vendor-provided/supported 'ExchangeActiveSync/EAS' Mobile clients!" ;
+                            $smsg += "`nPLEASE NOTE: By policy EAS clients are *Best Effort* supported:"
+                            $smsg += "`nWhere issues are experienced with legacy Eas/ActiveSync clients," ;
+                            $smsg += "`nUsers should be urged to move to _Supported_ Microsoft Outlook Mobile for IOS or Android" ;
+                            $hsum.xoMobileOtherClients
+                            #$prpEASDevs = 'DeviceFriendlyName','ClientType','LastSyncAttemptTime','LastSuccessSync' ; 
+                            $smsg += "`n$(($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'} | ft -a $prpEASDevs|out-string).trim())" ; 
+                            write-host -foregroundcolor yellow $smsg ;
+                        }
+                    }else{
+                        write-verbose "(no 'non'-Outlook Mobile clients returned)" ; 
+                    } ; 
+
+                } ;
+                #endregion OUTPUT_MOBILE ; #*------^ END OUTPUT_MOBILE ^------
             } ;
             #endregion RV_VIA_GAADU ; #*------^ END RV_VIA_GAADU ^------
             
