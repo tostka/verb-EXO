@@ -142,8 +142,78 @@ function resolve-user {
         Note: 
             - adds inline output:
                 xoMobileDeviceStats Count:2
+                Evaluates and reports on Outlook Mobile use, OLM ClientType sync, 
+                Stigmatizes and NOTE:'s EAS use with Best Effort support status. 
             - adds outobject property:
-            $results.xoMobileDeviceStats: 
+            $results:
+                xoMobileDeviceStats    (LastSyncTime -LE 30D)
+                xoMobileDeviceStatsOLD (LastSyncTime -GT 30D)
+                xoMobileOutlookClients (OL Mobile clients)
+                xoMobileOtherClients   (Non-OL Mobile clients)
+                xoMobileOMSyncTypes    ('Outlook' (MS Native Sync) v 'REST' (legacy GAPI))
+                xoMobileOtherSyncTypes ('EAS' et al)
+        
+        Typical Summary Block - Iphone
+        ===$hsum.xoMobileDeviceStats:
+        =get-xMob1:(ACTIVE)>
+        FriendlyName   | DevType | DevOs             | ClntType | DevID
+        iPhone 16 Plus | iPhone  | iOS 18.6.2 22G100 | EAS      | VC6DOHnnnnnnnnnnnnVOUL7KLK
+        1stSyncTime  | LastSyncTime  | LastSuccSync  | #Folders
+        4/3/25 19:23 | 9/23/25 14:22 | 9/23/25 14:22 | 98
+        =get-xMob2:(inactive)>
+        FriendlyName  | DevType | DevOs             | ClntType | DevID
+        iPhone 7 Plus | iPhone  | iOS 15.8.3 19H386 | EAS      | 15UG7D5nnnnnnnnnnnR14T7EM8
+        1stSyncTime  | LastSyncTime | LastSuccSync | #Folders
+        8/29/24 8:24 | 4/4/25 6:46  | 4/4/25 6:46  | 83
+        ---NON-Outlook Mobile Clients:(device-vendor-supported): 2
+        DeviceFriendlyName ClientType LastSyncTime  LastSuccSync
+        ------------------ ---------- ------------  ------------
+        iPhone 16 Plus     EAS        9/23/25 14:22 9/23/25 14:22
+        iPhone 7 Plus      EAS        4/4/25 6:46   4/4/25 6:46
+
+        The following devices use device-vendor-provided/supported 'ExchangeActiveSync/EAS' Mobile clients!
+        PLEASE NOTE: By policy EAS clients are *Best Effort* supported:
+        Where issues are experienced with legacy EAS/ActiveSync clients,
+        Users should be urged to move to _Supported_ Microsoft Outlook Mobile for IOS or Android
+        DeviceFriendlyName ClientType LastSyncTime  LastSuccSync
+        ------------------ ---------- ------------  ------------
+        iPhone 16 Plus     EAS        9/23/25 14:22 9/23/25 14:22
+        iPhone 7 Plus      EAS        4/4/25 6:46   4/4/25 6:46   
+
+        Typical Summary Block - Outlook Mobile Android 
+        ===$hsum.xoMobileDeviceStats:
+        =get-xMob1:(ACTIVE)>
+        FriendlyName | DevType | DevOs | ClntType | DevID
+                     | Outlook | 15    | Outlook  | D115DF6C8E0nnnnnnnnnnnnn0682152D
+        1stSyncTime  | LastSyncTime  | LastSuccSync  | #Folders
+        2/24/25 9:03 | 9/23/25 13:52 | 9/23/25 13:52 | 0
+        =get-xMob2:(inactive)>
+        FriendlyName | DevType | DevOs | ClntType | DevID
+                     | Outlook | 14    | Outlook  | 5D9DF50F879nnnnnnnnnnnnnC0B6988D
+        1stSyncTime   | LastSyncTime  | LastSuccSync  | #Folders
+        8/17/23 17:50 | 2/24/25 22:29 | 2/24/25 22:29 | 0
+        =get-xMob3:(inactive)>
+        FriendlyName | DevType     | DevOs              | ClntType | DevID
+        aaa-8aaa1a2  | WindowsMail | Windows 10.0.17134 | EAS      | BEB93DA5nnnnnnnnnnnn974B6036A907
+        1stSyncTime   | LastSyncTime | LastSuccSync | #Folders
+        1/24/22 14:58 |              |              | 0
+        +++Supported Outlook Mobile Clients: 2
+
+        -----$hsum.xoMobileOMSyncTypes: Outlook
+        ++User has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients
+        ---NON-Outlook Mobile Clients:(device-vendor-supported): 1
+        DeviceFriendlyName ClientType LastSyncTime LastSuccSync
+        ------------------ ---------- ------------ ------------
+        aaa-8aaa1a2        EAS
+
+        The following devices use device-vendor-provided/supported 'ExchangeActiveSync/EAS' Mobile clients!
+        PLEASE NOTE: By policy EAS clients are *Best Effort* supported:
+        Where issues are experienced with legacy Eas/ActiveSync clients,
+        Users should be urged to move to _Supported_ Microsoft Outlook Mobile for IOS or Android
+        DeviceFriendlyName ClientType LastSyncTime LastSuccSync
+        ------------------ ---------- ------------ ------------
+        aaa-8aaa1a2        EAS
+        14:18:54: INFO:
 
         PS> $results.xoMobileDeviceStats | ft -a
 
@@ -151,6 +221,7 @@ function resolve-user {
         -------------         --------------------  -------------------  ---------------      ----------  --------                         ---------------       ------------------ --------------------- -----------------
         1/24/2022 8:58:54 PM                                                                  WindowsMail XXXnnXAnnAAnnnnXnnnnnnnXn0nnAn0n MSFT-WIN-3/10.0.17134
         8/17/2023 10:50:16 PM 1/16/2025 10:08:42 AM 1/16/2025 5:45:14 PM 1/16/2025 5:45:14 PM Outlook     nXnXXn0XnnnXn0nnAAXA0XnnX0XnnnnX Outlook-Android/2.0
+
 
 
     -getQuotaUsage parameter, returns details on xo MailboxFolderStatistics and effective Quota, 
@@ -977,19 +1048,20 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
             $hsum.xoMobileDeviceStatsOLD  +=  @($xoMobileDeviceStats | ?{$_.LastSyncAttemptTime -lt (get-date).adddays(-1 * $xoMobileDeviceOLDThreshold)})
             $smsg += "`nxoMobileDeviceStatsOLD Count:$(($hsum.xoMobileDeviceStatsOLD|measure).count)" ;
-            $hsum.xoMobileOutlookClients += @($xoMobileDeviceStats | ?{$_.DeviceType -match 'Outlook'}) ;
-            $hsum.xoMobileOtherClients += @($xoMobileDeviceStats | ?{$_.DeviceType -notmatch 'Outlook'}) ;
+            $hsum.xoMobileOutlookClients += @($xoMobileDeviceStats | ?{$_.DeviceType -match 'Outlook' -OR $_.DeviceUserAgent -match 'Outlook' -OR $_.DeviceModel  -match 'Outlook'}) ;
+            $hsum.xoMobileOtherClients += @($xoMobileDeviceStats | ?{$_.DeviceType -notmatch 'Outlook' -AND $_.DeviceUserAgent -notmatch 'Outlook' -AND $_.DeviceModel  -notmatch 'Outlook'}) ;
             $hsum.xoMobileOMSyncTypes += @(($hsum.xoMobileOutlookClients | group ClientType | select -expand Name ) -join ';')
             if($hsum.xoMobileOMSyncTypes -match 'REST'){
-                $smsg += "`nUser has one or more *legacy* 'REST' Outlook Mobile clients" ;
+                $smsg += "`n+User has one or more *legacy* 'REST' Outlook Mobile clients" ;
             }elseif($hsum.xoMobileOMSyncTypes -match 'Outlook'){
-                $smsg += "`nUser has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients" ;
+                $smsg += "`n+++User has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients" ;
             } ;
+            $hsum.xoMobileOtherSyncTypes += @(($hsum.xoMobileOtherClients | group ClientType | select -expand Name ) -join ';')            
             if($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'}){ ;
-                $smsg += "`nUser has one or more device-vendor-provided 'ExchangeActiveSync' Mobile clients!" ;
-                $smsg += "`nPLEASE NOTE: BY POLICY EAS CLIENTS ARE *BEST EFFORT* supported:"
-                $smsg += "`nWHERE ISSUES ARE EXPERIENCED WITH LEGACY EAS/ACTIVESYNC CLIENTS," ;
-                $smsg += "`nUSERS SHOULD BE URGED TO MOVE TO SUPPORTED MS OUTLOOK MOBILE FOR IOS OR ANDROID CLIENTS" ;
+                $smsg += "`n---User has one or more device-vendor-provided 'ExchangeActiveSync' Mobile clients!" ;
+                #$smsg += "`nPLEASE NOTE: BY POLICY EAS CLIENTS ARE *BEST EFFORT* supported:"
+                #$smsg += "`nWHERE ISSUES ARE EXPERIENCED WITH LEGACY EAS/ACTIVESYNC CLIENTS," ;
+                #$smsg += "`nUSERS SHOULD BE URGED TO MOVE TO SUPPORTED MS OUTLOOK MOBILE FOR IOS OR ANDROID CLIENTS" ;
             }
             write-host -foregroundcolor green $smsg ;
         } ; 
@@ -2026,7 +2098,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                 $hsum.add('xoMobileOutlookClients',$null) ; 
                 $hsum.add('xoMobileOtherClients',$null) ; 
                 $hsum.add('xoMobileOMSyncTypes',$null) ; 
-                $hsum.add('xoMobileDeviceTypes',$null) ; 
+                #$hsum.add('xoMobileDeviceTypes',$null) ; 
                 $hsum.add('xoMobileOtherSyncTypes',$null) ; 
                 
             } ; 
@@ -3498,37 +3570,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             } ;
             #region xogetMobile ; #*------v xogetMobile v------
             if($getMobile){
-                get-xoMobileData ; 
-                <#
-                $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
-                if($verbose){
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-verbose $smsg } ; 
-                } ; 
-                #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ; 
-                # wasn't getting data back: shift to the .xomailbox.ExchangeGuid.guid, it's 100% going to hit and return data 
-                $xoMobileDeviceStats = +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP | sort LastSuccesssync -Descending ; 
-                #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP ; 
-                $hsum.xoMobileDeviceStats  +=  @($xoMobileDeviceStats | ?{$_.LastSyncAttemptTime -ge (get-date).adddays(-1 * $xoMobileDeviceOLDThreshold)})
-                $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
-                $hsum.xoMobileDeviceStatsOLD  +=  @($xoMobileDeviceStats | ?{$_.LastSyncAttemptTime -lt (get-date).adddays(-1 * $xoMobileDeviceOLDThreshold)})
-                $smsg += "`nxoMobileDeviceStatsOLD Count:$(($hsum.xoMobileDeviceStatsOLD|measure).count)" ;
-                $hsum.xoMobileOutlookClients += @($xoMobileDeviceStats | ?{$_.DeviceType -match 'Outlook'}) ; 
-                $hsum.xoMobileOtherClients += @($xoMobileDeviceStats | ?{$_.DeviceType -notmatch 'Outlook'}) ; 
-                $hsum.xoMobileOMSyncTypes += @(($hsum.xoMobileOutlookClients | group ClientType | select -expand Name ) -join ';')
-                if($hsum.xoMobileOMSyncTypes -match 'REST'){
-                    $smsg += "`nUser has one or more *legacy* 'REST' Outlook Mobile clients" ;
-                }elseif($hsum.xoMobileOMSyncTypes -match 'Outlook'){
-                    $smsg += "`nUser has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients" ;
-                } ; 
-                if($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'}){ ; 
-                    $smsg += "`nUser has one or more device-vendor-provided 'ExchangeActiveSync' Mobile clients!" ;
-                    $smsg += "`nPLEASE NOTE: BY POLICY EAS CLIENTS ARE *BEST EFFORT* supported:"
-                    $smsg += "`nWHERE ISSUES ARE EXPERIENCED WITH LEGACY EAS/ACTIVESYNC CLIENTS," ;
-                    $smsg += "`nUSERS SHOULD BE URGED TO MOVE TO SUPPORTED MS OUTLOOK MOBILE FOR IOS OR ANDROID CLIENTS" ;
-                }
-                write-host -foregroundcolor green $smsg ;
-                #>
+                get-xoMobileData ;                 
             } ; 
             #endregion xogetMobile ; #*------^ END xogetMobile ^------
             #region xogetQuotaUsage2 ; #*------v xogetQuotaUsage2 v------
@@ -3853,7 +3895,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 } ;
                 # AADUser enabled/disabled: .aaduser.AccountEnabled
                 if($hSum.AADUser){
-                    if($hSum.AADUser.Enabled){
+                    # 2:31 PM 9/23/2025 fixed typo: .Enabled -> .AccountEnabled
+                    if($hSum.AADUser.AccountEnabled){
                         if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){
                             $smsg = "ADUser:$($hSum.AADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) mbx is *ENABLED!*"
                             write-warning $smsg ;
@@ -3864,7 +3907,6 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             write-warning $smsg ;
                         } ; 
                     } ; 
-
                 } ;
                 #endregion ENABLED_STATUS ; #*------^ END ENABLED_STATUS ^------
                 #region LIC_GRP ; #*------v LIC_GRP v------
@@ -4020,26 +4062,24 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
 
                     $ino = 0 ;
                     if($hsum.xoMobileDeviceStats){
-                        #$smsg = "ACTIVE:(LastSyncAttemptTime -LT $($xoMobileDeviceOLDThreshold)d)" ; 
-                        #write-host -foregroundcolor yellow $smsg ;
                         foreach($xmob in $hsum.xoMobileDeviceStats){
                             $ino++ ;
                             if($hsum.xoMobileDeviceStats -is [system.array]){
-                                    write-host -foreground yellow "=get-xMob$($ino):(active)> " #-nonewline;
+                                    write-host -foreground yellow "=get-xMob$($ino):(ACTIVE)> " #-nonewline;
                             } else {
-                                write-host -foreground yellow "=get-xMobileDev:(active)> " #-nonewline;
+                                write-host -foreground yellow "=get-xMobileDev:(ACTIVE)> " #-nonewline;
                             } ;
                             $smsg = "$(($xmob | select $propsMobL1 |out-markdowntable @MDtbl |out-string).trim())" ;
                             $smsg += "`n$(($xmob | select $propsMobL2 |out-markdowntable @MDtbl |out-string).trim())" ;
                             write-host $smsg ;
                         } ;
                     } ; 
-                    if($hsum.xoMobileDeviceStats){
+                    if($hsum.xoMobileDeviceStatsOLD){
                         #$smsg = "INACTIVE:(LastSyncAttemptTime -GT $($xoMobileDeviceOLDThreshold)d)" ; 
                         #write-host -foregroundcolor gray $smsg ;
                         foreach($xmob in $hsum.xoMobileDeviceStatsOLD){
                             $ino++ ;
-                            if($hsum.xoMobileDeviceStats -is [system.array]){
+                            if($hsum.xoMobileDeviceStatsOLD -is [system.array]){
                                     write-host -foreground yellow "=get-xMob$($ino):(inactive)> " #-nonewline;
                             } else {
                                 write-host -foreground yellow "=get-xMobileDev:(inactive)> " #-nonewline;
@@ -4064,14 +4104,14 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             write-host $smsg ;
                         } ;
                         #>
-                        $smsg += "`n$(($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'} | ft -a $prpEASDevs|out-string).trim())" ; 
+                        $smsg += "`n$(($hsum.xoMobileOutlookClients| ?{$_.ClientType -eq 'EAS'} | ft -a $prpEASDevs|out-string).trim())" ; 
                         if($hsum.xoMobileOMSyncTypes){
                             $smsg += "`n-----`$hsum.xoMobileOMSyncTypes: $($hsum.xoMobileOMSyncTypes)" ; 
-                            write-host -foregroundcolor green $smsg ;
+                            #write-host -foregroundcolor green $smsg ;
                             if($hsum.xoMobileOMSyncTypes -match 'REST'){
-                                $smsg += "`nUser has one or more *legacy* 'REST' Outlook Mobile clients" ;
+                                $smsg += "`n+User has one or more *legacy* 'REST' Outlook Mobile clients" ;
                             }elseif($hsum.xoMobileOMSyncTypes -match 'Outlook'){
-                                $smsg += "`nUser has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients" ;
+                                $smsg += "`n++User has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients" ;
                             } ;
                         } ; 
                         write-host -foregroundcolor green $smsg ;
@@ -4079,7 +4119,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         write-verbose "(no Outlook Mobile clients returned)" ; 
                     } ; 
                     if($hsum.xoMobileOtherClients){
-                        $smsg = "---NON-Outlook Mobile Clients:(phone-vendor-supported)" ; 
+                        $smsg = "---NON-Outlook Mobile Clients:(device-vendor-supported): $($($hsum.xoMobileOtherClients|measure).count)" ; 
                         <#
                         foreach($xmob in $hsum.xoMobileOtherClients){
                             $ino++ ;
@@ -4095,12 +4135,15 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         #>
                         $smsg += "`n$(($hsum.xoMobileOtherClients| ft -a $prpEASDevs|out-string).trim())" ;                         
                         write-host -foregroundcolor RED $smsg ;
+                        if($hsum.xoMobileOMSyncTypes){
+                            $smsg += "`n-----`$hsum.xoMobileOtherSyncTypes: $($hsum.xoMobileOtherSyncTypes)" ;
+                            write-host -foregroundcolor yellow $smsg ;
+                        }
                         if($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'}){ ;
                             $smsg = "`nThe following devices use device-vendor-provided/supported 'ExchangeActiveSync/EAS' Mobile clients!" ;
                             $smsg += "`nPLEASE NOTE: By policy EAS clients are *Best Effort* supported:"
-                            $smsg += "`nWhere issues are experienced with legacy Eas/ActiveSync clients," ;
+                            $smsg += "`nWhere issues are experienced with legacy EAS/ActiveSync clients," ;
                             $smsg += "`nUsers should be urged to move to _Supported_ Microsoft Outlook Mobile for IOS or Android" ;
-                            $hsum.xoMobileOtherClients
                             #$prpEASDevs = 'DeviceFriendlyName','ClientType','LastSyncAttemptTime','LastSuccessSync' ; 
                             $smsg += "`n$(($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'} | ft -a $prpEASDevs|out-string).trim())" ; 
                             write-host -foregroundcolor yellow $smsg ;
