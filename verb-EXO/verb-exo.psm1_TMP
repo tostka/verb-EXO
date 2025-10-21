@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 10.0.0.0
+  Version     : 10.0.2.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -1572,7 +1572,7 @@ Function Connect-EXO {
             TokenExpiryTime        : 3/29/2022 8:21:45 PM +00:00
             CurrentModuleName      : tmp_j2itmjec.1iw
             State                  : Opened
-            IdleTimeout            : 10.0.00
+            IdleTimeout            : 900000
             OutputBufferingMode    : None
             DisconnectedOn         :
             ExpiresOn              :
@@ -6370,7 +6370,7 @@ function get-ExoGxMTEventType {
     PS> $hQuotas['database2']
     Name           ProhibitSendReceiveQuotaGB ProhibitSendQuotaGB IssueWarningQuotaGB
     ----           -------------------------- ------------------- -------------------
-    database2      12.000                     10.000              10.0.0
+    database2      12.000                     10.0.2              9.000
     Retrieve local org on-prem MailboxDatabase quotas and assign to a variable, with verbose outputs. Then output the retrieved quotas from the indexed hash returned, for the mailboxdatabase named 'database2'.
     .LINK
     https://github.com/tostka/verb-EXO
@@ -7921,6 +7921,8 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 4:27 PM 10/21/2025 fixed /tested more: loop (M$ v2 pagination offload) ; add: -ResultSize; fundemental update to use Get-xoMessageTraceV2 & Get-xoMessageTraceDetailV2 mandates (gxmt & gxmtd are now borked; fail) ; 
+        fixed connect-ExchangeServerTDO() return (brought over updated latest), post-import requirement; remove refs to removed reconnect-eXO2; typo fix, WARNING->WARN
     * 12:58 PM 5/5/2025 cx10 was out of date (prompting for manual creds); brought in fresh cbp copies of all internal funcs, and replaced svcs_conn block, logging etc from scratch. Working now, no prompts.
     * 2:28 PM 5/2/2025 main Catch wasn't returning underlying EOM cmdlet errors; added code to -force, dump; 
         -As gxmtd is now flaking out, adapting the $QuarExpandLimitPerSender support to per-Recipient (when -SenderAddress used), and per-Sender (when -RecipientAddress used), to cut down on repetitive 
@@ -8018,6 +8020,8 @@ function Get-EXOMessageTraceExportedTDO {
     Days to be searched, back from current time(Alt to use of StartDate & EndDate; Note:MS won't search -gt 10 days)[-Days 7]
     .PARAMETER Subject
     Subject of target message (emulated via post filtering, not supported param of Get-xoMessageTrace) [-Subject 'Some subject']
+    .PARAMETER SubjectFilterType
+    You specify how the value is evaluated in the message subject by using the SubjectFilterType parameter (Contains|EndsWith|StartsWith)
     .PARAMETER Status
     The Status parameter filters the results by the delivery status of the message (None|GettingStatus|Failed|Pending|Delivered|Expanded|Quarantined|FilteredAsSpam),an array runs search on each). [-Status 'Failed']
     .PARAMETER MessageId
@@ -8028,6 +8032,8 @@ function Get-EXOMessageTraceExportedTDO {
     The FromIP parameter filters the results by the source IP address. For incoming messages, the value of FromIP is the public IP address of the SMTP email server that sent the message. For outgoing messages from Exchange Online, the value is blank. [-FromIP '123.456.789.012']
     .PARAMETER ToIP
     The ToIP parameter filters the results by the destination IP address. For outgoing messages, the value of ToIP is the public IP address in the resolved MX record for the destination domain. For incoming messages to Exchange Online, the value is blank. [-ToIP '123.456.789.012']
+    .PARAMETER ResultSize
+    The ResultSize parameter specifies the maximum number of results to return. A valid value is from 1 to 5000. The default value is 1000. Note: This parameter replaces the PageSize parameter that was available on the Get-MessageTrace cmdlet.
     .PARAMETER SimpleTrack
     Switch to just return the net messages on the initial track (no Fail/Quarantine, MTDetail or other post-processing summaries) [-simpletrack]
     .PARAMETER Detailed
@@ -8307,6 +8313,10 @@ function Get-EXOMessageTraceExportedTDO {
         [Parameter(HelpMessage="Subject of target message (emulated via post filtering, not supported param of Get-xoMessageTrace) [-Subject 'Some subject']")]
             [Alias('MessageSubject')]
             [string]$subject,
+        [Parameter(HelpMessage="You specify how the value is evaluated in the message subject by using the SubjectFilterType parameter (Contains|EndsWith|StartsWith) [-SubjectFilterType 'StartsWith']")]
+            [ValidateSet("Contains","EndsWith","StartsWith")]
+            #[Alias('MessageSubject')]
+            [string]$SubjectFilterType,
         [Parameter(HelpMessage="The Status parameter filters the results by the delivery status of the message (None|GettingStatus|Failed|Pending|Delivered|Expanded|Quarantined|FilteredAsSpam),an array runs search on each, post-filter results to target full range of Status values). [-Status 'Failed']")]
             [Alias('DeliveryStatus','EventId')]
             [ValidateSet('None','GettingStatus','Failed','Pending','Delivered','Expanded','Quarantined','FilteredAsSpam')]
@@ -8319,7 +8329,9 @@ function Get-EXOMessageTraceExportedTDO {
         [Parameter(HelpMessage="The FromIP parameter filters the results by the source IP address. For incoming messages, the value of FromIP is the public IP address of the SMTP email server that sent the message. For outgoing messages from Exchange Online, the value is blank. [-FromIP '123.456.789.012']")] 
             [string]$FromIP, 
         [Parameter(HelpMessage="The ToIP parameter filters the results by the destination IP address. For outgoing messages, the value of ToIP is the public IP address in the resolved MX record for the destination domain. For incoming messages to Exchange Online, the value is blank. [-ToIP '123.456.789.012']")] 
-            [string]$ToIP,
+            [string]$ToIP,            
+            [Parameter(HelpMessage="The ResultSize parameter specifies the maximum number of results to return. A valid value is from 1 to 5000. The default value is 1000. Note: This parameter replaces the PageSize parameter that was available on the Get-MessageTrace cmdlet. [-ResultSize 2000]")]             
+            [int32]$ResultSize,
         [Parameter(HelpMessage="Switch to just return the net messages on the initial track (no Fail/Quarantine, MTDetail or other post-processing summaries) [-simpletrack]")]
             [switch]$SimpleTrack,
         [Parameter(HelpMessage="Switch to do Summarize & Expansion of any MTD TransportRule events (defaults true) [-DetailedReportRuleHits]")]
@@ -9284,8 +9296,25 @@ function Get-EXOMessageTraceExportedTDO {
                 stopping at the first successful connection.
                 .NOTES
                 REVISIONS
+                * 3:48 PM 10/21/2025 updated CBH for post-import tests on call
+                * 3:58 PM 5/14/2025 restored prior dropped earlier rev history (routinely trim for psparamt inclu)
+                * 10;07 am 4/30/2025 fixed borked edge conn, typo, and rev logic for Ex & role detection in raw PS - lacks evaris for exchange (EMS/REMS only), so leverage reg & stock install loc hunting to discover setup.exe for vers & role confirm).
                 * 2:46 PM 4/22/2025 add: -Version (default to Ex2010), and postfiltered returned ExchangeServers on version. If no -Version, sort on newest Version, then name, -descending.
-                .PARAMETER name
+                * 4:25 PM 1/15/2025 seems to work at this point, move to rebuild
+                * 4:49 PM 1/9/2025 reworked connect-exchangeserverTdo() to actually use the credentials passed in, and 
+                added the missing import-module $PSS, to _connect-ExOP, to make the session actually functional 
+                for running cmds, wo popping cred prompts. 
+                * 12:24 PM 12/4/2024 removed bracket bnr echos around _connect-ExOP
+                * 3:54 PM 11/26/2024 integrated back TLS fixes, and ExVersNum flip from June; syncd dbg & vx10 copies.
+                * 12:57 PM 6/11/2024 Validated, Ex2010 & Ex2019, hub, mail & edge roles: tested ☑️ on CMW mail role (Curly); and Jumpbox; 
+                copied in CBH from repo copy, which has been updated/debugged compat on CMW Edge 
+                includes local snapin detect & load for edge role (simplest EMS load option for Edge role, from David Paulson's original code; no longer published with Ex2010 compat)
+                * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
+                * 12:49 PM 6/21/2024 flipped PSS Name to Exchange$($ExchVers[dd])
+                * 11:28 AM 5/30/2024 fixed failure to recognize existing functional PSSession; Made substantial update in logic, validate works fine with other orgs, and in our local orgs.
+                * 4:02 PM 8/28/2023 debuged, updated CBH, renamed connect-ExchangeSErver -> Connect-ExchangeServerTDO (avoid name clashes, pretty common verb-noun combo).
+                * 12:36 PM 8/24/2023 init
+                 .PARAMETER name
                 FQDN of a specific Exchange server[-Name EXSERVER.DOMAIN.COM]
                 .PARAMETER discover
                 Boolean paraameter that drives auto-discovery of target Exchange servers for connection (defaults `$true)[-discover:`$false]
@@ -9310,6 +9339,35 @@ function Get-EXOMessageTraceExportedTDO {
                 .EXAMPLE
                 PS> TRY{$Site=[System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().Name}CATCH{$Site=$env:COMPUTERNAME} ;
                 PS> $PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
+                PS> write-verbose "discover and import session" ; 
+                PS> $cmd = $null; $cmd = get-command 'Get-OrganizationConfig' -erroraction 0 ;
+                PS> if(-not $cmd){
+                PS>     if($ExPSS = get-pssession | ? { $_.ConfigurationName -eq 'Microsoft.Exchange' -AND $_.State -eq 'Opened' -AND $_.Availability -eq 'Available' } | sort id -Descending | select -first 1 ){
+                PS>         TRY{
+                PS>             $ExIPSS = Import-PSSession $ExPSS -allowclobber -ea STOP ;
+                PS>             $cmd = $null; $cmd = get-command 'Get-OrganizationConfig' -erroraction stop ;
+                PS>             $smsg = "Connected to: $($expss.computername)" ;
+                PS>             if(gcm Write-MyOutput -ea 0){Write-MyOutput $smsg } else {
+                PS>                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                PS>                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                PS>             } ;
+                PS>         } CATCH {
+                PS>             $ErrTrapd=$Error[0] ;
+                PS>             $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                PS>             if(gcm Write-MyWarning -ea 0){Write-MyWarning $smsg } else {
+                PS>                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN} else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                PS>             } ;
+                PS>             BREAK ;
+                PS>         } ;
+                PS>     } ;  
+                PS> } else {
+                PS>     $smsg = "Connected to: $($expss.computername)" ;
+                PS>     if(gcm Write-MyOutput -ea 0){Write-MyOutput $smsg } else {
+                PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                PS>         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                PS>     } ;
+                PS> } ;                      
+                PS> 
                 Demo including support for EdgeRole, which is detected on it's lack of AD Site specification (which gets fed through to call, by setting the Site to the machine itself).
                 .EXAMPLE
                 PS> $PSSession = Connect-ExchangeServerTDO -siteName SITENAME -RoleNames @('HUB','CAS') -Version Ex2016 -verbose 
@@ -9354,7 +9412,7 @@ function Get-EXOMessageTraceExportedTDO {
                   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
                 } ;
               } ;
-                
+    
                     # 5:15 PM 4/22/2025 on CMW, have to patch version to Ex2016
 
                     #*------v Function _connect-ExOP v------
@@ -9445,9 +9503,9 @@ function Get-EXOMessageTraceExportedTDO {
                                                 }else{
                                                     $Global:ExInstall = (Get-ItemProperty HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup).MsiInstallPath
                                                 }
-    
+
                                                 $Global:ExBin = $Global:ExInstall + "\Bin"
-    
+
                                                 $smsg = ("Set ExInstall: {0}" -f $Global:ExInstall)
                                                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
                                                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
@@ -10453,6 +10511,58 @@ function Get-EXOMessageTraceExportedTDO {
         } ; 
         #endregion OUT_CLIPBOARD ; #*------^ END out-Clipboard ^------
 
+        #region START_SLEEPCOUNTDOWN ; #*------v start-sleepcountdown v------
+        if (-not (get-command start-sleepcountdown -ea 0)) {
+            function start-sleepcountdown {
+                <#
+                .SYNOPSIS
+                Start-SleepCountdown - Countdown variant of start-sleep: Counts down seconds to finish.
+                .NOTES
+
+                REVISION
+                * 10:44 AM 10/15/2024 add -useMins to make it do a minutes countdown (still requires seconds input)
+
+                .PARAMETER Seconds
+                Specifies how long the resource sleeps in seconds. You can omit the parameter name ( Seconds ), or you can abbreviate it as s
+
+                #>
+                [CmdletBinding()]
+                PARAM(
+                    [Parameter(Mandatory = $True, ValueFromPipeline = $true, HelpMessage = "Specifies how long the resource sleeps in seconds. You can omit the parameter name ( Seconds ), or you can abbreviate it as s")]
+                    [Alias('s')]
+                    [System.Int32]$Seconds,
+                    [Parameter(Mandatory = $True, ValueFromPipeline = $true, HelpMessage = "Specifies how long the resource sleeps in seconds. You can omit the parameter name ( Seconds ), or you can abbreviate it as s")]
+                    [switch]$useMins
+                ) ;
+                PROCESS {
+                    $smsg += "`nWaiting $($Seconds) seconds...`nSTART[" ;
+                    write-host -foregroundcolor yellow -NoNewline $smsg ;
+                    $a = 1 ; $thisMin = 60 ;
+                    Do {
+                        <#Var â€“ Is $a a multiple of $b?
+                        Using the % modulus (remainder of a division) operator.
+                        Tests if ($a % $b) returns zero ($b divides evenly into $a, with no remainder)
+                        $a=100; $b=5 ; if(!($a % $b)){"$a is a multiple of $b "}else{"$a is not a multiple of $b "};
+                        #>
+                        $thisMin-- ;
+                        if ($useMins) {
+                            if ($thisMin -eq 0) {
+                                #if($Seconds % 60){ # mod isn't working right
+                                #write-host -NoNewline ".$($Seconds)" ;
+                                write-host -NoNewline ".$([int]($Seconds/60))" ;
+                                $thisMin = 60 ;
+                            } ;
+                        } else {
+                            write-host -NoNewline ".$($Seconds)" ;
+                        } ;
+                        start-sleep -Seconds 1 ; $Seconds--
+                    }
+                    While ($Seconds -gt 0) ;
+                    write-host -foregroundcolor yellow "]DONE" ;
+                } ;
+            } ;
+        } ;
+        #endregion START_SLEEPCOUNTDOWN ; #*------^ END start-sleepcountdown ^------
         #region CONVERTFROM_MARKDOWNTABLE ; #*------v convertFrom-MarkdownTable v------
         if(-not(gci function:convertFrom-MarkdownTable -ea 0)){
             Function convertFrom-MarkdownTable {
@@ -10651,6 +10761,12 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                 [Parameter(Mandatory=$True,HelpMessage="Array of Get-xoMessageTrace Message returns to be expanded into Get-xoMessageTraceDetail ")]
                 [array]$Messages
             ) ; 
+            BEGIN{
+                if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
+                if(-not $DawdleWait){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
+                if(-not $RetryThrottle){$RetryThrottle = 60 } ; # wait time (secs) after Throttle error $errtest.Exception ||Your recent queries have surpassed the permitted limit, please try again later
+                if(-not $rgxEXOThrottle){$rgxEXOThrottle = 'Your\srecent\squeries\shave\ssurpassed\sthe\spermitted\slimit,\splease\stry\sagain\slater' } 
+            } ; 
             PROCESS{
                 $mtds = @() ; 
                 foreach( $mtdm in  $Messages){
@@ -10669,14 +10785,40 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                     $Exit = 0 ;
                     Do {
-                        TRY {
-                            if($rmtd = Get-xoMessageTraceDetail @pltgXMTD){
+                        TRY {                            
+                            #if($rmtd = Get-xoMessageTraceDetail @pltgXMTD){
+                            # 1:21 PM 10/21/2025 try to splice in Get-xoMessageTraceDetailV2
+                            # doesn't seem to support the same -StartingRecipientAddress etc params, no evidence does warning pushback, lacks the gxmt's native params for those features. 
+                            # does throttle HARD, just kills the connection
+                            if($rmtd = Get-xoMessageTraceDetailV2 @pltgXMTD){
                                 $mtds += $rmtd ;
                             } else {
                                 write-warning "No Return: #$($Exit):MTId: $($pltgXMTD.MessageTraceId) : To: $($pltgXMTD.RecipientAddress)" ; 
                                 throw "no Get-xoMessageTraceDetail return" ; 
                             } ; 
                             $Exit = $Retries ;
+                        } CATCH [System.Exception] {
+                            $ErrTrapd=$Error[0] ;
+                            if($ErrTrapd.Exception -match $rgxEXOThrottle){
+                                $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                                $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                                #Start-Sleep -Milliseconds $ThrottleMs 
+                                start-sleepcountdown -seconds $RetryThrottle -Rolling ; 
+                                $Exit ++ ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                $smsg= "Try #: $($Exit)" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                If ($Exit -eq $Retries) {
+                                    $smsg= "Unable to exec cmd!" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    BREAK ; 
+                                } ;
+                            } ; 
                         } CATCH {
                             $ErrTrapd=$Error[0] ;
                             $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
@@ -10813,7 +10955,9 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
     
         if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
         if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
-        if(-not $RetrySleep){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
+        if(-not $DawdleWait){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
+        if(-not $RetryThrottle){$RetryThrottle = 60 } ; # wait time (secs) after Throttle error $errtest.Exception ||Your recent queries have surpassed the permitted limit, please try again later
+        if(-not $rgxEXOThrottle){$rgxEXOThrottle = 'Your\srecent\squeries\shave\ssurpassed\sthe\spermitted\slimit,\splease\stry\sagain\slater' } 
         if(-not $DirSyncInterval){$DirSyncInterval = 30 } ; # AADConnect dirsync interval
         if(-not $ThrottleMs){$ThrottleMs = 50 ;}
         if(-not $rgxDriveBanChars){$rgxDriveBanChars = '[;~/\\\.:]' ; } ; # ;~/\.:,
@@ -10826,11 +10970,12 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         #$rgxADDistNameGAT = ",$(($TORMeta.UnreplicatedOU -split ',' | select -skip 1 ) -join ',')" 
         #$rgxADDistNameAT = ",$(($TORMeta.UnreplicatedOU -split ',' | select -skip 2 ) -join ',')"
 
-        write-verbose "Coerce configured but blank Resultsize to Unlimited" ; 
+        <#write-verbose "Coerce configured but blank Resultsize to Unlimited" ; 
         if(get-variable -name resultsize -ea 0){
             if( ($null -eq $ResultSize) -OR ('' -eq $ResultSize) ){$ResultSize = 'unlimited' }
             elseif($Resultsize -is [int]){} else {throw "Resultsize must be an integer or the string 'unlimited' (or blank)"} ;
         } ; 
+        #>
         #$ComputerName = $env:COMPUTERNAME ;
         #$NoProf = [bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); # if($NoProf){# do this};
         # XXXMeta derived constants:
@@ -11355,9 +11500,12 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
 
         #region useEXO ; #*------v useEXO v------
         # 1:29 PM 9/15/2022 as of MFA & v205, have to load EXO *before* any EXOP, or gen get-steppablepipeline suffix conflict error
+        # 9:31 AM 10/21/2025 remove refs to removed reconnect-eXO2
         if($useEXO){
-            if ($script:useEXOv2 -OR $useEXOv2) { reconnect-eXO2 @pltRXOC }
-            else { reconnect-EXO @pltRXOC } ;
+            #if ($script:useEXOv2 -OR $useEXOv2) { reconnect-eXO2 @pltRXOC }
+            #else { 
+                reconnect-EXO @pltRXOC 
+            #} ;
         } else {
             $smsg = "(`$useEXO:$($useEXO))" ; 
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -11476,10 +11624,41 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                             $pltCcX10.version = 'Ex2016' ; 
                         } else { $pltCcX10.add('version','Ex2016') } ;
                     } ; 
-                    $smsg = "Connect-ExchangeServerTDO w`n$(($pltCcX10|out-string).trim())" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    #$PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
-                    $PSSession = Connect-ExchangeServerTDO @pltCcX10 ; 
+                    $cmd = $null; $cmd = get-command 'Get-OrganizationConfig' -erroraction 0 ;
+                    if(-not $cmd){
+                        $smsg = "Connect-ExchangeServerTDO w`n$(($pltCcX10|out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #$PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
+                        $PSSession = Connect-ExchangeServerTDO @pltCcX10 ; 
+                        # do remedial import test (remote function context doesn't have the session mounted on pass back)
+                        $cmd = $null; $cmd = get-command 'Get-OrganizationConfig' -erroraction 0 ;
+                        if(-not $cmd){
+                            if($ExPSS = get-pssession | ? { $_.ConfigurationName -eq 'Microsoft.Exchange' -AND $_.State -eq 'Opened' -AND $_.Availability -eq 'Available' } | sort id -Descending | select -first 1 ){
+                                TRY{
+                                    $ExIPSS = Import-PSSession $ExPSS -allowclobber -ea STOP ;
+                                    $cmd = $null; $cmd = get-command 'Get-OrganizationConfig' -erroraction stop ;
+                                    $smsg = "Connected to: $($expss.computername)" ;
+                                    if(gcm Write-MyOutput -ea 0){Write-MyOutput $smsg } else {
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                    } ;
+                                } CATCH {
+                                    $ErrTrapd=$Error[0] ;
+                                    $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                                    if(gcm Write-MyWarning -ea 0){Write-MyWarning $smsg } else {
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN} else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    } ;
+                                    BREAK ;
+                                } ;
+                            } ;
+                        } else {
+                            $smsg = "Connected to: $($expss.computername)" ;
+                            if(gcm Write-MyOutput -ea 0){Write-MyOutput $smsg } else {
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            } ;
+                        } ;                                                        
+                    } ; 
                 } else {
                     if($pltRX10){
                         #ReConnect-Ex2010XO @pltRX10 ;
@@ -11673,8 +11852,19 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
 
       
         # Configure the Get-xoMessageTrace splat 
+        <# gxmt v1 params
         $pltGXMT=[ordered]@{
             Page= 1 ; # default it to 1 vs $null as we'll be purging empties further down
+            ErrorAction = 'STOP' ;
+            verbose = $($VerbosePreference -eq "Continue") ;
+        } ;
+        #>
+        # 12:12 PM 10/21/2025 Get-xoMessageTraceV2 params - tossed out Page support and all native pagination
+        #-ResultSize 5000 -StartDate $StartDate -EndDate $EndDate -WarningVariable MoreResultsAvailable 
+        $pltGXMT=[ordered]@{
+            #Page= 1 ; # default it to 1 vs $null as we'll be purging empties further down
+            #ResultSize = 5000 ; 
+            WarningVariable = "MoreResultsAvailable" ; 
             ErrorAction = 'STOP' ;
             verbose = $($VerbosePreference -eq "Continue") ;
         } ;
@@ -11789,10 +11979,29 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         if($ToIP){
             $pltGXMT.add('ToIP',$ToIP) ; 
         } ;
-
+        # 4:01 PM 10/21/2025 add: $ResultSize,
+        if($ResultSize){
+            $pltGXMT.add('ResultSize',$ResultSize) ; 
+        } else{
+            # use default 5k msg limt, max allowed size by MS; given 100qrys/5min window throttling, pays to get max out of each qry.
+            $pltGXMT.add('ResultSize',5000) ; 
+        };
+        # 12:28 PM 10/21/2025 new gxmtV2 -subject & SubjectFilterType params
         if($subject){
+            $pltGXMT.add('Subject',$subject) ; 
         } ;
-        
+        <# You specify how the value is evaluated in the message subject by using the SubjectFilterType parameter.
+            -SubjectFilterType
+                The SubjectFilterType parameter specifies how the value of the Subject parameter is evaluated. Valid values are:
+                    Contains
+                    EndsWith
+                    StartsWith
+                We recommend using StartsWith or EndsWith instead of Contains whenever possible.
+        #>
+        if($SubjectFilterType){
+            $pltGXMT.add('Subject',$SubjectFilterType) ; 
+        } ;
+
         #endregion SPLAT_BUILD ; #*------^ END SPLAT_BUILD ^------
 
         # use the updated psOfile build:
@@ -11865,68 +12074,409 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         $hReports = [ordered]@{} ; 
         #rxo ;
         $error.clear() ;
-        TRY {
-            # prepurge empty hash value keys:
-            #$pltGXMT=$pltGXMT.GetEnumerator()|? value ;
-            # remove null keyed objects
-            #$pltGXMT | Foreach {$p = $_ ;@($p.GetEnumerator()) | ?{ ($_.Value | Out-String).length -eq 0 } | Foreach-Object {$p.Remove($_.Key)} ;} ;
-            # skip it, we're only adding populated items now
-            #write-verbose "hashtype:$($pltGXMT.GetType().FullName)" ; 
-            # and issue was first untested negative integer -Days; and 2nd GMT window for start/enddate, so the 'local' input needs to be converted to/from gmt to get the targeted content.
+        $Exit = 0 ;
+        # do retry the initial query
+        Do {
+            TRY {
+                # prepurge empty hash value keys:
+                #$pltGXMT=$pltGXMT.GetEnumerator()|? value ;
+                # remove null keyed objects
+                #$pltGXMT | Foreach {$p = $_ ;@($p.GetEnumerator()) | ?{ ($_.Value | Out-String).length -eq 0 } | Foreach-Object {$p.Remove($_.Key)} ;} ;
+                # skip it, we're only adding populated items now
+                #write-verbose "hashtype:$($pltGXMT.GetType().FullName)" ; 
+                # and issue was first untested negative integer -Days; and 2nd GMT window for start/enddate, so the 'local' input needs to be converted to/from gmt to get the targeted content.
 
-            $smsg = "Get-xoMessageTrace  w`n$(($pltGXMT|out-string).trim())" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-            $Page = 1  ;
-            $Msgs=$null ;
-            do {
-                $smsg = "Collecting - Page $($Page)..."  ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                $pltGXMT.Page=$Page ;
-                $PageMsgs = Get-xoMessageTrace @pltGXMT |  ?{$_.SenderAddress -notlike '*micro*' -or $_.SenderAddress -notlike '*root*' }  ;
-                $Page++  ;
-                $Msgs += @($PageMsgs)  ;
-            } until ($PageMsgs -eq $null) ;
-            $Msgs=$Msgs| Sort Received ;
-            $smsg = "Raw sender/recipient events:$(($Msgs|measure).Count)" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                <# as of 9:56 AM 10/21/2025: Microsoft is killing all requests to Get-xoMessageTrace, now returns:
+                Write-ErrorMessage : ||Get-MessageTrace will start deprecating on September 1st, 2025. Please refer to: https://learn.microsoft.com/en-us/powershell/module/exchange/get-messagetracev2?view=exchange-ps to switch to 
+                Get-MessageTraceV2.
+                At C:\Users\kadriTSS\AppData\Local\Temp\2\tmpEXO_ah0pg1qz.hjm\tmpEXO_ah0pg1qz.hjm.psm1:1191 char:13
+                +             Write-ErrorMessage $ErrorObject
+                +             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                    + CategoryInfo          : InvalidOperation: (:) [Get-MessageTrace], ValidationException
+                    + FullyQualifiedErrorId : [Server=CY3PR04MB9691,RequestId=8c72957c-e95b-a089-8433-7f5e0e74f247,TimeStamp=Tue, 21 Oct 2025 14:40:45 GMT],Write-ErrorMessage
+                [Announcing General Availability (GA) of the New Message Trace in Exchange Online | Microsoft Community Hub](https://techcommunity.microsoft.com/blog/exchange/announcing-general-availability-ga-of-the-new-message-trace-in-exchange-online/4420243)
 
-            if($subject){
-                $smsg = "Post-Filtering on Subject:$($subject)" ;
+                [New Message trace in EAC in Exchange Online | Microsoft Learn](https://learn.microsoft.com/en-us/exchange/monitoring/trace-an-email-message/new-message-trace)
+
+                [Using the Get-MessageTraceV2 cmdlet to generate mail traffic statistics by user - Blog](https://michev.info/blog/post/6572/using-the-get-messagetracev2-cmdlet-to-generate-mail-traffic-statistics-by-user)
+
+                [PowerShell/Get-DetailedMessageStatsV2.ps1 at master · michevnew/PowerShell · GitHub](https://github.com/michevnew/PowerShell/blob/master/Get-DetailedMessageStatsV2.ps1)
+                
+                # Changes: throttling, torn out usefulness, from Michev:
+
+                ### Positives:
+                - Let's start with the good news. The new message trace ensures feature parity 
+                    with the "old" experience, while bringing some nice improvements. The most 
+                    significant of these is the support for querying data up to 90 days in the past 
+                    in a synchronous manner, whereas we were previously limited to just a handful 
+                    of days, and had to run async queries. Up to 10 days of data is available for a 
+                    single query, but this should not be a problem as in any tenant of meaningful 
+                    size, you will hit the "page" limit early on and will have to issue additional 
+                    queries anyway. 
+                -  larger set of filters supported for the Get-MessageTraceV2 cmdlet, most 
+                    notably the ability to filter based on a message's subject, made possible 
+                    thanks to the -Subject parameter. 
+                ### Negatives:
+                - Microsoft changed the way "pagination" works, and the new experience is mildly 
+                    annoying at best. It could have been implemented better IMO, or at the very 
+                    least align with the pagination experience in the Graph API. Speaking of which, 
+                    the next negative is the lack of support for Graph API endpoints/methods. One 
+                    can argue that we do have a suitable replacement on the Graph via the 
+                    **analyzedEmails** endpoint, but as we discussed in [our 
+                    article](https://www.michev.info/blog/post/6181/first-look-at-the-analyzedemails-graph-api-endpoint) 
+                    on said endpoint, it's use case is different. 
+                -  incoming deprecation of the old experience. Microsoft is giving customers 
+                    until September 1st to move away from the 
+                    Get-MessageTrace/Get-MessageTraceDetail cmdlets. The same deadline applies to 
+                    the MessageTrace report in the good old reporting web service, which is the 
+                    only supported RESTful interface to query the message trace data programmatically.
+                    No alternative is provided at this point, thus any customers 
+                    and ISVs that still rely on the reporting web service need to move to using 
+                    PowerShell instead, which might be an issue. The same can be safe in regard to 
+                    the new throttling guidance, namely 100 requests per 5 minutes. 
+
+                > The biggest change in the script's logic is in how it handles pagination. 
+                I've opted for an approach that relies on the presence of the "hint" returned 
+                by the service, which unfortunately is implemented via the warning stream. In 
+                effect, we suppress the warning while making sure its content is stored in a 
+                variable and then processed to extract the "next page" cmdlet. I'm not a big 
+                fan of this implementation, as you can see from [my 
+                comments](https://techcommunity.microsoft.com/blog/exchange/announcing-public-preview-of-the-new-message-trace-in-exchange-online/4356561/replies/4392248) 
+                under the original blog article. The alternative is to create the "next page" 
+                syntax yourself, by copying the properties of the last returned entry, like 
+                Tony does in his [sample 
+                script](https://github.com/12Knocksinna/Office365itpros/blob/master/Analyze-MailTraffic.PS1)
+
+                >
+ 
+                > Another downside of the new "no pagination" approach is that we cannot have a 
+                proper progress indicator, so instead I have added a "poor man's" variation of 
+                it, just so you know whether the script is progressing. Once we fetch the 
+                available message trace data, we largely follow the logic of the original 
+                script and prepare a hashtable for each recipient, holding the count and size 
+                of both inbound and outbound messages, per day. Lastly, we transform the output 
+                and dump it into a CSV file in the working directory. And since HTML output 
+                seems to be all the rage currently, I've asked Copilot to generate the 
+                corresponding code. Can I play with the cool kids now? 🙂 
+
+                TK: REQUIRES LATER REV
+                10:18 AM 10/21/2025 jb running:
+                #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+                [PS]:D:\s\build $ Gcm Get-xoMessageTracev2
+
+                CommandType     Name                                               Version    Source                                                                                                                                            
+                -----------     ----                                               -------    ------                                                                                                                                            
+                Function        Get-xoMessageTraceV2                               1.0        tmpEXO_ah0pg1qz.hjm
+
+                [PS]:D:\s\build $ gmo exchangeonlinemanagement
+
+                ModuleType Version    Name                                ExportedCommands                                                                                                                                                      
+                ---------- -------    ----                                ----------------                                                                                                                                                      
+                Script     3.6.0      ExchangeOnlineManagement            {Add-VivaModuleFeaturePolicy, Get-ConnectionInformation, Get-DefaultTenantBriefingConfig, Get-DefaultTenantMyAnalyticsFeatureConfig...}
+
+                Curr Online rev:
+                [PowerShell Gallery | ExchangeOnlineManagement 3.9.0](https://www.powershellgallery.com/packages/ExchangeOnlineManagement/3.9.0)
+
+                    63,387,978 Downloads
+                    12,868 Downloads of 3.9.1-Preview1
+                    8/13/2025 Last Published
+
+                Version                 | Downloads | Last updated
+                ----------------------- | --------- | -------------
+                3.9.1-Preview1          | 12,868    | a month ago
+                3.9.0 (current version) | 1,424,135 | 2 months ago <=== 2 mos old!
+                3.9.0-Preview1          | 9,617     | 3 months ago
+                3.8.1-Preview1          | 48,821    | 5 months ago
+                3.8.0                   | 2,050,555 | 5 months ago
+                3.8.0-Preview2          | 14,309    | 6 months ago
+                3.8.0-Preview1          | 10,600    | 7 months ago
+                3.7.2                   | 1,234,251 | 7 months ago
+                3.7.2-Preview1          | 6,924     | 8 months ago
+                3.7.1                   | 3,181,614 | 9 months ago
+                3.7.1-Preview1          | 9,542     | 10 months ago
+                3.7.0                   | 2,950,466 | 12/2/2024
+                3.7.0-Preview1          | 4,938     | 11/15/2024
+                3.6.0                   | 3,537,886 | 9/25/2024
+
+                #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+            #>
+                <# my prior Get-xoMessageTrace code:
+                $smsg = "Get-xoMessageTrace  w`n$(($pltGXMT|out-string).trim())" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                # detect whether to filter on -match (regex) or -like (asterisk, or default non-regex)
-                if(test-IsRegexPattern -string $subject -verbose:$($VerbosePreference -eq "Continue")){
-                    $smsg = "(detected -subject as regex - using -match comparison)" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    $MsgsFltrd = $Msgs | ?{$_.Subject -match $subject} ;
-                    if(-not $MsgsFltrd){
-                        $smsg = "Subject: regex -match comparison *FAILED* to return matches`nretrying Subject filter as -Like..." ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        $MsgsFltrd = $Msgs | ?{$_.Subject -like $subject} ;
-                    } ; 
-                } else { 
-                    $smsg = "(detected -subject as NON-regex - using -like comparison)" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    $MsgsFltrd = $Msgs | ?{$_.Subject -like $subject} ;
-                    if(-not $MsgsFltrd){
-                        $smsg = "Subject: -like comparison *FAILED* to return matches`nretrying Subject filter as -match..." ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        $MsgsFltrd = $Msgs | ?{$_.Subject -match $subject} 
-                    } ; 
-                } ; 
-                $smsg = "Post Subj filter matches:$(($MsgsFltrd|measure).Count)" ;
+                $Page = 1  ;
+                $Msgs=$null ;
+                do {
+                    $smsg = "Collecting - Page $($Page)..."  ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    $pltGXMT.Page=$Page ;
+                    $PageMsgs = Get-xoMessageTrace @pltGXMT |  ?{$_.SenderAddress -notlike '*micro*' -or $_.SenderAddress -notlike '*root*' }  ;
+                    $Page++  ;
+                    $Msgs += @($PageMsgs)  ;
+                } until ($PageMsgs -eq $null) ;
+                $Msgs=$Msgs| Sort Received ;
+                $smsg = "Raw sender/recipient events:$(($Msgs|measure).Count)" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                $msgs = $MsgsFltrd ; 
-            } ;
+                #>
+
+                # michev's code:
+                #$MailTraffic = @{} ; 
+                # static 10d window
+                #$StartDate = (Get-Date).AddDays(-10) #max period we can cover in a single query is 10 days, if needed rerun multiple times to cover up to 90
+                #$EndDate = (Get-Date)
+                #Get the first "page"
+                $Msgs = $null # aggregator
+                #$PageMsgs = Get-xoMessageTraceV2 -ResultSize 5000 -StartDate $StartDate -EndDate $EndDate -WarningVariable MoreResultsAvailable -Verbose:$false 3>$null
+                #pltGXMT
+                $smsg = "Get-xoMessageTrace  w`n$(($pltGXMT|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $PageMsgs = Get-xoMessageTraceV2 @pltGXMT 3>$null
+                # The expression 3>$null in PowerShell redirects the Warning stream (stream number 3) to $null. required, because mich is using the warning to note restart points
+                                                                                                <# Michev asked M$:
+            [Announcing Public Preview of the New Message Trace in Exchange Online | Microsoft Community Hub](https://techcommunity.microsoft.com/blog/exchange/announcing-public-preview-of-the-new-message-trace-in-exchange-online/4356561/replies/4392248)
+
+            Thanks. I see a new warning being generated now, is this the supposed "hint"?
+
+            PS> Get-MessageTracev2 -resultsize 1 ; 
+            out:> WARNING: There are more results, use the following command to get more. Get-MessageTraceV2 -StartDate "xxx" -EndDate "xxx" -StartingRecipientAddress "vasil@michev.info" 
+
+            If so, might I suggest using a format that does not require any additional 
+            transformation, for example by returning a separate array element with just the 
+            "next page" cmdlet syntax? Or by adding a "dummy" entry to the general output 
+            stream instead of using the warning one? I.e. like this: 
+
+            Or just do it the "Graph way" with @odata.nextpage and $count?
+
+            [YunjieCao](https://techcommunity.microsoft.com/users/yunjiecao/2896050)
+            to VasilMichev
+
+            Mar 12, 2025
+
+            Hi,
+
+            Yes, that is the hint we provide. Thank you for your suggestions! We value this 
+            feedback and will work on improvements after gathering input from all our customers.
+            In the meantime, you can refer to the FAQ section **How could 
+            pagination from V1 be achieved in V2?**. If you see a warning message, you can 
+            use the scripts provided in the FAQ section to compose your queries without 
+            depending on the warning message itself. 
+
+            #>
+                #$Msgs += $PageMsgs | Select Received,SenderAddress,RecipientAddress,Size,Status
+                # splice over my postfilter system messages removal
+                $Msgs += $PageMsgs | ?{$_.SenderAddress -notlike '*micro*' -or $_.SenderAddress -notlike '*root*' } ; 
+                $Exit = $Retries ;
+            } CATCH [System.Exception] {
+                $ErrTrapd=$Error[0] ;
+                if($ErrTrapd.Exception -match $rgxEXOThrottle){
+                    $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                    $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    #Start-Sleep -Milliseconds $ThrottleMs 
+                    start-sleepcountdown -seconds $RetryThrottle -Rolling ; 
+                    $Exit ++ ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $smsg= "Try #: $($Exit)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    If ($Exit -eq $Retries) {
+                        $smsg= "Unable to exec cmd!" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        BREAK ; 
+                    } ;
+                } else{
+                    # different error, throw to the main catch
+                    throw $ErrTrapd
+                } ;     
+            } CATCH {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                # it's not outputting the underlying cmdlet error, try to force it :
+                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #-=-record a STATUSWARN=-=-=-=-=-=-=
+                $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                #-=-=-=-=-=-=-=-=
+                $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+            } ; 
+        } Until ($Exit -eq $Retries) ; 
+        # another do/try on the more's
+        #If more results are available, as indicated by the presence of the WarningVariable, we need to loop until we get all results
+        if ($MoreResultsAvailable) {
+            $Exit = 0 ;
+            # moreresults loop
+            Do {
+                # exit retries loop
+                $Exit = 0 ;
+                Do {
+                    TRY {
+                        #As we don't have a clue how many pages we will get, proper progress indicator is not feasible.
+                        Write-Host "." -NoNewline
+                        #Handling this via Warning output is beyong annoying...
+                        $NextPage = ($MoreResultsAvailable -join "").TrimStart("There are more results, use the following command to get more. ")
+                        # note the above lacks the PREFIX!, patch it in
+                        $NextPage = ($MoreResultsAvailable -join "").TrimStart("There are more results, use the following command to get more. ") -replace 'Get-MessageTraceV2','Get-xoMessageTraceV2' ; 
+                        $ScriptBlock = [ScriptBlock]::Create($NextPage)
+                        $smsg = "MORE:($($Msgs.count)):$(($ScriptBlock|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        $PageMsgs = Invoke-Command -ScriptBlock $ScriptBlock -WarningVariable MoreResultsAvailable -Verbose:$false 3>$null #MUST PASS WarningVariable HERE OR IT WILL NOT WORK
+                        #$Msgs += $PageMsgs | Select Received,SenderAddress,RecipientAddress,Size,Status
+                        # splice over my postfilter system messages removal 
+                        #$Msgs += $PageMsgs | ?{$_.SenderAddress -notlike '*micro*' -or $_.SenderAddress -notlike '*root*' }
+                        # Remove Exchange Online public folder hierarchy synchronization messages
+                        # $Messages = $Messages | Where-Object {$_.Subject -NotLike "*HierarchySync*"}
+                        $Msgs += $PageMsgs | ?{$_.SenderAddress -notlike '*micro*' -OR $_.SenderAddress -notlike '*root*' -AND ($_.Subject -NotLike "*HierarchySync*") }
+                        if($MoreResultsAvailable.Count -eq 0){
+                            # it didn't break on a repeat, could be the inner loop is preventing the outer until from triggering, so do it inside here.
+                            Break ; 
+                        } ; 
+                    } CATCH [System.Exception] {
+                        $ErrTrapd=$Error[0] ;
+                        if($ErrTrapd.Exception -match $rgxEXOThrottle){
+                            $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                            $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                            #Start-Sleep -Milliseconds $ThrottleMs 
+                            start-sleepcountdown -seconds $RetryThrottle -Rolling ; 
+                            $Exit ++ ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $smsg= "Try #: $($Exit)" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            If ($Exit -eq $Retries) {
+                                $smsg= "Unable to exec cmd!" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                BREAK ; 
+                            } ;
+                        } else{
+                            # different error, throw to the main catch
+                            throw $ErrTrapd
+                        } ;     
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        # it's not outputting the underlying cmdlet error, try to force it :
+                        $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #-=-record a STATUSWARN=-=-=-=-=-=-=
+                        $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                        if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                        if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                        #-=-=-=-=-=-=-=-=
+                        $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                    } ; 
+                } Until ($Exit -eq $Retries) ; 
+            }until ($MoreResultsAvailable.Count -eq 0) #Arraylist
+        }  # if-E More test
             
+           
+        #If no messages were found, exit
+        if ($Msgs.Count -eq 0) {
+            Write-Error "No messages found for the specified date range. Please check your permissions or update the date range above."
+            return
+        }
+        # -----------
+                                                                                                                            <# for comparison, here's how TonyRedmond handles the above
+            [array]$Messages = $Null
+            [int]$BatchSizeForMessages = 2000
+                # original code [array]$MessagePage = Get-MessageTrace -StartDate $StartDate -EndDate $EndDate -PageSize 1000 -Page $i -Status "Delivered"
+            Try {
+                # The warning action is suppressed here because we don't want to see warnings when more data is available
+                [array]$MessagePage = Get-MessageTraceV2 -StartDate $StartDate -EndDate $EndDate `
+        	            -ResultSize $BatchSizeForMessages -Status "Delivered" -ErrorAction Stop -WarningAction SilentlyContinue
+                $Messages += $MessagePage
+            } Catch {
+                Write-Host ("Error fetching message trace data: {0}" -f $_.Exception.Message)
+                Break
+            }
+            If ($MessagePage.count -eq $BatchSizeForMessages) {
+                Do {
+                    Write-Host ("Fetched {0} messages so far" -f $Messages.count)
+                    $LastMessageFetched = $MessagePage[-1]
+                    $LastMessageFetchedDate = $LastMessageFetched.Received.ToString("O")
+                    $LastMessageFetchedRecipient = $LastMessageFetched.RecipientAddress
+                    # Fetch the next page of messages
+                    [array]$MessagePage = Get-MessageTraceV2 -StartDate $StartDate -EndDate $LastMessageFetchedDate `
+                        -StartingRecipientAddress $LastMessageFetchedRecipient -ResultSize $BatchSizeForMessages -Status "Delivered" -ErrorAction Stop -WarningAction SilentlyContinue
+                    If ($MessagePage) {
+                        $Messages += $MessagePage
+                    }
+                } While ($MessagePage.count -eq $BatchSizeForMessages)
+            }
+            # Remove Exchange Online public folder hierarchy synchronization messages
+            $Messages = $Messages | Where-Object {$_.Subject -NotLike "*HierarchySync*"}
+            #>
+        # -----------
+        # 12:25 PM 10/21/2025 as of Get-xoMessageTraceV2 -subject is a new [string] param, put it up in the splat - but it's not a regex, (removes my support below)
+        <#
+                if($subject){
+                    $smsg = "Post-Filtering on Subject:$($subject)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    # detect whether to filter on -match (regex) or -like (asterisk, or default non-regex)
+                    if(test-IsRegexPattern -string $subject -verbose:$($VerbosePreference -eq "Continue")){
+                        $smsg = "(detected -subject as regex - using -match comparison)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $MsgsFltrd = $Msgs | ?{$_.Subject -match $subject} ;
+                        if(-not $MsgsFltrd){
+                            $smsg = "Subject: regex -match comparison *FAILED* to return matches`nretrying Subject filter as -Like..." ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $MsgsFltrd = $Msgs | ?{$_.Subject -like $subject} ;
+                        } ; 
+                    } else { 
+                        $smsg = "(detected -subject as NON-regex - using -like comparison)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $MsgsFltrd = $Msgs | ?{$_.Subject -like $subject} ;
+                        if(-not $MsgsFltrd){
+                            $smsg = "Subject: -like comparison *FAILED* to return matches`nretrying Subject filter as -match..." ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $MsgsFltrd = $Msgs | ?{$_.Subject -match $subject} 
+                        } ; 
+                    } ; 
+                    $smsg = "Post Subj filter matches:$(($MsgsFltrd|measure).Count)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    $msgs = $MsgsFltrd ; 
+                } ;
+                #>
+        
+        # new try for balance of non-download work
+        TRY {     
             if($Msgs){
                 # reselect with local time variant
                 $Msgs = $Msgs | select $propsMTAll ; 
@@ -12100,7 +12650,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                             #$FailMsgSummary.isFailOther = $true ; 
                             #$FODetail =  $failed | Get-xoMessageTraceDetail -ea STOP; 
                             # 9:48 AM 5/2/2025 Get-xoMessageTraceDetail pipe fails, blow out into a wait loop
-                            $FODetail = pull-GetxoMessageTraceDetail -Messages $failed ; 
+                            $FODetail = pull-GetxoMessageTraceDetail -Messages $failed ;                            
 
                             $FailMsgSummary.FailDetailEvent = $FODetail.event ; 
                             $FailMsgSummary.FailDetailDetail = $FODetail.Detail ; 
@@ -12793,7 +13343,8 @@ else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ; 
             } else { 
                 $smsg = "Unpopulated `$hReports, skipping output to pipeline" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARNING } 
+                # 9:36 AM 10/21/2025 typo fix, WARNING->WARN
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                 $false | write-output ; 
@@ -22652,6 +23203,9 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 9:39 AM 10/10/2025 add: if -getQuotaUsage, and sharedmailbox recipienttypedetails, output info about Deleted Items & Sent Items OL mgmt regkeys.
+    * 1:45 PM 9/23/2025 removed err-source connect-exo2 call (retured) ; added expanded mobile device reporting, testing Microsoft Nativ esync protocol (Outlook|REST clienttype) tests, explciit 'EAS' stigma tagging in outputs (wastes time t-shooting unsupported 3rd-party clients; given Security formally prefers OLM client over otheres).
+    * 2:24 PM 8/1/2025 pulled unused whpassfail defs
     * 10:55 AM 4/15/2025 updated added param -ResolveForwards:
         -  to expand MailContacts into object that forwards the contact (net of MsgTracese that show the contact as a leaf recipient, informs *who* forwarded to the contact) ; 
         - new func: resolve-RMbxForwards() pulls all Rmbxs w ForwardingAddress populated, 
@@ -22774,8 +23328,78 @@ function resolve-user {
         Note: 
             - adds inline output:
                 xoMobileDeviceStats Count:2
+                Evaluates and reports on Outlook Mobile use, OLM ClientType sync, 
+                Stigmatizes and NOTE:'s EAS use with Best Effort support status. 
             - adds outobject property:
-            $results.xoMobileDeviceStats: 
+            $results:
+                xoMobileDeviceStats    (LastSyncTime -LE 30D)
+                xoMobileDeviceStatsOLD (LastSyncTime -GT 30D)
+                xoMobileOutlookClients (OL Mobile clients)
+                xoMobileOtherClients   (Non-OL Mobile clients)
+                xoMobileOMSyncTypes    ('Outlook' (MS Native Sync) v 'REST' (legacy GAPI))
+                xoMobileOtherSyncTypes ('EAS' et al)
+        
+        Typical Summary Block - Iphone
+        ===$hsum.xoMobileDeviceStats:
+        =get-xMob1:(ACTIVE)>
+        FriendlyName   | DevType | DevOs             | ClntType | DevID
+        iPhone 16 Plus | iPhone  | iOS 18.6.2 22G100 | EAS      | VC6DOHnnnnnnnnnnnnVOUL7KLK
+        1stSyncTime  | LastSyncTime  | LastSuccSync  | #Folders
+        4/3/25 19:23 | 9/23/25 14:22 | 9/23/25 14:22 | 98
+        =get-xMob2:(inactive)>
+        FriendlyName  | DevType | DevOs             | ClntType | DevID
+        iPhone 7 Plus | iPhone  | iOS 15.8.3 19H386 | EAS      | 15UG7D5nnnnnnnnnnnR14T7EM8
+        1stSyncTime  | LastSyncTime | LastSuccSync | #Folders
+        8/29/24 8:24 | 4/4/25 6:46  | 4/4/25 6:46  | 83
+        ---NON-Outlook Mobile Clients:(device-vendor-supported): 2
+        DeviceFriendlyName ClientType LastSyncTime  LastSuccSync
+        ------------------ ---------- ------------  ------------
+        iPhone 16 Plus     EAS        9/23/25 14:22 9/23/25 14:22
+        iPhone 7 Plus      EAS        4/4/25 6:46   4/4/25 6:46
+
+        The following devices use device-vendor-provided/supported 'ExchangeActiveSync/EAS' Mobile clients!
+        PLEASE NOTE: By policy EAS clients are *Best Effort* supported:
+        Where issues are experienced with legacy EAS/ActiveSync clients,
+        Users should be urged to move to _Supported_ Microsoft Outlook Mobile for IOS or Android
+        DeviceFriendlyName ClientType LastSyncTime  LastSuccSync
+        ------------------ ---------- ------------  ------------
+        iPhone 16 Plus     EAS        9/23/25 14:22 9/23/25 14:22
+        iPhone 7 Plus      EAS        4/4/25 6:46   4/4/25 6:46   
+
+        Typical Summary Block - Outlook Mobile Android 
+        ===$hsum.xoMobileDeviceStats:
+        =get-xMob1:(ACTIVE)>
+        FriendlyName | DevType | DevOs | ClntType | DevID
+                     | Outlook | 15    | Outlook  | D115DF6C8E0nnnnnnnnnnnnn0682152D
+        1stSyncTime  | LastSyncTime  | LastSuccSync  | #Folders
+        2/24/25 9:03 | 9/23/25 13:52 | 9/23/25 13:52 | 0
+        =get-xMob2:(inactive)>
+        FriendlyName | DevType | DevOs | ClntType | DevID
+                     | Outlook | 14    | Outlook  | 5D9DF50F879nnnnnnnnnnnnnC0B6988D
+        1stSyncTime   | LastSyncTime  | LastSuccSync  | #Folders
+        8/17/23 17:50 | 2/24/25 22:29 | 2/24/25 22:29 | 0
+        =get-xMob3:(inactive)>
+        FriendlyName | DevType     | DevOs              | ClntType | DevID
+        aaa-8aaa1a2  | WindowsMail | Windows 10.0.17134 | EAS      | BEB93DA5nnnnnnnnnnnn974B6036A907
+        1stSyncTime   | LastSyncTime | LastSuccSync | #Folders
+        1/24/22 14:58 |              |              | 0
+        +++Supported Outlook Mobile Clients: 2
+
+        -----$hsum.xoMobileOMSyncTypes: Outlook
+        ++User has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients
+        ---NON-Outlook Mobile Clients:(device-vendor-supported): 1
+        DeviceFriendlyName ClientType LastSyncTime LastSuccSync
+        ------------------ ---------- ------------ ------------
+        aaa-8aaa1a2        EAS
+
+        The following devices use device-vendor-provided/supported 'ExchangeActiveSync/EAS' Mobile clients!
+        PLEASE NOTE: By policy EAS clients are *Best Effort* supported:
+        Where issues are experienced with legacy Eas/ActiveSync clients,
+        Users should be urged to move to _Supported_ Microsoft Outlook Mobile for IOS or Android
+        DeviceFriendlyName ClientType LastSyncTime LastSuccSync
+        ------------------ ---------- ------------ ------------
+        aaa-8aaa1a2        EAS
+        14:18:54: INFO:
 
         PS> $results.xoMobileDeviceStats | ft -a
 
@@ -22783,6 +23407,7 @@ function resolve-user {
         -------------         --------------------  -------------------  ---------------      ----------  --------                         ---------------       ------------------ --------------------- -----------------
         1/24/2022 8:58:54 PM                                                                  WindowsMail XXXnnXAnnAAnnnnXnnnnnnnXn0nnAn0n MSFT-WIN-3/10.0.17134
         8/17/2023 10:50:16 PM 1/16/2025 10:08:42 AM 1/16/2025 5:45:14 PM 1/16/2025 5:45:14 PM Outlook     nXnXXn0XnnnXn0nnAAXA0XnnX0XnnnnX Outlook-Android/2.0
+
 
 
     -getQuotaUsage parameter, returns details on xo MailboxFolderStatistics and effective Quota, 
@@ -22911,10 +23536,14 @@ function resolve-user {
     switch to return mobiledevice info for target user[-getMobile]
     .PARAMETER getQuotaUsage
     switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]
+    .PARAMETER DeletedItems
+    switch to return Quota & MailboxFolderStatistics & LegalHold analysis and return information about DeletedItems and RecoverableItems folders(XO-only)[-DeletedItems]
     .PARAMETER getPerms
     switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]
     .PARAMETER ResolveForwards
     switch to resolve MailContact email addresses against the population of forwarded RemoteMailbox objects(XO-only)[-ResolveForwards]
+    .PARAMETER xoMobileDeviceOLDThreshold
+    Integer days since LastSyncAttemptTime that classifies a MobileDevice as xoMobileDeviceStatsOLD (defaults to 30)[-xoMobileDeviceOLDThreshold 45]
     .PARAMETER rgxAccentedNameChars
     Regular Expression that identifies input 'user' strings that should have diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]
     .PARAMETER TenOrg
@@ -23150,11 +23779,16 @@ function resolve-user {
         [Parameter(HelpMessage="switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]")]
             [Alias('Quota')]
             [switch]$getQuotaUsage,
+        [Parameter(HelpMessage="switch to return Quota & MailboxFolderStatistics & LegalHold analysis and return information about DeletedItems and RecoverableItems folders(XO-only)[-DeletedItems]")]
+            #[Alias('')]
+            [switch]$DeletedItems,
         [Parameter(HelpMessage="switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]")]
             [Alias('Perms','getPermissions')]
             [switch]$getPerms,
         [Parameter(HelpMessage="switch to resolve MailContact email addresses against the population of forwarded RemoteMailbox objects(XO-only)[-ResolveForwards]")]
             [switch]$ResolveForwards,
+        [Parameter(HelpMessage="Integer days since LastSyncAttemptTime that classifies a MobileDevice as xoMobileDeviceStatsOLD (defaults to 30)[-xoMobileDeviceOLDThreshold 45]")]
+            [int]$xoMobileDeviceOLDThreshold = 30,
         [Parameter(HelpMessage="Regular Expression that identifies input 'user' strings that should have diacriticals/latin/non-simple english characters replaced, before lookups (has default value, used to override for future temp exclusion)[-rgxAccentedNameChars `$rgx]")]
             [ValidateNotNullOrEmpty()]
             [regex]$rgxAccentedNameChars = "[^a-zA-Z0-9\s\.\(\)\{\}\/\&\$\#\@\,\`"\'\’\:\–_-]",
@@ -23439,10 +24073,20 @@ function resolve-user {
                 @{Name='DevOs';Expression={$_.DeviceOS }},@{Name='ClntType';Expression={$_.ClientType }},
                 @{Name='DevID';Expression={$_.DeviceID }} ; 
             # shorten times: (get-date '6/20/2021 1:45:34 AM' -format 'M/d/yy H:mmtt');
+            <#
             $propsMobL2 = @{Name='1stSyncTime';Expression={(get-date $_.FirstSyncTime -format 'M/d/yy H:mmtt') }},
                 @{Name='LastSyncTime';Expression={(get-date $_.LastSyncAttemptTime -format 'M/d/yy H:mmtt') }},
                 @{Name='LastSuccSync';Expression={(get-date $_.LastSuccessSync -format 'M/d/yy H:mmtt') }},
                 @{Name='#Folders';Expression={$_.NumberOfFoldersSynced }} ; 
+            #>
+            # converttimes to local
+            $propsMobL2 = @{Name='1stSyncTime';Expression={(get-date $_.FirstSyncTime.ToLocalTime() -format 'M/d/yy H:mm') }},
+                @{Name='LastSyncTime';Expression={(get-date $_.LastSyncAttemptTime.ToLocalTime() -format 'M/d/yy H:mm') }},
+                @{Name='LastSuccSync';Expression={(get-date $_.LastSuccessSync.ToLocalTime() -format 'M/d/yy H:mm') }},
+                @{Name='#Folders';Expression={$_.NumberOfFoldersSynced }} ; 
+            # add for tight summaries
+            $prpEASDevs = 'DeviceFriendlyName','ClientType',@{Name='LastSyncTime';Expression={(get-date $_.LastSyncAttemptTime.ToLocalTime() -format 'M/d/yy H:mm') }},
+                @{Name='LastSuccSync';Expression={(get-date $_.LastSuccessSync.ToLocalTime() -format 'M/d/yy H:mm') }} ; 
         } ; 
         if($getQuotaUsage){
 
@@ -23458,6 +24102,12 @@ function resolve-user {
                 @{Name="OldestItem"; Expression={get-date $_.OldestItemReceivedDate -f "yyyyMMdd"}}, 
                 @{Name="NewestItem"; Expression={$_.NewestItemReceivedDate -f "yyyyMMdd"}},"FolderType" ;
 
+            $prpFldrDeleted = @{Name='Folder'; Expression={$_.Identity.tostring()}},@{Name="Items"; Expression={$_.ItemsInFolder}}, 
+                @{n="SizeMB"; e={[math]::round($_.FolderSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}}, 
+                @{n="TreeSizeMB"; e={[math]::round($_.FolderAndSubfolderSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}}, 
+                @{Name="OldestItem"; Expression={get-date $_.OldestItemReceivedDate -f "yyyyMMdd"}}, 
+                @{Name="NewestItem"; Expression={$_.NewestItemReceivedDate -f "yyyyMMdd"}},"FolderType" ;
+
             # 10:01 AM 2/27/2024 new spec for reporting on LegalHold symptom folders
             $prpFldrLH = @{Name='Folder'; Expression={$_.Name.tostring()}},@{Name="Items"; Expression={$_.ItemsInFolder}}, 
                 @{n="SizeMB"; e={[math]::round($_.FolderSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}}, 
@@ -23465,10 +24115,11 @@ function resolve-user {
                 @{Name="NewestItem"; Expression={$_.NewestItemReceivedDate -f "yyyyMMdd"}},"FolderType" ;
                 
             # 9:41 AM 2/27/2024 fixed borked InPlaceHolds expansion (was empty, and the prop is where JanelS holds actually *appear*)
-$prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) -join ', '}},
+            $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) -join ', '}},
                 'ComplianceTagHoldApplied','DelayHoldApplied','DelayReleaseHoldApplied' ; 
 
             $rgxHiddn = '.*\\(Versions|SubstrateHolds|DiscoveryHolds|Yammer.*|Social\sActivity\sNotifications|Suggested\sContacts|Recipient\sCache|PersonMetadata|Audits|Calendar\sLogging|Purges)$' ; 
+            $rgxDelItmsShow = '.*\\(Deleted Items|Recoverable Items|Deletions|DiscoveryHolds|Purges|SubstrateHolds|Versions)$' ; 
 
         } ; 
         # 2:31 PM 12/26/2024
@@ -23520,31 +24171,6 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         } ; 
         #endregion ENCODED_CONTANTS ; #*------^ END ENCODED_CONTANTS ^------
     
-        #region WHPASSFAIL ; #*------v WHPASSFAIL v------
-        $whPASS = @{
-        Object = "$([Char]8730) PASS" ;
-        ForegroundColor = 'Green' ;
-        NoNewLine = $true ;
-        } ;
-        $whFAIL = @{
-            # light diagonal cross: ╳ U+2573 DOESN'T RENDER IN PS, use it if WinTerm
-            'Object'= if ($env:WT_SESSION) { "$([Char]8730) FAIL"} else {' X FAIL'};
-            ForegroundColor = 'RED' ;
-            NoNewLine = $true ;
-        } ;
-        <#
-        # inline pass/fail color-coded w char
-        $smsg = "Testing:THING" ; 
-        $Passed = $true ; 
-        Write-Host "$($smsg)... " -NoNewline ; 
-        if($Passed){Write-Host @whPASS} else {write-host @whFAIL} ; 
-        Write-Host " (Done)" ;
-        # out: Test:Thing... √ PASS (Done) | Test:Thing...  X FAIL (Done)
-        #>
-        $psPASS = "$([Char]8730) PASS" ; 
-        $psFAIL = if ($env:WT_SESSION) { "$([Char]8730) FAIL"} else {' X FAIL'} ;
-        #endregion WHPASSFAIL ; #*------^ END WHPASSFAIL ^------
-    
         #endregion CONSTANTS_AND_ENVIRO ; #*------^ END CONSTANTS_AND_ENVIRO ^------
 
         #region FUNCTIONS ; #*======v FUNCTIONS v======
@@ -23583,6 +24209,61 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             $hshForwards | write-output 
         } ; 
         #*------^ END Function resolve-RMbxForwards ^------
+
+        #endregion GET_XOMOBILEDATA ; #*------^ END get-xoMobileData ^------
+        function get-xoMobileData {
+            <#
+            .SYNOPSIS
+            Runs EXO get-xoMobildDevice qrys, and parses results into approp $hSum properties (single common function to reduce dupe queries)
+            .EXAMPLE
+            PS> get-xoMobileData ;             
+            .NOTES
+            VERSION:
+            * 10:52 AM 9/23/2025init
+            #>
+            # 
+            if($xmbx){
+                $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
+                if($verbose){
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-verbose $smsg } ;
+                } ;
+                #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ;
+                # wasn't getting data back: shift to the .xomailbox.ExchangeGuid.guid, it's 100% going to hit and return data
+                $xoMobileDeviceStats +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP | sort LastSuccesssync -Descending ;
+            }else{
+                $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
+                if($verbose){
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                    else{ write-verbose $smsg } ;
+                } ;
+                #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ;
+                # wasn't getting data back: shift to the .xomailbox.ExchangeGuid.guid, it's 100% going to hit and return data
+                $xoMobileDeviceStats = +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP | sort LastSuccesssync -Descending ;
+            }
+            #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP ;
+            $hsum.xoMobileDeviceStats  +=  @($xoMobileDeviceStats | ?{$_.LastSyncAttemptTime -ge (get-date).adddays(-1 * $xoMobileDeviceOLDThreshold)})
+            $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
+            $hsum.xoMobileDeviceStatsOLD  +=  @($xoMobileDeviceStats | ?{$_.LastSyncAttemptTime -lt (get-date).adddays(-1 * $xoMobileDeviceOLDThreshold)})
+            $smsg += "`nxoMobileDeviceStatsOLD Count:$(($hsum.xoMobileDeviceStatsOLD|measure).count)" ;
+            $hsum.xoMobileOutlookClients += @($xoMobileDeviceStats | ?{$_.DeviceType -match 'Outlook' -OR $_.DeviceUserAgent -match 'Outlook' -OR $_.DeviceModel  -match 'Outlook'}) ;
+            $hsum.xoMobileOtherClients += @($xoMobileDeviceStats | ?{$_.DeviceType -notmatch 'Outlook' -AND $_.DeviceUserAgent -notmatch 'Outlook' -AND $_.DeviceModel  -notmatch 'Outlook'}) ;
+            $hsum.xoMobileOMSyncTypes += @(($hsum.xoMobileOutlookClients | group ClientType | select -expand Name ) -join ';')
+            if($hsum.xoMobileOMSyncTypes -match 'REST'){
+                $smsg += "`n+User has one or more *legacy* 'REST' Outlook Mobile clients" ;
+            }elseif($hsum.xoMobileOMSyncTypes -match 'Outlook'){
+                $smsg += "`n+++User has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients" ;
+            } ;
+            $hsum.xoMobileOtherSyncTypes += @(($hsum.xoMobileOtherClients | group ClientType | select -expand Name ) -join ';')            
+            if($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'}){ ;
+                $smsg += "`n---User has one or more device-vendor-provided 'ExchangeActiveSync' Mobile clients!" ;
+                #$smsg += "`nPLEASE NOTE: BY POLICY EAS CLIENTS ARE *BEST EFFORT* supported:"
+                #$smsg += "`nWHERE ISSUES ARE EXPERIENCED WITH LEGACY EAS/ACTIVESYNC CLIENTS," ;
+                #$smsg += "`nUSERS SHOULD BE URGED TO MOVE TO SUPPORTED MS OUTLOOK MOBILE FOR IOS OR ANDROID CLIENTS" ;
+            }
+            write-host -foregroundcolor green $smsg ;
+        } ; 
+        #endregion GET_XOMOBILEDATA ; #*------^ END get-xoMobileData ^------
 
         #endregion FUNCTIONS ; #*======^ END FUNCTIONS ^======
 
@@ -23834,8 +24515,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
         #region useEXO ; #*------v useEXO v------
         # 1:29 PM 9/15/2022 as of MFA & v205, have to load EXO *before* any EXOP, or gen get-steppablepipeline suffix conflict error
         if($useEXO){
-            if ($script:useEXOv2 -OR $useEXOv2) { reconnect-eXO2 @pltRXOC }
-            else { reconnect-EXO @pltRXOC } ;
+            reconnect-EXO @pltRXOC ;
         } else {
             $smsg = "(`$useEXO:$($useEXO))" ; 
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -24603,12 +25283,22 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
             $procd++ ;
             write-verbose "processing:$($usr)" ;
             if($getMobile){
+                
                 $smsg = "(-getMobile:retrieving user xo MobileDevices)" ; 
                 if($verbose){
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                     else{ write-verbose $smsg } ; 
                 } ; 
                 $hsum.add('xoMobileDeviceStats',$null) ; 
+                $hsum.add('xoMobileDeviceStatsOLD',$null) ; 
+                # 9:22 AM 9/23/2025 add xoMobileOutlookClients, xoMobileOMSyncTypes, reflecting supported Outlook Mobile client & the ClientType spec in use for the OLM 'Microsoft's native sync technology'
+                # add xoMobileDeviceTypes, xoMobileOtherSyncTypes to make iphone/android types immed vis
+                $hsum.add('xoMobileOutlookClients',$null) ; 
+                $hsum.add('xoMobileOtherClients',$null) ; 
+                $hsum.add('xoMobileOMSyncTypes',$null) ; 
+                #$hsum.add('xoMobileDeviceTypes',$null) ; 
+                $hsum.add('xoMobileOtherSyncTypes',$null) ; 
+                
             } ; 
             if($getQuotaUsage){
                 $smsg = "(-getQuotaUsage:retrieving user xo Mailbox*Statistics & Effective Quotas)" ; 
@@ -25397,6 +26087,8 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                         } ;
                                         #region xogetMobile ; #*------v xogetMobile v------
                                         if($getMobile){
+                                            get-xoMobileData ; 
+                                            <#
                                             $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
                                             if($verbose){
                                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
@@ -25407,6 +26099,7 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                             $hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.ExchangeGuid.guid -ea STOP ; 
                                             $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
                                             write-host -foregroundcolor green $smsg ;
+                                            #>
                                         } ; 
                                         #endregion xogetMobile ; #*------^ END xogetMobile ^------
                                         #region xogetQuotaUsage ; #*------v getQuotaUsage v------
@@ -25449,8 +26142,14 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                                                     else{ write-verbose $smsg } ; 
                                                 } ; 
-                                                $hsum.xoMailboxFolderStats | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } | 
-                                                    select $prpFldr | sort SizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+                                                if($DeletedItems){
+                                                    $hsum.xoMailboxFolderStats | 
+                                                        select $prpFldrDeleted | sort TreeSizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+
+                                                }else{
+                                                    $hsum.xoMailboxFolderStats | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } | 
+                                                        select $prpFldr | sort SizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+                                                } ; 
 
                                             } CATCH {
                                                 $ErrTrapd=$Error[0] ;
@@ -26075,16 +26774,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             } ;
             #region xogetMobile ; #*------v xogetMobile v------
             if($getMobile){
-                $smsg = "'xoMobileDeviceStats':Get-xoMobileDeviceStatistics -Mailbox $($xmbx.ExchangeGuid.guid)"
-                if($verbose){
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                    else{ write-verbose $smsg } ; 
-                } ; 
-                #$hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $xmbx.userprincipalname -ea STOP ; 
-                # wasn't getting data back: shift to the .xomailbox.ExchangeGuid.guid, it's 100% going to hit and return data 
-                $hsum.xoMobileDeviceStats  +=  Get-xoMobileDeviceStatistics -Mailbox $hSum.xoMailbox.exchangeguid.guid -ea STOP ; 
-                $smsg = "xoMobileDeviceStats Count:$(($hsum.xoMobileDeviceStats|measure).count)" ;
-                write-host -foregroundcolor green $smsg ;
+                get-xoMobileData ;                 
             } ; 
             #endregion xogetMobile ; #*------^ END xogetMobile ^------
             #region xogetQuotaUsage2 ; #*------v xogetQuotaUsage2 v------
@@ -26133,8 +26823,13 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                             else{ write-verbose $smsg } ; 
                         } ; 
-                        $hsum.xoMailboxFolderStats | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } | 
-                            select $prpFldr | sort SizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+                        if($DeletedItems){
+                            $hsum.xoMailboxFolderStats |
+                                select $prpFldrDeleted | sort TreeSizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+                        }else{
+                            $hsum.xoMailboxFolderStats | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } | 
+                                select $prpFldr | sort SizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+                        }
 
                     } CATCH {
                         $ErrTrapd=$Error[0] ;
@@ -26409,7 +27104,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 } ;
                 # AADUser enabled/disabled: .aaduser.AccountEnabled
                 if($hSum.AADUser){
-                    if($hSum.AADUser.Enabled){
+                    # 2:31 PM 9/23/2025 fixed typo: .Enabled -> .AccountEnabled
+                    if($hSum.AADUser.AccountEnabled){
                         if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){
                             $smsg = "ADUser:$($hSum.AADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) mbx is *ENABLED!*"
                             write-warning $smsg ;
@@ -26420,7 +27116,6 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             write-warning $smsg ;
                         } ; 
                     } ; 
-
                 } ;
                 #endregion ENABLED_STATUS ; #*------^ END ENABLED_STATUS ^------
                 #region LIC_GRP ; #*------v LIC_GRP v------
@@ -26473,10 +27168,18 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                     } ;
 
-                    $smsg = "`nWith the following non-zero folder metrics`n`n$((import-csv $ofMbxFolderStats | ft -auto |out-string).trim())" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    if($DeletedItems){
+                        $smsg = "`nWith the following non-zero folder metrics`n`n$((import-csv $ofMbxFolderStats  | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } |select $prpFldr | ft -auto |out-string).trim())" ; 
+                        $smsg += "`n`nAnd the Following Deleted-Items-related folder metrics`n`n$((import-csv $ofMbxFolderStats | ?{$_.identity -match $rgxDelItmsShow } |select $prpFldrDeleted | ft -auto |out-string).trim())`n`n" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    }else{
+                        $smsg = "`nWith the following non-zero folder metrics`n`n$((import-csv $ofMbxFolderStats | ft -auto |out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    } ; 
 
                     $smsg = "`n===`output to:`n$($ofMbxFolderStats)`n" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -26501,6 +27204,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
 
                     } ;  
+
+                    
 
                     $hsInfo = @"
 
@@ -26533,6 +27238,111 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
 
 "@ ; 
                     write-host $hsInfo ;   
+                    if($hSum.xoMailbox.recipienttypedetails -eq 'SharedMailbox'){
+                        $hsInfoSharedMbx = @"
+
+## Shared Mailbox Outlook Handling of Deleted Items & Sent Items. 
+
+*Please note*: The subject mailbox is a _SharedMailbox_-type, which will 
+trigger a _Delegate's Outlook client_ to perform special handling of the 
+following actions by the Delegate: 
+
+### Deleted Items: 
+
+> When [a Delegated user uses] Microsoft Outlook to delete items from a mailbox folder of another 
+> user for whom [the Delegate has] deletion privileges, the deleted items go to *[the Delegate's] own 
+> Deleted Items folder* instead of the Deleted Items folder of the mailbox owner. 
+
+Ref: [Items that are deleted from a shared mailbox go to the wrong folder in Outlook - Outlook | Microsoft Learn]
+(https://learn.microsoft.com/en-us/troubleshoot/outlook/email-management/deleted-items-go-to-wrong-folder)
+
+The Outlook behavior is controlled through configuring _the Delegate's Legacy Outlook client)_ 
+with a custom Registry Key (with Service Desk assistance), that manages the 
+Delegate's preference for storage of third-party Sent Items, sent from their Legacy Outlook client.  
+
+The details of workstation registry modification process are covered in the Service Desk kb, and documented by Microsoft at:
+
+[Switch the destination of deleted items - Outlook | Microsoft Learn]
+(https://learn.microsoft.com/en-us/troubleshoot/outlook/email-management/deleted-items-go-to-wrong-folder#switch-the-destination-of-deleted-items)
+
+The article above details configuration of the following custom registry key on the 
+Delegate's Legacy Outlook workstation: 
+
+    Note: As of October of 2025, Microsoft has not yet delivered an equivelent configurable setting for New Outlook,
+    Legacy Outlook is *required* for configuration of Delegate preferences for Outlook mail handling actions.
+
+    HKEY_CURRENT_USER\Software\Microsoft\Office\<x.0>\Outlook\Options\General
+
+    Note: The <x.0> placeholder represents your version of Office (16.0 = Office 2016, Office 2019, Office LTSC 2021, or Microsoft 365, 15.0 = Office 2013).
+
+    DelegateWastebasketStyle, DWORD Value:
+
+    8 = Stores deleted items in [the Delegate's] folder.
+    4 = Stores deleted items in the mailbox owner (e.g. the Shared Mailbox) folder 
+
+    Note: Unlike Sent Items behavior (covered below), there is *no* administrator
+    configurable setting available, to implement the configuration above 
+    directly on a Shared Mailbox.    
+
+### Sent Mail from the Shared Mailbox address:
+
+> [When] using Microsoft Outlook 2016 or a later version, and a user has been delegated 
+> permission to send email messages as another user or on behalf of another user from a shared mailbox. 
+> ... when [they] send a message as another user or on behalf of the user, the 
+> sent message isn't saved to the Sent Items folder of  the shared mailbox. 
+> *Instead, _it's saved to the Sent Items folder of [the Delegate's] mailbox*. 
+
+Ref: [Messages sent from a shared mailbox aren't saved to the Sent Items folder - Exchange | Microsoft Learn]
+(https://learn.microsoft.com/en-us/troubleshoot/exchange/user-and-shared-mailboxes/sent-mail-is-not-saved?source=recommendations)
+
+The Outlook behavior is controlled through one of two ways:
+
+1. The Delegate's workstation Legacy Outlook client, can be configured 
+(with Service Desk assistance), to store 3rd party Sent Items, 
+_to the 3rd party mailbox_ by setting the DelegateSentItemsStyle registry key.  
+
+    The details of this process are covered in the Service Desk kb, and documented by Microsoft at:
+
+    [Messages sent from a shared mailbox aren't saved to the Sent Items folder - Exchange | Microsoft Learn]
+    (https://learn.microsoft.com/en-us/troubleshoot/exchange/user-and-shared-mailboxes/sent-mail-is-not-saved?source=recommendations)
+
+    The article above details configuration of the following custom registry key on the 
+    Delegate's Legacy Outlook workstation: 
+
+        HKEY_CURRENT_USER\Software\Microsoft\Office\16.0\Outlook\Preferences
+
+        DelegateSentItemsStyle,  DWORD 32-bit Value.
+
+    DelegateSentItemsStyle | MessageCopyForSentAsEnabled | Expected behavior
+    ---------------------- | --------------------------- | -------------------------------------------------------------------------------------------------
+    0                      | True                        | A copy of the email will be saved in 
+                           |                             | both the primary mailbox and the 
+                           |                             | shared mailbox.
+    1                      | True                        | Two copies of the email will be saved
+                           |                             | in the shared mailbox and no copies 
+                           |                             | in the primary mailbox.
+    0                      | False                       | A copy of the email will be saved in 
+                           |                             | the primary mailbox and no copies 
+                           |                             | in the shared mailbox.
+    1                      | False                       | A copy of the email will be saved in 
+                           |                             | the shared mailbox and no copies 
+                           |                             | in the primary mailbox.
+
+2. Or, the Shared mailbox can be configured by an administrator to save 
+messages to the Sharted mailbox through a powershell modification on the Shared 
+Mailbox itself : 
+
+ - For emails sent as the shared mailbox, run the following command in Exchange PowerShell:
+
+        set-mailbox <mailbox name> -MessageCopyForSentAsEnabled `$True
+
+ - For emails sent on behalf of the shared mailbox, run the following command in Exchange PowerShell:
+
+        set-mailbox <mailbox name> -MessageCopyForSendOnBehalfEnabled `$True
+
+"@ ; 
+                        write-host  $hsInfoSharedMbx ; 
+                    } ; 
 
                 } ; 
                 #endregion OUTPUT_QUOTA_N_SIZE ; #*------^ END OUTPUT_QUOTA_N_SIZE ^------
@@ -26559,7 +27369,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             foreach($grp in $hSum.xoRecipientPermissionGroups){
                                 $smsg += "`n-----------" ; 
                                 $smsg += "`n$(($grp |select $propsDG[0..1] |out-markdowntable @MDtbl|out-string).trim())" ;
-                                $smsg += "`n$(($grp |select $propsDG[3..6] |out-markdowntable @MDtbl|out-string).trim())" ;
+                                $smsg += "`n$(($grp |select $propsDG[3..6] |out-markdow ntable @MDtbl|out-string).trim())" ;
                                 $smsg += "`n$(($grp |select $propsDG[2] |fl |out-string).trim())" ;
                                 $smsg += "`n#### Members:`n$(($grp.members | ft -a $propsRcpTbl|out-string).trim())`n`n" ;
                             } ; 
@@ -26570,6 +27380,104 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                 } ;
                 #endregion OUTPUT_PERMS ; #*------^ END OUTPUT_PERMS ^------
+                #region OUTPUT_MOBILE ; #*------v OUTPUT_MOBILE v------
+                if($getMobile){
+                    write-host -foreground yellow "===`$hsum.xoMobileDeviceStats: " #-nonewline;
+
+                    $ino = 0 ;
+                    if($hsum.xoMobileDeviceStats){
+                        foreach($xmob in $hsum.xoMobileDeviceStats){
+                            $ino++ ;
+                            if($hsum.xoMobileDeviceStats -is [system.array]){
+                                    write-host -foreground yellow "=get-xMob$($ino):(ACTIVE)> " #-nonewline;
+                            } else {
+                                write-host -foreground yellow "=get-xMobileDev:(ACTIVE)> " #-nonewline;
+                            } ;
+                            $smsg = "$(($xmob | select $propsMobL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            $smsg += "`n$(($xmob | select $propsMobL2 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            write-host $smsg ;
+                        } ;
+                    } ; 
+                    if($hsum.xoMobileDeviceStatsOLD){
+                        #$smsg = "INACTIVE:(LastSyncAttemptTime -GT $($xoMobileDeviceOLDThreshold)d)" ; 
+                        #write-host -foregroundcolor gray $smsg ;
+                        foreach($xmob in $hsum.xoMobileDeviceStatsOLD){
+                            $ino++ ;
+                            if($hsum.xoMobileDeviceStatsOLD -is [system.array]){
+                                    write-host -foreground yellow "=get-xMob$($ino):(inactive)> " #-nonewline;
+                            } else {
+                                write-host -foreground yellow "=get-xMobileDev:(inactive)> " #-nonewline;
+                            } ;
+                            $smsg = "$(($xmob | select $propsMobL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            $smsg += "`n$(($xmob | select $propsMobL2 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            write-host -foregroundcolor gray $smsg ;
+                        } ;
+                    } ; 
+                    if($hsum.xoMobileOutlookClients){                        
+                        $smsg = "+++Supported Outlook Mobile Clients: $($($hsum.xoMobileOutlookClients|measure).count)" ; 
+                        <#
+                        foreach($xmob in $hsum.xoMobileOutlookClients){
+                            $ino++ ;
+                            if($hsum.xoMobileDeviceStats -is [system.array]){
+                                    write-host -foreground yellow "=get-xMob$($ino):> " #-nonewline;
+                            } else {
+                                write-host -foreground yellow "=get-xMobileDev:> " #-nonewline;
+                            } ;
+                            $smsg = "$(($xmob | select $propsMobL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            $smsg += "`n$(($xmob | select $propsMobL2 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            write-host $smsg ;
+                        } ;
+                        #>
+                        $smsg += "`n$(($hsum.xoMobileOutlookClients| ?{$_.ClientType -eq 'EAS'} | ft -a $prpEASDevs|out-string).trim())" ; 
+                        if($hsum.xoMobileOMSyncTypes){
+                            $smsg += "`n-----`$hsum.xoMobileOMSyncTypes: $($hsum.xoMobileOMSyncTypes)" ; 
+                            #write-host -foregroundcolor green $smsg ;
+                            if($hsum.xoMobileOMSyncTypes -match 'REST'){
+                                $smsg += "`n+User has one or more *legacy* 'REST' Outlook Mobile clients" ;
+                            }elseif($hsum.xoMobileOMSyncTypes -match 'Outlook'){
+                                $smsg += "`n++User has has one or more fully compliant 'MS Native Sync'-protocol Outlook Mobile clients" ;
+                            } ;
+                        } ; 
+                        write-host -foregroundcolor green $smsg ;
+                    }else{
+                        write-verbose "(no Outlook Mobile clients returned)" ; 
+                    } ; 
+                    if($hsum.xoMobileOtherClients){
+                        $smsg = "---NON-Outlook Mobile Clients:(device-vendor-supported): $($($hsum.xoMobileOtherClients|measure).count)" ; 
+                        <#
+                        foreach($xmob in $hsum.xoMobileOtherClients){
+                            $ino++ ;
+                            if($hsum.xoMobileDeviceStats -is [system.array]){
+                                    write-host -foreground yellow "=get-xMob$($ino):> " #-nonewline;
+                            } else {
+                                write-host -foreground yellow "=get-xMobileDev:> " #-nonewline;
+                            } ;
+                            $smsg = "$(($xmob | select $propsMobL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            $smsg += "`n$(($xmob | select $propsMobL2 |out-markdowntable @MDtbl |out-string).trim())" ;
+                            write-host $smsg ;
+                        } ;
+                        #>
+                        $smsg += "`n$(($hsum.xoMobileOtherClients| ft -a $prpEASDevs|out-string).trim())" ;                         
+                        write-host -foregroundcolor RED $smsg ;
+                        if($hsum.xoMobileOMSyncTypes){
+                            $smsg += "`n-----`$hsum.xoMobileOtherSyncTypes: $($hsum.xoMobileOtherSyncTypes)" ;
+                            write-host -foregroundcolor yellow $smsg ;
+                        }
+                        if($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'}){ ;
+                            $smsg = "`nThe following devices use device-vendor-provided/supported 'ExchangeActiveSync/EAS' Mobile clients!" ;
+                            $smsg += "`nPLEASE NOTE: By policy EAS clients are *Best Effort* supported:"
+                            $smsg += "`nWhere issues are experienced with legacy EAS/ActiveSync clients," ;
+                            $smsg += "`nUsers should be urged to move to _Supported_ Microsoft Outlook Mobile for IOS or Android" ;
+                            #$prpEASDevs = 'DeviceFriendlyName','ClientType','LastSyncAttemptTime','LastSuccessSync' ; 
+                            $smsg += "`n$(($hsum.xoMobileOtherClients| ?{$_.ClientType -eq 'EAS'} | ft -a $prpEASDevs|out-string).trim())" ; 
+                            write-host -foregroundcolor yellow $smsg ;
+                        }
+                    }else{
+                        write-verbose "(no 'non'-Outlook Mobile clients returned)" ; 
+                    } ; 
+
+                } ;
+                #endregion OUTPUT_MOBILE ; #*------^ END OUTPUT_MOBILE ^------
             } ;
             #endregion RV_VIA_GAADU ; #*------^ END RV_VIA_GAADU ^------
             
@@ -30269,7 +31177,7 @@ function test-xoMailboxHasEWSAccess {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test-Uri,connect-O365Services,get-CodeProfileAST,get-MGCodeCmdletPermissionsTDO,2b4,2b4c,fb4,convert-ADUserRecipientTypeRemoteSharedMailbox,convert-ADUserRecipientTypeRemoteUserMailbox,convert-exoMailboxTypeSharedMailbox,convert-exoMailboxTypeUserMailbox,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxoTOL,cxoTOR,Disconnect-EXO,get-AADlicensePlanList,get-ADUsersWithSoftDeletedxoMailboxes,get-ExoGxMTEventType,get-ExoMailboxLicenses,get-ExoMessageTraceEventType,Get-EXOMessageTraceExportedTDO,resolve-EnvironmentTDO,write-log,Start-Log,Connect-ExchangeServerTDO,_connect-ExOP,get-ADExchangeServerTDO,load-ADMS,get-GCFast,resolve-NetworkLocalTDO,out-Clipboard,convertFrom-MarkdownTable,Remove-InvalidVariableNameChars,Initialize-exoStatusTable,pull-GetxoMessageTraceDetail,2b4,2b4c,fb4,get-ExoMessageTraceSourceType,get-EXOMsgTraceDetailed,Remove-InvalidVariableNameChars,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,get-XOMailboxFolderList,Get-xoMailboxFolderPermissionsRecursive,get-XOMailboxFolderPermissionsSummary,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,remove-EXOLicense,Reset-xoMailboxFolderPermissionsRecursive,resolve-AppIDToCBAFriendlyName,resolve-Name,resolve-user,2b4,2b4c,fb4,resolve-RMbxForwards,Resolve-xoRcps,rxoTOL,rxoTOR,test-EXOConnectionTDO,test-ExoDnsRecordTDO,test-EXOIsLicensed,test-EXOv2Connection,test-xoMailbox,_cleanup,test-xoMailboxHasEWSAccess -Alias *
+Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test-Uri,connect-O365Services,get-CodeProfileAST,get-MGCodeCmdletPermissionsTDO,2b4,2b4c,fb4,convert-ADUserRecipientTypeRemoteSharedMailbox,convert-ADUserRecipientTypeRemoteUserMailbox,convert-exoMailboxTypeSharedMailbox,convert-exoMailboxTypeUserMailbox,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxoTOL,cxoTOR,Disconnect-EXO,get-AADlicensePlanList,get-ADUsersWithSoftDeletedxoMailboxes,get-ExoGxMTEventType,get-ExoMailboxLicenses,get-ExoMessageTraceEventType,Get-EXOMessageTraceExportedTDO,resolve-EnvironmentTDO,write-log,Start-Log,Connect-ExchangeServerTDO,_connect-ExOP,get-ADExchangeServerTDO,load-ADMS,get-GCFast,resolve-NetworkLocalTDO,out-Clipboard,start-sleepcountdown,convertFrom-MarkdownTable,Remove-InvalidVariableNameChars,Initialize-exoStatusTable,pull-GetxoMessageTraceDetail,2b4,2b4c,fb4,get-ExoMessageTraceSourceType,get-EXOMsgTraceDetailed,Remove-InvalidVariableNameChars,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,get-XOMailboxFolderList,Get-xoMailboxFolderPermissionsRecursive,get-XOMailboxFolderPermissionsSummary,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,remove-EXOLicense,Reset-xoMailboxFolderPermissionsRecursive,resolve-AppIDToCBAFriendlyName,resolve-Name,resolve-user,2b4,2b4c,fb4,resolve-RMbxForwards,get-xoMobileData,Resolve-xoRcps,rxoTOL,rxoTOR,test-EXOConnectionTDO,test-ExoDnsRecordTDO,test-EXOIsLicensed,test-EXOv2Connection,test-xoMailbox,_cleanup,test-xoMailboxHasEWSAccess -Alias *
 
 
 
