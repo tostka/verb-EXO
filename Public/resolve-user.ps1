@@ -18,6 +18,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 9:39 AM 10/10/2025 add: if -getQuotaUsage, and sharedmailbox recipienttypedetails, output info about Deleted Items & Sent Items OL mgmt regkeys.
     * 1:45 PM 9/23/2025 removed err-source connect-exo2 call (retured) ; added expanded mobile device reporting, testing Microsoft Nativ esync protocol (Outlook|REST clienttype) tests, explciit 'EAS' stigma tagging in outputs (wastes time t-shooting unsupported 3rd-party clients; given Security formally prefers OLM client over otheres).
     * 2:24 PM 8/1/2025 pulled unused whpassfail defs
     * 10:55 AM 4/15/2025 updated added param -ResolveForwards:
@@ -350,6 +351,8 @@ function resolve-user {
     switch to return mobiledevice info for target user[-getMobile]
     .PARAMETER getQuotaUsage
     switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]
+    .PARAMETER DeletedItems
+    switch to return Quota & MailboxFolderStatistics & LegalHold analysis and return information about DeletedItems and RecoverableItems folders(XO-only)[-DeletedItems]
     .PARAMETER getPerms
     switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]
     .PARAMETER ResolveForwards
@@ -591,6 +594,9 @@ function resolve-user {
         [Parameter(HelpMessage="switch to return Quota & MailboxFolderStatistics & LegalHold analysis (XO-only)[-getQuotaUsage]")]
             [Alias('Quota')]
             [switch]$getQuotaUsage,
+        [Parameter(HelpMessage="switch to return Quota & MailboxFolderStatistics & LegalHold analysis and return information about DeletedItems and RecoverableItems folders(XO-only)[-DeletedItems]")]
+            #[Alias('')]
+            [switch]$DeletedItems,
         [Parameter(HelpMessage="switch to return Get-xoMailboxPermission & Get-xoRecipientPermission, non-SELF grants, and membership of any grant groups (XO-only)[-getPerms]")]
             [Alias('Perms','getPermissions')]
             [switch]$getPerms,
@@ -911,6 +917,12 @@ function resolve-user {
                 @{Name="OldestItem"; Expression={get-date $_.OldestItemReceivedDate -f "yyyyMMdd"}}, 
                 @{Name="NewestItem"; Expression={$_.NewestItemReceivedDate -f "yyyyMMdd"}},"FolderType" ;
 
+            $prpFldrDeleted = @{Name='Folder'; Expression={$_.Identity.tostring()}},@{Name="Items"; Expression={$_.ItemsInFolder}}, 
+                @{n="SizeMB"; e={[math]::round($_.FolderSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}}, 
+                @{n="TreeSizeMB"; e={[math]::round($_.FolderAndSubfolderSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}}, 
+                @{Name="OldestItem"; Expression={get-date $_.OldestItemReceivedDate -f "yyyyMMdd"}}, 
+                @{Name="NewestItem"; Expression={$_.NewestItemReceivedDate -f "yyyyMMdd"}},"FolderType" ;
+
             # 10:01 AM 2/27/2024 new spec for reporting on LegalHold symptom folders
             $prpFldrLH = @{Name='Folder'; Expression={$_.Name.tostring()}},@{Name="Items"; Expression={$_.ItemsInFolder}}, 
                 @{n="SizeMB"; e={[math]::round($_.FolderSize.ToString().Split("(")[1].Split(" ")[0].Replace(",","")/1MB,2)}}, 
@@ -918,10 +930,11 @@ function resolve-user {
                 @{Name="NewestItem"; Expression={$_.NewestItemReceivedDate -f "yyyyMMdd"}},"FolderType" ;
                 
             # 9:41 AM 2/27/2024 fixed borked InPlaceHolds expansion (was empty, and the prop is where JanelS holds actually *appear*)
-$prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) -join ', '}},
+            $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) -join ', '}},
                 'ComplianceTagHoldApplied','DelayHoldApplied','DelayReleaseHoldApplied' ; 
 
             $rgxHiddn = '.*\\(Versions|SubstrateHolds|DiscoveryHolds|Yammer.*|Social\sActivity\sNotifications|Suggested\sContacts|Recipient\sCache|PersonMetadata|Audits|Calendar\sLogging|Purges)$' ; 
+            $rgxDelItmsShow = '.*\\(Deleted Items|Recoverable Items|Deletions|DiscoveryHolds|Purges|SubstrateHolds|Versions)$' ; 
 
         } ; 
         # 2:31 PM 12/26/2024
@@ -2944,8 +2957,14 @@ $prpMbxHold = 'LitigationHoldEnabled',@{n="InPlaceHolds";e={ ($_.inplaceholds ) 
                                                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                                                     else{ write-verbose $smsg } ; 
                                                 } ; 
-                                                $hsum.xoMailboxFolderStats | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } | 
-                                                    select $prpFldr | sort SizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+                                                if($DeletedItems){
+                                                    $hsum.xoMailboxFolderStats | 
+                                                        select $prpFldrDeleted | sort TreeSizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+
+                                                }else{
+                                                    $hsum.xoMailboxFolderStats | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } | 
+                                                        select $prpFldr | sort SizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+                                                } ; 
 
                                             } CATCH {
                                                 $ErrTrapd=$Error[0] ;
@@ -3619,8 +3638,13 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                             else{ write-verbose $smsg } ; 
                         } ; 
-                        $hsum.xoMailboxFolderStats | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } | 
-                            select $prpFldr | sort SizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+                        if($DeletedItems){
+                            $hsum.xoMailboxFolderStats |
+                                select $prpFldrDeleted | sort TreeSizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+                        }else{
+                            $hsum.xoMailboxFolderStats | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } | 
+                                select $prpFldr | sort SizeMB -desc | export-csv  -path $ofMbxFolderStats -notype ;
+                        }
 
                     } CATCH {
                         $ErrTrapd=$Error[0] ;
@@ -3959,10 +3983,18 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                     } ;
 
-                    $smsg = "`nWith the following non-zero folder metrics`n`n$((import-csv $ofMbxFolderStats | ft -auto |out-string).trim())" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    if($DeletedItems){
+                        $smsg = "`nWith the following non-zero folder metrics`n`n$((import-csv $ofMbxFolderStats  | ?{$_.ItemsInFolder -gt 0 -AND $_.identity -notmatch $rgxHiddn } |select $prpFldr | ft -auto |out-string).trim())" ; 
+                        $smsg += "`n`nAnd the Following Deleted-Items-related folder metrics`n`n$((import-csv $ofMbxFolderStats | ?{$_.identity -match $rgxDelItmsShow } |select $prpFldrDeleted | ft -auto |out-string).trim())`n`n" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    }else{
+                        $smsg = "`nWith the following non-zero folder metrics`n`n$((import-csv $ofMbxFolderStats | ft -auto |out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    } ; 
 
                     $smsg = "`n===`output to:`n$($ofMbxFolderStats)`n" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -3987,6 +4019,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
 
                     } ;  
+
+                    
 
                     $hsInfo = @"
 
@@ -4019,6 +4053,111 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
 
 "@ ; 
                     write-host $hsInfo ;   
+                    if($hSum.xoMailbox.recipienttypedetails -eq 'SharedMailbox'){
+                        $hsInfoSharedMbx = @"
+
+## Shared Mailbox Outlook Handling of Deleted Items & Sent Items. 
+
+*Please note*: The subject mailbox is a _SharedMailbox_-type, which will 
+trigger a _Delegate's Outlook client_ to perform special handling of the 
+following actions by the Delegate: 
+
+### Deleted Items: 
+
+> When [a Delegated user uses] Microsoft Outlook to delete items from a mailbox folder of another 
+> user for whom [the Delegate has] deletion privileges, the deleted items go to *[the Delegate's] own 
+> Deleted Items folder* instead of the Deleted Items folder of the mailbox owner. 
+
+Ref: [Items that are deleted from a shared mailbox go to the wrong folder in Outlook - Outlook | Microsoft Learn]
+(https://learn.microsoft.com/en-us/troubleshoot/outlook/email-management/deleted-items-go-to-wrong-folder)
+
+The Outlook behavior is controlled through configuring _the Delegate's Legacy Outlook client)_ 
+with a custom Registry Key (with Service Desk assistance), that manages the 
+Delegate's preference for storage of third-party Sent Items, sent from their Legacy Outlook client.  
+
+The details of workstation registry modification process are covered in the Service Desk kb, and documented by Microsoft at:
+
+[Switch the destination of deleted items - Outlook | Microsoft Learn]
+(https://learn.microsoft.com/en-us/troubleshoot/outlook/email-management/deleted-items-go-to-wrong-folder#switch-the-destination-of-deleted-items)
+
+The article above details configuration of the following custom registry key on the 
+Delegate's Legacy Outlook workstation: 
+
+    Note: As of October of 2025, Microsoft has not yet delivered an equivelent configurable setting for New Outlook,
+    Legacy Outlook is *required* for configuration of Delegate preferences for Outlook mail handling actions.
+
+    HKEY_CURRENT_USER\Software\Microsoft\Office\<x.0>\Outlook\Options\General
+
+    Note: The <x.0> placeholder represents your version of Office (16.0 = Office 2016, Office 2019, Office LTSC 2021, or Microsoft 365, 15.0 = Office 2013).
+
+    DelegateWastebasketStyle, DWORD Value:
+
+    8 = Stores deleted items in [the Delegate's] folder.
+    4 = Stores deleted items in the mailbox owner (e.g. the Shared Mailbox) folder 
+
+    Note: Unlike Sent Items behavior (covered below), there is *no* administrator
+    configurable setting available, to implement the configuration above 
+    directly on a Shared Mailbox.    
+
+### Sent Mail from the Shared Mailbox address:
+
+> [When] using Microsoft Outlook 2016 or a later version, and a user has been delegated 
+> permission to send email messages as another user or on behalf of another user from a shared mailbox. 
+> ... when [they] send a message as another user or on behalf of the user, the 
+> sent message isn't saved to the Sent Items folder of  the shared mailbox. 
+> *Instead, _it's saved to the Sent Items folder of [the Delegate's] mailbox*. 
+
+Ref: [Messages sent from a shared mailbox aren't saved to the Sent Items folder - Exchange | Microsoft Learn]
+(https://learn.microsoft.com/en-us/troubleshoot/exchange/user-and-shared-mailboxes/sent-mail-is-not-saved?source=recommendations)
+
+The Outlook behavior is controlled through one of two ways:
+
+1. The Delegate's workstation Legacy Outlook client, can be configured 
+(with Service Desk assistance), to store 3rd party Sent Items, 
+_to the 3rd party mailbox_ by setting the DelegateSentItemsStyle registry key.  
+
+    The details of this process are covered in the Service Desk kb, and documented by Microsoft at:
+
+    [Messages sent from a shared mailbox aren't saved to the Sent Items folder - Exchange | Microsoft Learn]
+    (https://learn.microsoft.com/en-us/troubleshoot/exchange/user-and-shared-mailboxes/sent-mail-is-not-saved?source=recommendations)
+
+    The article above details configuration of the following custom registry key on the 
+    Delegate's Legacy Outlook workstation: 
+
+        HKEY_CURRENT_USER\Software\Microsoft\Office\16.0\Outlook\Preferences
+
+        DelegateSentItemsStyle,  DWORD 32-bit Value.
+
+    DelegateSentItemsStyle | MessageCopyForSentAsEnabled | Expected behavior
+    ---------------------- | --------------------------- | -------------------------------------------------------------------------------------------------
+    0                      | True                        | A copy of the email will be saved in 
+                           |                             | both the primary mailbox and the 
+                           |                             | shared mailbox.
+    1                      | True                        | Two copies of the email will be saved
+                           |                             | in the shared mailbox and no copies 
+                           |                             | in the primary mailbox.
+    0                      | False                       | A copy of the email will be saved in 
+                           |                             | the primary mailbox and no copies 
+                           |                             | in the shared mailbox.
+    1                      | False                       | A copy of the email will be saved in 
+                           |                             | the shared mailbox and no copies 
+                           |                             | in the primary mailbox.
+
+2. Or, the Shared mailbox can be configured by an administrator to save 
+messages to the Sharted mailbox through a powershell modification on the Shared 
+Mailbox itself : 
+
+ - For emails sent as the shared mailbox, run the following command in Exchange PowerShell:
+
+        set-mailbox <mailbox name> -MessageCopyForSentAsEnabled `$True
+
+ - For emails sent on behalf of the shared mailbox, run the following command in Exchange PowerShell:
+
+        set-mailbox <mailbox name> -MessageCopyForSendOnBehalfEnabled `$True
+
+"@ ; 
+                        write-host  $hsInfoSharedMbx ; 
+                    } ; 
 
                 } ; 
                 #endregion OUTPUT_QUOTA_N_SIZE ; #*------^ END OUTPUT_QUOTA_N_SIZE ^------
@@ -4045,7 +4184,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             foreach($grp in $hSum.xoRecipientPermissionGroups){
                                 $smsg += "`n-----------" ; 
                                 $smsg += "`n$(($grp |select $propsDG[0..1] |out-markdowntable @MDtbl|out-string).trim())" ;
-                                $smsg += "`n$(($grp |select $propsDG[3..6] |out-markdowntable @MDtbl|out-string).trim())" ;
+                                $smsg += "`n$(($grp |select $propsDG[3..6] |out-markdow ntable @MDtbl|out-string).trim())" ;
                                 $smsg += "`n$(($grp |select $propsDG[2] |fl |out-string).trim())" ;
                                 $smsg += "`n#### Members:`n$(($grp.members | ft -a $propsRcpTbl|out-string).trim())`n`n" ;
                             } ; 
