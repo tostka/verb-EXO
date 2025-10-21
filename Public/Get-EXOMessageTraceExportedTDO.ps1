@@ -18,6 +18,8 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 4:27 PM 10/21/2025 fixed /tested more: loop (M$ v2 pagination offload) ; add: -ResultSize; fundemental update to use Get-xoMessageTraceV2 & Get-xoMessageTraceDetailV2 mandates (gxmt & gxmtd are now borked; fail) ; 
+        fixed connect-ExchangeServerTDO() return (brought over updated latest), post-import requirement; remove refs to removed reconnect-eXO2; typo fix, WARNING->WARN
     * 12:58 PM 5/5/2025 cx10 was out of date (prompting for manual creds); brought in fresh cbp copies of all internal funcs, and replaced svcs_conn block, logging etc from scratch. Working now, no prompts.
     * 2:28 PM 5/2/2025 main Catch wasn't returning underlying EOM cmdlet errors; added code to -force, dump; 
         -As gxmtd is now flaking out, adapting the $QuarExpandLimitPerSender support to per-Recipient (when -SenderAddress used), and per-Sender (when -RecipientAddress used), to cut down on repetitive 
@@ -115,6 +117,8 @@ function Get-EXOMessageTraceExportedTDO {
     Days to be searched, back from current time(Alt to use of StartDate & EndDate; Note:MS won't search -gt 10 days)[-Days 7]
     .PARAMETER Subject
     Subject of target message (emulated via post filtering, not supported param of Get-xoMessageTrace) [-Subject 'Some subject']
+    .PARAMETER SubjectFilterType
+    You specify how the value is evaluated in the message subject by using the SubjectFilterType parameter (Contains|EndsWith|StartsWith)
     .PARAMETER Status
     The Status parameter filters the results by the delivery status of the message (None|GettingStatus|Failed|Pending|Delivered|Expanded|Quarantined|FilteredAsSpam),an array runs search on each). [-Status 'Failed']
     .PARAMETER MessageId
@@ -125,6 +129,8 @@ function Get-EXOMessageTraceExportedTDO {
     The FromIP parameter filters the results by the source IP address. For incoming messages, the value of FromIP is the public IP address of the SMTP email server that sent the message. For outgoing messages from Exchange Online, the value is blank. [-FromIP '123.456.789.012']
     .PARAMETER ToIP
     The ToIP parameter filters the results by the destination IP address. For outgoing messages, the value of ToIP is the public IP address in the resolved MX record for the destination domain. For incoming messages to Exchange Online, the value is blank. [-ToIP '123.456.789.012']
+    .PARAMETER ResultSize
+    The ResultSize parameter specifies the maximum number of results to return. A valid value is from 1 to 5000. The default value is 1000. Note: This parameter replaces the PageSize parameter that was available on the Get-MessageTrace cmdlet.
     .PARAMETER SimpleTrack
     Switch to just return the net messages on the initial track (no Fail/Quarantine, MTDetail or other post-processing summaries) [-simpletrack]
     .PARAMETER Detailed
@@ -404,6 +410,10 @@ function Get-EXOMessageTraceExportedTDO {
         [Parameter(HelpMessage="Subject of target message (emulated via post filtering, not supported param of Get-xoMessageTrace) [-Subject 'Some subject']")]
             [Alias('MessageSubject')]
             [string]$subject,
+        [Parameter(HelpMessage="You specify how the value is evaluated in the message subject by using the SubjectFilterType parameter (Contains|EndsWith|StartsWith) [-SubjectFilterType 'StartsWith']")]
+            [ValidateSet("Contains","EndsWith","StartsWith")]
+            #[Alias('MessageSubject')]
+            [string]$SubjectFilterType,
         [Parameter(HelpMessage="The Status parameter filters the results by the delivery status of the message (None|GettingStatus|Failed|Pending|Delivered|Expanded|Quarantined|FilteredAsSpam),an array runs search on each, post-filter results to target full range of Status values). [-Status 'Failed']")]
             [Alias('DeliveryStatus','EventId')]
             [ValidateSet('None','GettingStatus','Failed','Pending','Delivered','Expanded','Quarantined','FilteredAsSpam')]
@@ -416,7 +426,9 @@ function Get-EXOMessageTraceExportedTDO {
         [Parameter(HelpMessage="The FromIP parameter filters the results by the source IP address. For incoming messages, the value of FromIP is the public IP address of the SMTP email server that sent the message. For outgoing messages from Exchange Online, the value is blank. [-FromIP '123.456.789.012']")] 
             [string]$FromIP, 
         [Parameter(HelpMessage="The ToIP parameter filters the results by the destination IP address. For outgoing messages, the value of ToIP is the public IP address in the resolved MX record for the destination domain. For incoming messages to Exchange Online, the value is blank. [-ToIP '123.456.789.012']")] 
-            [string]$ToIP,
+            [string]$ToIP,            
+            [Parameter(HelpMessage="The ResultSize parameter specifies the maximum number of results to return. A valid value is from 1 to 5000. The default value is 1000. Note: This parameter replaces the PageSize parameter that was available on the Get-MessageTrace cmdlet. [-ResultSize 2000]")]             
+            [int32]$ResultSize,
         [Parameter(HelpMessage="Switch to just return the net messages on the initial track (no Fail/Quarantine, MTDetail or other post-processing summaries) [-simpletrack]")]
             [switch]$SimpleTrack,
         [Parameter(HelpMessage="Switch to do Summarize & Expansion of any MTD TransportRule events (defaults true) [-DetailedReportRuleHits]")]
@@ -1381,8 +1393,25 @@ function Get-EXOMessageTraceExportedTDO {
                 stopping at the first successful connection.
                 .NOTES
                 REVISIONS
+                * 3:48 PM 10/21/2025 updated CBH for post-import tests on call
+                * 3:58 PM 5/14/2025 restored prior dropped earlier rev history (routinely trim for psparamt inclu)
+                * 10;07 am 4/30/2025 fixed borked edge conn, typo, and rev logic for Ex & role detection in raw PS - lacks evaris for exchange (EMS/REMS only), so leverage reg & stock install loc hunting to discover setup.exe for vers & role confirm).
                 * 2:46 PM 4/22/2025 add: -Version (default to Ex2010), and postfiltered returned ExchangeServers on version. If no -Version, sort on newest Version, then name, -descending.
-                .PARAMETER name
+                * 4:25 PM 1/15/2025 seems to work at this point, move to rebuild
+                * 4:49 PM 1/9/2025 reworked connect-exchangeserverTdo() to actually use the credentials passed in, and 
+                added the missing import-module $PSS, to _connect-ExOP, to make the session actually functional 
+                for running cmds, wo popping cred prompts. 
+                * 12:24 PM 12/4/2024 removed bracket bnr echos around _connect-ExOP
+                * 3:54 PM 11/26/2024 integrated back TLS fixes, and ExVersNum flip from June; syncd dbg & vx10 copies.
+                * 12:57 PM 6/11/2024 Validated, Ex2010 & Ex2019, hub, mail & edge roles: tested ☑️ on CMW mail role (Curly); and Jumpbox; 
+                copied in CBH from repo copy, which has been updated/debugged compat on CMW Edge 
+                includes local snapin detect & load for edge role (simplest EMS load option for Edge role, from David Paulson's original code; no longer published with Ex2010 compat)
+                * 1:30 PM 9/5/2024 added  update-SecurityProtocolTDO() SB to begin
+                * 12:49 PM 6/21/2024 flipped PSS Name to Exchange$($ExchVers[dd])
+                * 11:28 AM 5/30/2024 fixed failure to recognize existing functional PSSession; Made substantial update in logic, validate works fine with other orgs, and in our local orgs.
+                * 4:02 PM 8/28/2023 debuged, updated CBH, renamed connect-ExchangeSErver -> Connect-ExchangeServerTDO (avoid name clashes, pretty common verb-noun combo).
+                * 12:36 PM 8/24/2023 init
+                 .PARAMETER name
                 FQDN of a specific Exchange server[-Name EXSERVER.DOMAIN.COM]
                 .PARAMETER discover
                 Boolean paraameter that drives auto-discovery of target Exchange servers for connection (defaults `$true)[-discover:`$false]
@@ -1407,6 +1436,35 @@ function Get-EXOMessageTraceExportedTDO {
                 .EXAMPLE
                 PS> TRY{$Site=[System.DirectoryServices.ActiveDirectory.ActiveDirectorySite]::GetComputerSite().Name}CATCH{$Site=$env:COMPUTERNAME} ;
                 PS> $PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
+                PS> write-verbose "discover and import session" ; 
+                PS> $cmd = $null; $cmd = get-command 'Get-OrganizationConfig' -erroraction 0 ;
+                PS> if(-not $cmd){
+                PS>     if($ExPSS = get-pssession | ? { $_.ConfigurationName -eq 'Microsoft.Exchange' -AND $_.State -eq 'Opened' -AND $_.Availability -eq 'Available' } | sort id -Descending | select -first 1 ){
+                PS>         TRY{
+                PS>             $ExIPSS = Import-PSSession $ExPSS -allowclobber -ea STOP ;
+                PS>             $cmd = $null; $cmd = get-command 'Get-OrganizationConfig' -erroraction stop ;
+                PS>             $smsg = "Connected to: $($expss.computername)" ;
+                PS>             if(gcm Write-MyOutput -ea 0){Write-MyOutput $smsg } else {
+                PS>                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                PS>                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                PS>             } ;
+                PS>         } CATCH {
+                PS>             $ErrTrapd=$Error[0] ;
+                PS>             $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                PS>             if(gcm Write-MyWarning -ea 0){Write-MyWarning $smsg } else {
+                PS>                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN} else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                PS>             } ;
+                PS>             BREAK ;
+                PS>         } ;
+                PS>     } ;  
+                PS> } else {
+                PS>     $smsg = "Connected to: $($expss.computername)" ;
+                PS>     if(gcm Write-MyOutput -ea 0){Write-MyOutput $smsg } else {
+                PS>         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                PS>         #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                PS>     } ;
+                PS> } ;                      
+                PS> 
                 Demo including support for EdgeRole, which is detected on it's lack of AD Site specification (which gets fed through to call, by setting the Site to the machine itself).
                 .EXAMPLE
                 PS> $PSSession = Connect-ExchangeServerTDO -siteName SITENAME -RoleNames @('HUB','CAS') -Version Ex2016 -verbose 
@@ -1451,7 +1509,7 @@ function Get-EXOMessageTraceExportedTDO {
                   [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor $_
                 } ;
               } ;
-                
+    
                     # 5:15 PM 4/22/2025 on CMW, have to patch version to Ex2016
 
                     #*------v Function _connect-ExOP v------
@@ -1542,9 +1600,9 @@ function Get-EXOMessageTraceExportedTDO {
                                                 }else{
                                                     $Global:ExInstall = (Get-ItemProperty HKLM:\SOFTWARE\Microsoft\ExchangeServer\v15\Setup).MsiInstallPath
                                                 }
-    
+
                                                 $Global:ExBin = $Global:ExInstall + "\Bin"
-    
+
                                                 $smsg = ("Set ExInstall: {0}" -f $Global:ExInstall)
                                                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
                                                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
@@ -2550,6 +2608,58 @@ function Get-EXOMessageTraceExportedTDO {
         } ; 
         #endregion OUT_CLIPBOARD ; #*------^ END out-Clipboard ^------
 
+        #region START_SLEEPCOUNTDOWN ; #*------v start-sleepcountdown v------
+        if (-not (get-command start-sleepcountdown -ea 0)) {
+            function start-sleepcountdown {
+                <#
+                .SYNOPSIS
+                Start-SleepCountdown - Countdown variant of start-sleep: Counts down seconds to finish.
+                .NOTES
+
+                REVISION
+                * 10:44 AM 10/15/2024 add -useMins to make it do a minutes countdown (still requires seconds input)
+
+                .PARAMETER Seconds
+                Specifies how long the resource sleeps in seconds. You can omit the parameter name ( Seconds ), or you can abbreviate it as s
+
+                #>
+                [CmdletBinding()]
+                PARAM(
+                    [Parameter(Mandatory = $True, ValueFromPipeline = $true, HelpMessage = "Specifies how long the resource sleeps in seconds. You can omit the parameter name ( Seconds ), or you can abbreviate it as s")]
+                    [Alias('s')]
+                    [System.Int32]$Seconds,
+                    [Parameter(Mandatory = $True, ValueFromPipeline = $true, HelpMessage = "Specifies how long the resource sleeps in seconds. You can omit the parameter name ( Seconds ), or you can abbreviate it as s")]
+                    [switch]$useMins
+                ) ;
+                PROCESS {
+                    $smsg += "`nWaiting $($Seconds) seconds...`nSTART[" ;
+                    write-host -foregroundcolor yellow -NoNewline $smsg ;
+                    $a = 1 ; $thisMin = 60 ;
+                    Do {
+                        <#Var â€“ Is $a a multiple of $b?
+                        Using the % modulus (remainder of a division) operator.
+                        Tests if ($a % $b) returns zero ($b divides evenly into $a, with no remainder)
+                        $a=100; $b=5 ; if(!($a % $b)){"$a is a multiple of $b "}else{"$a is not a multiple of $b "};
+                        #>
+                        $thisMin-- ;
+                        if ($useMins) {
+                            if ($thisMin -eq 0) {
+                                #if($Seconds % 60){ # mod isn't working right
+                                #write-host -NoNewline ".$($Seconds)" ;
+                                write-host -NoNewline ".$([int]($Seconds/60))" ;
+                                $thisMin = 60 ;
+                            } ;
+                        } else {
+                            write-host -NoNewline ".$($Seconds)" ;
+                        } ;
+                        start-sleep -Seconds 1 ; $Seconds--
+                    }
+                    While ($Seconds -gt 0) ;
+                    write-host -foregroundcolor yellow "]DONE" ;
+                } ;
+            } ;
+        } ;
+        #endregion START_SLEEPCOUNTDOWN ; #*------^ END start-sleepcountdown ^------
         #region CONVERTFROM_MARKDOWNTABLE ; #*------v convertFrom-MarkdownTable v------
         if(-not(gci function:convertFrom-MarkdownTable -ea 0)){
             Function convertFrom-MarkdownTable {
@@ -2748,6 +2858,12 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                 [Parameter(Mandatory=$True,HelpMessage="Array of Get-xoMessageTrace Message returns to be expanded into Get-xoMessageTraceDetail ")]
                 [array]$Messages
             ) ; 
+            BEGIN{
+                if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
+                if(-not $DawdleWait){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
+                if(-not $RetryThrottle){$RetryThrottle = 60 } ; # wait time (secs) after Throttle error $errtest.Exception ||Your recent queries have surpassed the permitted limit, please try again later
+                if(-not $rgxEXOThrottle){$rgxEXOThrottle = 'Your\srecent\squeries\shave\ssurpassed\sthe\spermitted\slimit,\splease\stry\sagain\slater' } 
+            } ; 
             PROCESS{
                 $mtds = @() ; 
                 foreach( $mtdm in  $Messages){
@@ -2766,14 +2882,40 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                     $Exit = 0 ;
                     Do {
-                        TRY {
-                            if($rmtd = Get-xoMessageTraceDetail @pltgXMTD){
+                        TRY {                            
+                            #if($rmtd = Get-xoMessageTraceDetail @pltgXMTD){
+                            # 1:21 PM 10/21/2025 try to splice in Get-xoMessageTraceDetailV2
+                            # doesn't seem to support the same -StartingRecipientAddress etc params, no evidence does warning pushback, lacks the gxmt's native params for those features. 
+                            # does throttle HARD, just kills the connection
+                            if($rmtd = Get-xoMessageTraceDetailV2 @pltgXMTD){
                                 $mtds += $rmtd ;
                             } else {
                                 write-warning "No Return: #$($Exit):MTId: $($pltgXMTD.MessageTraceId) : To: $($pltgXMTD.RecipientAddress)" ; 
                                 throw "no Get-xoMessageTraceDetail return" ; 
                             } ; 
                             $Exit = $Retries ;
+                        } CATCH [System.Exception] {
+                            $ErrTrapd=$Error[0] ;
+                            if($ErrTrapd.Exception -match $rgxEXOThrottle){
+                                $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                                $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                                #Start-Sleep -Milliseconds $ThrottleMs 
+                                start-sleepcountdown -seconds $RetryThrottle -Rolling ; 
+                                $Exit ++ ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                $smsg= "Try #: $($Exit)" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                If ($Exit -eq $Retries) {
+                                    $smsg= "Unable to exec cmd!" ;
+                                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    BREAK ; 
+                                } ;
+                            } ; 
                         } CATCH {
                             $ErrTrapd=$Error[0] ;
                             $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
@@ -2910,7 +3052,9 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
     
         if(-not $DoRetries){$DoRetries = 4 } ;    # # times to repeat retry attempts
         if(-not $RetrySleep){$RetrySleep = 10 } ; # wait time between retries
-        if(-not $RetrySleep){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
+        if(-not $DawdleWait){$DawdleWait = 30 } ; # wait time (secs) between dawdle checks
+        if(-not $RetryThrottle){$RetryThrottle = 60 } ; # wait time (secs) after Throttle error $errtest.Exception ||Your recent queries have surpassed the permitted limit, please try again later
+        if(-not $rgxEXOThrottle){$rgxEXOThrottle = 'Your\srecent\squeries\shave\ssurpassed\sthe\spermitted\slimit,\splease\stry\sagain\slater' } 
         if(-not $DirSyncInterval){$DirSyncInterval = 30 } ; # AADConnect dirsync interval
         if(-not $ThrottleMs){$ThrottleMs = 50 ;}
         if(-not $rgxDriveBanChars){$rgxDriveBanChars = '[;~/\\\.:]' ; } ; # ;~/\.:,
@@ -2923,11 +3067,12 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         #$rgxADDistNameGAT = ",$(($TORMeta.UnreplicatedOU -split ',' | select -skip 1 ) -join ',')" 
         #$rgxADDistNameAT = ",$(($TORMeta.UnreplicatedOU -split ',' | select -skip 2 ) -join ',')"
 
-        write-verbose "Coerce configured but blank Resultsize to Unlimited" ; 
+        <#write-verbose "Coerce configured but blank Resultsize to Unlimited" ; 
         if(get-variable -name resultsize -ea 0){
             if( ($null -eq $ResultSize) -OR ('' -eq $ResultSize) ){$ResultSize = 'unlimited' }
             elseif($Resultsize -is [int]){} else {throw "Resultsize must be an integer or the string 'unlimited' (or blank)"} ;
         } ; 
+        #>
         #$ComputerName = $env:COMPUTERNAME ;
         #$NoProf = [bool]([Environment]::GetCommandLineArgs() -like '-noprofile'); # if($NoProf){# do this};
         # XXXMeta derived constants:
@@ -3452,9 +3597,12 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
 
         #region useEXO ; #*------v useEXO v------
         # 1:29 PM 9/15/2022 as of MFA & v205, have to load EXO *before* any EXOP, or gen get-steppablepipeline suffix conflict error
+        # 9:31 AM 10/21/2025 remove refs to removed reconnect-eXO2
         if($useEXO){
-            if ($script:useEXOv2 -OR $useEXOv2) { reconnect-eXO2 @pltRXOC }
-            else { reconnect-EXO @pltRXOC } ;
+            #if ($script:useEXOv2 -OR $useEXOv2) { reconnect-eXO2 @pltRXOC }
+            #else { 
+                reconnect-EXO @pltRXOC 
+            #} ;
         } else {
             $smsg = "(`$useEXO:$($useEXO))" ; 
             if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
@@ -3573,10 +3721,41 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                             $pltCcX10.version = 'Ex2016' ; 
                         } else { $pltCcX10.add('version','Ex2016') } ;
                     } ; 
-                    $smsg = "Connect-ExchangeServerTDO w`n$(($pltCcX10|out-string).trim())" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    #$PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
-                    $PSSession = Connect-ExchangeServerTDO @pltCcX10 ; 
+                    $cmd = $null; $cmd = get-command 'Get-OrganizationConfig' -erroraction 0 ;
+                    if(-not $cmd){
+                        $smsg = "Connect-ExchangeServerTDO w`n$(($pltCcX10|out-string).trim())" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #$PSSession = Connect-ExchangeServerTDO -siteName $Site -RoleNames @('HUB','CAS') -verbose ; 
+                        $PSSession = Connect-ExchangeServerTDO @pltCcX10 ; 
+                        # do remedial import test (remote function context doesn't have the session mounted on pass back)
+                        $cmd = $null; $cmd = get-command 'Get-OrganizationConfig' -erroraction 0 ;
+                        if(-not $cmd){
+                            if($ExPSS = get-pssession | ? { $_.ConfigurationName -eq 'Microsoft.Exchange' -AND $_.State -eq 'Opened' -AND $_.Availability -eq 'Available' } | sort id -Descending | select -first 1 ){
+                                TRY{
+                                    $ExIPSS = Import-PSSession $ExPSS -allowclobber -ea STOP ;
+                                    $cmd = $null; $cmd = get-command 'Get-OrganizationConfig' -erroraction stop ;
+                                    $smsg = "Connected to: $($expss.computername)" ;
+                                    if(gcm Write-MyOutput -ea 0){Write-MyOutput $smsg } else {
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                                    } ;
+                                } CATCH {
+                                    $ErrTrapd=$Error[0] ;
+                                    $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                                    if(gcm Write-MyWarning -ea 0){Write-MyWarning $smsg } else {
+                                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN} else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                    } ;
+                                    BREAK ;
+                                } ;
+                            } ;
+                        } else {
+                            $smsg = "Connected to: $($expss.computername)" ;
+                            if(gcm Write-MyOutput -ea 0){Write-MyOutput $smsg } else {
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level H1 } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            } ;
+                        } ;                                                        
+                    } ; 
                 } else {
                     if($pltRX10){
                         #ReConnect-Ex2010XO @pltRX10 ;
@@ -3770,8 +3949,19 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
 
       
         # Configure the Get-xoMessageTrace splat 
+        <# gxmt v1 params
         $pltGXMT=[ordered]@{
             Page= 1 ; # default it to 1 vs $null as we'll be purging empties further down
+            ErrorAction = 'STOP' ;
+            verbose = $($VerbosePreference -eq "Continue") ;
+        } ;
+        #>
+        # 12:12 PM 10/21/2025 Get-xoMessageTraceV2 params - tossed out Page support and all native pagination
+        #-ResultSize 5000 -StartDate $StartDate -EndDate $EndDate -WarningVariable MoreResultsAvailable 
+        $pltGXMT=[ordered]@{
+            #Page= 1 ; # default it to 1 vs $null as we'll be purging empties further down
+            #ResultSize = 5000 ; 
+            WarningVariable = "MoreResultsAvailable" ; 
             ErrorAction = 'STOP' ;
             verbose = $($VerbosePreference -eq "Continue") ;
         } ;
@@ -3886,10 +4076,29 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         if($ToIP){
             $pltGXMT.add('ToIP',$ToIP) ; 
         } ;
-
+        # 4:01 PM 10/21/2025 add: $ResultSize,
+        if($ResultSize){
+            $pltGXMT.add('ResultSize',$ResultSize) ; 
+        } else{
+            # use default 5k msg limt, max allowed size by MS; given 100qrys/5min window throttling, pays to get max out of each qry.
+            $pltGXMT.add('ResultSize',5000) ; 
+        };
+        # 12:28 PM 10/21/2025 new gxmtV2 -subject & SubjectFilterType params
         if($subject){
+            $pltGXMT.add('Subject',$subject) ; 
         } ;
-        
+        <# You specify how the value is evaluated in the message subject by using the SubjectFilterType parameter.
+            -SubjectFilterType
+                The SubjectFilterType parameter specifies how the value of the Subject parameter is evaluated. Valid values are:
+                    Contains
+                    EndsWith
+                    StartsWith
+                We recommend using StartsWith or EndsWith instead of Contains whenever possible.
+        #>
+        if($SubjectFilterType){
+            $pltGXMT.add('Subject',$SubjectFilterType) ; 
+        } ;
+
         #endregion SPLAT_BUILD ; #*------^ END SPLAT_BUILD ^------
 
         # use the updated psOfile build:
@@ -3962,68 +4171,408 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         $hReports = [ordered]@{} ; 
         #rxo ;
         $error.clear() ;
-        TRY {
-            # prepurge empty hash value keys:
-            #$pltGXMT=$pltGXMT.GetEnumerator()|? value ;
-            # remove null keyed objects
-            #$pltGXMT | Foreach {$p = $_ ;@($p.GetEnumerator()) | ?{ ($_.Value | Out-String).length -eq 0 } | Foreach-Object {$p.Remove($_.Key)} ;} ;
-            # skip it, we're only adding populated items now
-            #write-verbose "hashtype:$($pltGXMT.GetType().FullName)" ; 
-            # and issue was first untested negative integer -Days; and 2nd GMT window for start/enddate, so the 'local' input needs to be converted to/from gmt to get the targeted content.
+        $Exit = 0 ;
+        # do retry the initial query
+        Do {
+            TRY {
+                # prepurge empty hash value keys:
+                #$pltGXMT=$pltGXMT.GetEnumerator()|? value ;
+                # remove null keyed objects
+                #$pltGXMT | Foreach {$p = $_ ;@($p.GetEnumerator()) | ?{ ($_.Value | Out-String).length -eq 0 } | Foreach-Object {$p.Remove($_.Key)} ;} ;
+                # skip it, we're only adding populated items now
+                #write-verbose "hashtype:$($pltGXMT.GetType().FullName)" ; 
+                # and issue was first untested negative integer -Days; and 2nd GMT window for start/enddate, so the 'local' input needs to be converted to/from gmt to get the targeted content.
 
-            $smsg = "Get-xoMessageTrace  w`n$(($pltGXMT|out-string).trim())" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-            $Page = 1  ;
-            $Msgs=$null ;
-            do {
-                $smsg = "Collecting - Page $($Page)..."  ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                $pltGXMT.Page=$Page ;
-                $PageMsgs = Get-xoMessageTrace @pltGXMT |  ?{$_.SenderAddress -notlike '*micro*' -or $_.SenderAddress -notlike '*root*' }  ;
-                $Page++  ;
-                $Msgs += @($PageMsgs)  ;
-            } until ($PageMsgs -eq $null) ;
-            $Msgs=$Msgs| Sort Received ;
-            $smsg = "Raw sender/recipient events:$(($Msgs|measure).Count)" ;
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-            else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                <# as of 9:56 AM 10/21/2025: Microsoft is killing all requests to Get-xoMessageTrace, now returns:
+                Write-ErrorMessage : ||Get-MessageTrace will start deprecating on September 1st, 2025. Please refer to: https://learn.microsoft.com/en-us/powershell/module/exchange/get-messagetracev2?view=exchange-ps to switch to 
+                Get-MessageTraceV2.
+                At C:\Users\kadriTSS\AppData\Local\Temp\2\tmpEXO_ah0pg1qz.hjm\tmpEXO_ah0pg1qz.hjm.psm1:1191 char:13
+                +             Write-ErrorMessage $ErrorObject
+                +             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                    + CategoryInfo          : InvalidOperation: (:) [Get-MessageTrace], ValidationException
+                    + FullyQualifiedErrorId : [Server=CY3PR04MB9691,RequestId=8c72957c-e95b-a089-8433-7f5e0e74f247,TimeStamp=Tue, 21 Oct 2025 14:40:45 GMT],Write-ErrorMessage
+                [Announcing General Availability (GA) of the New Message Trace in Exchange Online | Microsoft Community Hub](https://techcommunity.microsoft.com/blog/exchange/announcing-general-availability-ga-of-the-new-message-trace-in-exchange-online/4420243)
 
-            if($subject){
-                $smsg = "Post-Filtering on Subject:$($subject)" ;
+                [New Message trace in EAC in Exchange Online | Microsoft Learn](https://learn.microsoft.com/en-us/exchange/monitoring/trace-an-email-message/new-message-trace)
+
+                [Using the Get-MessageTraceV2 cmdlet to generate mail traffic statistics by user - Blog](https://michev.info/blog/post/6572/using-the-get-messagetracev2-cmdlet-to-generate-mail-traffic-statistics-by-user)
+
+                [PowerShell/Get-DetailedMessageStatsV2.ps1 at master · michevnew/PowerShell · GitHub](https://github.com/michevnew/PowerShell/blob/master/Get-DetailedMessageStatsV2.ps1)
+                
+                # Changes: throttling, torn out usefulness, from Michev:
+
+                ### Positives:
+                - Let's start with the good news. The new message trace ensures feature parity 
+                    with the "old" experience, while bringing some nice improvements. The most 
+                    significant of these is the support for querying data up to 90 days in the past 
+                    in a synchronous manner, whereas we were previously limited to just a handful 
+                    of days, and had to run async queries. Up to 10 days of data is available for a 
+                    single query, but this should not be a problem as in any tenant of meaningful 
+                    size, you will hit the "page" limit early on and will have to issue additional 
+                    queries anyway. 
+                -  larger set of filters supported for the Get-MessageTraceV2 cmdlet, most 
+                    notably the ability to filter based on a message's subject, made possible 
+                    thanks to the -Subject parameter. 
+                ### Negatives:
+                - Microsoft changed the way "pagination" works, and the new experience is mildly 
+                    annoying at best. It could have been implemented better IMO, or at the very 
+                    least align with the pagination experience in the Graph API. Speaking of which, 
+                    the next negative is the lack of support for Graph API endpoints/methods. One 
+                    can argue that we do have a suitable replacement on the Graph via the 
+                    **analyzedEmails** endpoint, but as we discussed in [our 
+                    article](https://www.michev.info/blog/post/6181/first-look-at-the-analyzedemails-graph-api-endpoint) 
+                    on said endpoint, it's use case is different. 
+                -  incoming deprecation of the old experience. Microsoft is giving customers 
+                    until September 1st to move away from the 
+                    Get-MessageTrace/Get-MessageTraceDetail cmdlets. The same deadline applies to 
+                    the MessageTrace report in the good old reporting web service, which is the 
+                    only supported RESTful interface to query the message trace data programmatically.
+                    No alternative is provided at this point, thus any customers 
+                    and ISVs that still rely on the reporting web service need to move to using 
+                    PowerShell instead, which might be an issue. The same can be safe in regard to 
+                    the new throttling guidance, namely 100 requests per 5 minutes. 
+
+                > The biggest change in the script's logic is in how it handles pagination. 
+                I've opted for an approach that relies on the presence of the "hint" returned 
+                by the service, which unfortunately is implemented via the warning stream. In 
+                effect, we suppress the warning while making sure its content is stored in a 
+                variable and then processed to extract the "next page" cmdlet. I'm not a big 
+                fan of this implementation, as you can see from [my 
+                comments](https://techcommunity.microsoft.com/blog/exchange/announcing-public-preview-of-the-new-message-trace-in-exchange-online/4356561/replies/4392248) 
+                under the original blog article. The alternative is to create the "next page" 
+                syntax yourself, by copying the properties of the last returned entry, like 
+                Tony does in his [sample 
+                script](https://github.com/12Knocksinna/Office365itpros/blob/master/Analyze-MailTraffic.PS1)
+
+                > 
+                > Another downside of the new "no pagination" approach is that we cannot have a 
+                proper progress indicator, so instead I have added a "poor man's" variation of 
+                it, just so you know whether the script is progressing. Once we fetch the 
+                available message trace data, we largely follow the logic of the original 
+                script and prepare a hashtable for each recipient, holding the count and size 
+                of both inbound and outbound messages, per day. Lastly, we transform the output 
+                and dump it into a CSV file in the working directory. And since HTML output 
+                seems to be all the rage currently, I've asked Copilot to generate the 
+                corresponding code. Can I play with the cool kids now? 🙂 
+
+                TK: REQUIRES LATER REV
+                10:18 AM 10/21/2025 jb running:
+                #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+                [PS]:D:\s\build $ Gcm Get-xoMessageTracev2
+
+                CommandType     Name                                               Version    Source                                                                                                                                            
+                -----------     ----                                               -------    ------                                                                                                                                            
+                Function        Get-xoMessageTraceV2                               1.0        tmpEXO_ah0pg1qz.hjm
+
+                [PS]:D:\s\build $ gmo exchangeonlinemanagement
+
+                ModuleType Version    Name                                ExportedCommands                                                                                                                                                      
+                ---------- -------    ----                                ----------------                                                                                                                                                      
+                Script     3.6.0      ExchangeOnlineManagement            {Add-VivaModuleFeaturePolicy, Get-ConnectionInformation, Get-DefaultTenantBriefingConfig, Get-DefaultTenantMyAnalyticsFeatureConfig...}
+
+                Curr Online rev:
+                [PowerShell Gallery | ExchangeOnlineManagement 3.9.0](https://www.powershellgallery.com/packages/ExchangeOnlineManagement/3.9.0)
+
+                    63,387,978 Downloads
+                    12,868 Downloads of 3.9.1-Preview1
+                    8/13/2025 Last Published
+
+                Version                 | Downloads | Last updated
+                ----------------------- | --------- | -------------
+                3.9.1-Preview1          | 12,868    | a month ago
+                3.9.0 (current version) | 1,424,135 | 2 months ago <=== 2 mos old!
+                3.9.0-Preview1          | 9,617     | 3 months ago
+                3.8.1-Preview1          | 48,821    | 5 months ago
+                3.8.0                   | 2,050,555 | 5 months ago
+                3.8.0-Preview2          | 14,309    | 6 months ago
+                3.8.0-Preview1          | 10,600    | 7 months ago
+                3.7.2                   | 1,234,251 | 7 months ago
+                3.7.2-Preview1          | 6,924     | 8 months ago
+                3.7.1                   | 3,181,614 | 9 months ago
+                3.7.1-Preview1          | 9,542     | 10 months ago
+                3.7.0                   | 2,950,466 | 12/2/2024
+                3.7.0-Preview1          | 4,938     | 11/15/2024
+                3.6.0                   | 3,537,886 | 9/25/2024
+
+                #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+            #>
+                <# my prior Get-xoMessageTrace code:
+                $smsg = "Get-xoMessageTrace  w`n$(($pltGXMT|out-string).trim())" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                # detect whether to filter on -match (regex) or -like (asterisk, or default non-regex)
-                if(test-IsRegexPattern -string $subject -verbose:$($VerbosePreference -eq "Continue")){
-                    $smsg = "(detected -subject as regex - using -match comparison)" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    $MsgsFltrd = $Msgs | ?{$_.Subject -match $subject} ;
-                    if(-not $MsgsFltrd){
-                        $smsg = "Subject: regex -match comparison *FAILED* to return matches`nretrying Subject filter as -Like..." ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        $MsgsFltrd = $Msgs | ?{$_.Subject -like $subject} ;
-                    } ; 
-                } else { 
-                    $smsg = "(detected -subject as NON-regex - using -like comparison)" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    $MsgsFltrd = $Msgs | ?{$_.Subject -like $subject} ;
-                    if(-not $MsgsFltrd){
-                        $smsg = "Subject: -like comparison *FAILED* to return matches`nretrying Subject filter as -match..." ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
-                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        $MsgsFltrd = $Msgs | ?{$_.Subject -match $subject} 
-                    } ; 
-                } ; 
-                $smsg = "Post Subj filter matches:$(($MsgsFltrd|measure).Count)" ;
+                $Page = 1  ;
+                $Msgs=$null ;
+                do {
+                    $smsg = "Collecting - Page $($Page)..."  ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    $pltGXMT.Page=$Page ;
+                    $PageMsgs = Get-xoMessageTrace @pltGXMT |  ?{$_.SenderAddress -notlike '*micro*' -or $_.SenderAddress -notlike '*root*' }  ;
+                    $Page++  ;
+                    $Msgs += @($PageMsgs)  ;
+                } until ($PageMsgs -eq $null) ;
+                $Msgs=$Msgs| Sort Received ;
+                $smsg = "Raw sender/recipient events:$(($Msgs|measure).Count)" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
                 else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                $msgs = $MsgsFltrd ; 
-            } ;
+                #>
+
+                # michev's code:
+                #$MailTraffic = @{} ; 
+                # static 10d window
+                #$StartDate = (Get-Date).AddDays(-10) #max period we can cover in a single query is 10 days, if needed rerun multiple times to cover up to 90
+                #$EndDate = (Get-Date)
+                #Get the first "page"
+                $Msgs = $null # aggregator
+                #$PageMsgs = Get-xoMessageTraceV2 -ResultSize 5000 -StartDate $StartDate -EndDate $EndDate -WarningVariable MoreResultsAvailable -Verbose:$false 3>$null
+                #pltGXMT
+                $smsg = "Get-xoMessageTrace  w`n$(($pltGXMT|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $PageMsgs = Get-xoMessageTraceV2 @pltGXMT 3>$null
+                # The expression 3>$null in PowerShell redirects the Warning stream (stream number 3) to $null. required, because mich is using the warning to note restart points
+                                                                                                <# Michev asked M$:
+            [Announcing Public Preview of the New Message Trace in Exchange Online | Microsoft Community Hub](https://techcommunity.microsoft.com/blog/exchange/announcing-public-preview-of-the-new-message-trace-in-exchange-online/4356561/replies/4392248)
+
+            Thanks. I see a new warning being generated now, is this the supposed "hint"?
+
+            PS> Get-MessageTracev2 -resultsize 1 ; 
+            out:> WARNING: There are more results, use the following command to get more. Get-MessageTraceV2 -StartDate "xxx" -EndDate "xxx" -StartingRecipientAddress "vasil@michev.info" 
+
+            If so, might I suggest using a format that does not require any additional 
+            transformation, for example by returning a separate array element with just the 
+            "next page" cmdlet syntax? Or by adding a "dummy" entry to the general output 
+            stream instead of using the warning one? I.e. like this: 
+
+            Or just do it the "Graph way" with @odata.nextpage and $count?
+
+            [YunjieCao](https://techcommunity.microsoft.com/users/yunjiecao/2896050)
+            to VasilMichev
+
+            Mar 12, 2025
+
+            Hi,
+
+            Yes, that is the hint we provide. Thank you for your suggestions! We value this 
+            feedback and will work on improvements after gathering input from all our customers.
+            In the meantime, you can refer to the FAQ section **How could 
+            pagination from V1 be achieved in V2?**. If you see a warning message, you can 
+            use the scripts provided in the FAQ section to compose your queries without 
+            depending on the warning message itself. 
+
+            #>
+                #$Msgs += $PageMsgs | Select Received,SenderAddress,RecipientAddress,Size,Status
+                # splice over my postfilter system messages removal
+                $Msgs += $PageMsgs | ?{$_.SenderAddress -notlike '*micro*' -or $_.SenderAddress -notlike '*root*' } ; 
+                $Exit = $Retries ;
+            } CATCH [System.Exception] {
+                $ErrTrapd=$Error[0] ;
+                if($ErrTrapd.Exception -match $rgxEXOThrottle){
+                    $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                    $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    #Start-Sleep -Milliseconds $ThrottleMs 
+                    start-sleepcountdown -seconds $RetryThrottle -Rolling ; 
+                    $Exit ++ ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $smsg= "Try #: $($Exit)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    If ($Exit -eq $Retries) {
+                        $smsg= "Unable to exec cmd!" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        BREAK ; 
+                    } ;
+                } else{
+                    # different error, throw to the main catch
+                    throw $ErrTrapd
+                } ;     
+            } CATCH {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                # it's not outputting the underlying cmdlet error, try to force it :
+                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #-=-record a STATUSWARN=-=-=-=-=-=-=
+                $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                #-=-=-=-=-=-=-=-=
+                $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+            } ; 
+        } Until ($Exit -eq $Retries) ; 
+        # another do/try on the more's
+        #If more results are available, as indicated by the presence of the WarningVariable, we need to loop until we get all results
+        if ($MoreResultsAvailable) {
+            $Exit = 0 ;
+            # moreresults loop
+            Do {
+                # exit retries loop
+                $Exit = 0 ;
+                Do {
+                    TRY {
+                        #As we don't have a clue how many pages we will get, proper progress indicator is not feasible.
+                        Write-Host "." -NoNewline
+                        #Handling this via Warning output is beyong annoying...
+                        $NextPage = ($MoreResultsAvailable -join "").TrimStart("There are more results, use the following command to get more. ")
+                        # note the above lacks the PREFIX!, patch it in
+                        $NextPage = ($MoreResultsAvailable -join "").TrimStart("There are more results, use the following command to get more. ") -replace 'Get-MessageTraceV2','Get-xoMessageTraceV2' ; 
+                        $ScriptBlock = [ScriptBlock]::Create($NextPage)
+                        $smsg = "MORE:($($Msgs.count)):$(($ScriptBlock|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        $PageMsgs = Invoke-Command -ScriptBlock $ScriptBlock -WarningVariable MoreResultsAvailable -Verbose:$false 3>$null #MUST PASS WarningVariable HERE OR IT WILL NOT WORK
+                        #$Msgs += $PageMsgs | Select Received,SenderAddress,RecipientAddress,Size,Status
+                        # splice over my postfilter system messages removal 
+                        #$Msgs += $PageMsgs | ?{$_.SenderAddress -notlike '*micro*' -or $_.SenderAddress -notlike '*root*' }
+                        # Remove Exchange Online public folder hierarchy synchronization messages
+                        # $Messages = $Messages | Where-Object {$_.Subject -NotLike "*HierarchySync*"}
+                        $Msgs += $PageMsgs | ?{$_.SenderAddress -notlike '*micro*' -OR $_.SenderAddress -notlike '*root*' -AND ($_.Subject -NotLike "*HierarchySync*") }
+                        if($MoreResultsAvailable.Count -eq 0){
+                            # it didn't break on a repeat, could be the inner loop is preventing the outer until from triggering, so do it inside here.
+                            Break ; 
+                        } ; 
+                    } CATCH [System.Exception] {
+                        $ErrTrapd=$Error[0] ;
+                        if($ErrTrapd.Exception -match $rgxEXOThrottle){
+                            $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                            $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                            #Start-Sleep -Milliseconds $ThrottleMs 
+                            start-sleepcountdown -seconds $RetryThrottle -Rolling ; 
+                            $Exit ++ ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $smsg= "Try #: $($Exit)" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            If ($Exit -eq $Retries) {
+                                $smsg= "Unable to exec cmd!" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Error }  #Error|Warn|Debug 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                BREAK ; 
+                            } ;
+                        } else{
+                            # different error, throw to the main catch
+                            throw $ErrTrapd
+                        } ;     
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        # it's not outputting the underlying cmdlet error, try to force it :
+                        $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        $smsg = "$('*'*5)`nFailed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: `n$(($ErrTrapd|out-string).trim())`n$('-'*5)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #-=-record a STATUSWARN=-=-=-=-=-=-=
+                        $statusdelta = ";WARN"; # CHANGE|INCOMPLETE|ERROR|WARN|FAIL ;
+                        if(gv passstatus -scope Script -ea 0){$script:PassStatus += $statusdelta } ;
+                        if(gv -Name PassStatus_$($tenorg) -scope Script -ea 0){set-Variable -Name PassStatus_$($tenorg) -scope Script -Value ((get-Variable -Name PassStatus_$($tenorg)).value + $statusdelta)} ; 
+                        #-=-=-=-=-=-=-=-=
+                        $smsg = "FULL ERROR TRAPPED (EXPLICIT CATCH BLOCK WOULD LOOK LIKE): } catch[$($ErrTrapd.Exception.GetType().FullName)]{" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level ERROR } #Error|Warn|Debug 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Break #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
+                    } ; 
+                } Until ($Exit -eq $Retries) ; 
+            }until ($MoreResultsAvailable.Count -eq 0) #Arraylist
+        }  # if-E More test
             
+           
+        #If no messages were found, exit
+        if ($Msgs.Count -eq 0) {
+            Write-Error "No messages found for the specified date range. Please check your permissions or update the date range above."
+            return
+        }
+        # -----------
+                                                                                                                            <# for comparison, here's how TonyRedmond handles the above
+            [array]$Messages = $Null
+            [int]$BatchSizeForMessages = 2000
+                # original code [array]$MessagePage = Get-MessageTrace -StartDate $StartDate -EndDate $EndDate -PageSize 1000 -Page $i -Status "Delivered"
+            Try {
+                # The warning action is suppressed here because we don't want to see warnings when more data is available
+                [array]$MessagePage = Get-MessageTraceV2 -StartDate $StartDate -EndDate $EndDate `
+        	            -ResultSize $BatchSizeForMessages -Status "Delivered" -ErrorAction Stop -WarningAction SilentlyContinue
+                $Messages += $MessagePage
+            } Catch {
+                Write-Host ("Error fetching message trace data: {0}" -f $_.Exception.Message)
+                Break
+            }
+            If ($MessagePage.count -eq $BatchSizeForMessages) {
+                Do {
+                    Write-Host ("Fetched {0} messages so far" -f $Messages.count)
+                    $LastMessageFetched = $MessagePage[-1]
+                    $LastMessageFetchedDate = $LastMessageFetched.Received.ToString("O")
+                    $LastMessageFetchedRecipient = $LastMessageFetched.RecipientAddress
+                    # Fetch the next page of messages
+                    [array]$MessagePage = Get-MessageTraceV2 -StartDate $StartDate -EndDate $LastMessageFetchedDate `
+                        -StartingRecipientAddress $LastMessageFetchedRecipient -ResultSize $BatchSizeForMessages -Status "Delivered" -ErrorAction Stop -WarningAction SilentlyContinue
+                    If ($MessagePage) {
+                        $Messages += $MessagePage
+                    }
+                } While ($MessagePage.count -eq $BatchSizeForMessages)
+            }
+            # Remove Exchange Online public folder hierarchy synchronization messages
+            $Messages = $Messages | Where-Object {$_.Subject -NotLike "*HierarchySync*"}
+            #>
+        # -----------
+        # 12:25 PM 10/21/2025 as of Get-xoMessageTraceV2 -subject is a new [string] param, put it up in the splat - but it's not a regex, (removes my support below)
+        <#
+                if($subject){
+                    $smsg = "Post-Filtering on Subject:$($subject)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    # detect whether to filter on -match (regex) or -like (asterisk, or default non-regex)
+                    if(test-IsRegexPattern -string $subject -verbose:$($VerbosePreference -eq "Continue")){
+                        $smsg = "(detected -subject as regex - using -match comparison)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $MsgsFltrd = $Msgs | ?{$_.Subject -match $subject} ;
+                        if(-not $MsgsFltrd){
+                            $smsg = "Subject: regex -match comparison *FAILED* to return matches`nretrying Subject filter as -Like..." ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $MsgsFltrd = $Msgs | ?{$_.Subject -like $subject} ;
+                        } ; 
+                    } else { 
+                        $smsg = "(detected -subject as NON-regex - using -like comparison)" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        $MsgsFltrd = $Msgs | ?{$_.Subject -like $subject} ;
+                        if(-not $MsgsFltrd){
+                            $smsg = "Subject: -like comparison *FAILED* to return matches`nretrying Subject filter as -match..." ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            $MsgsFltrd = $Msgs | ?{$_.Subject -match $subject} 
+                        } ; 
+                    } ; 
+                    $smsg = "Post Subj filter matches:$(($MsgsFltrd|measure).Count)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
+                    else{ write-host "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    $msgs = $MsgsFltrd ; 
+                } ;
+                #>
+        
+        # new try for balance of non-download work
+        TRY {     
             if($Msgs){
                 # reselect with local time variant
                 $Msgs = $Msgs | select $propsMTAll ; 
@@ -4197,7 +4746,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                             #$FailMsgSummary.isFailOther = $true ; 
                             #$FODetail =  $failed | Get-xoMessageTraceDetail -ea STOP; 
                             # 9:48 AM 5/2/2025 Get-xoMessageTraceDetail pipe fails, blow out into a wait loop
-                            $FODetail = pull-GetxoMessageTraceDetail -Messages $failed ; 
+                            $FODetail = pull-GetxoMessageTraceDetail -Messages $failed ;                            
 
                             $FailMsgSummary.FailDetailEvent = $FODetail.event ; 
                             $FailMsgSummary.FailDetailDetail = $FODetail.Detail ; 
@@ -4890,7 +5439,8 @@ else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 } ; 
             } else { 
                 $smsg = "Unpopulated `$hReports, skipping output to pipeline" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARNING } 
+                # 9:36 AM 10/21/2025 typo fix, WARNING->WARN
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
                 $false | write-output ; 
