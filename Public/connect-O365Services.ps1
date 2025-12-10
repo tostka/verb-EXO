@@ -21,6 +21,7 @@
         AddedWebsite:
         AddedTwitter: 
         REVISIONS
+        * 10:16 AM 12/10/2025 I'd removed/renamed $pltRXOC -> $pltCXO at some point: ren all @pltRXOC -> @pltCXO; correction, caad & cmsol don't support prefix; created pltCAAD cloned pltCXO, removing the prefix, used that 
         * 10:28 AM 6/2/2025 CBH updated looping o365 connect demo block;  debugs functional for useexo & usesc now; 
         *11:40 AM 5/29/2025 hybrid the two vers to one latest; cleaned out unused CBH params
         * 5:00 PM 5/23/2025 added useSC support, and UPN auth; updated connect-exo() to support upn properly; rolled reconnect-exo into an alias of connect-exo ; 
@@ -970,26 +971,30 @@
 
             #region useEXO ; #*------v useEXO v------
             # 1:29 PM 9/15/2022 as of MFA & v205, have to load EXO *before* any EXOP, or gen get-steppablepipeline suffix conflict error
-            if($useEXO){
-                $pltCXO = [ordered]@{
-                    Prefix = $XODefaultPrefix ;
-                    TenOrg = $TenOrg ; 
-                    Silent = $($silent) ; 
-                    #Verbose = ($PSBoundParameters['Verbose'] -eq $true); 
-                } ;
-                if($AdminAccount){
-                    $pltCXO.add('UserPrincipalName',$AdminAccount) ; 
-                } ; 
-                if($Credential){
-                    $pltCXO.add('Credential',$Credential) ; 
-                } ; 
-                if(-not ($AdminAccount -OR $Credential) -AND $UserRole){
-                    $pltCXO.add('UserRole',$UserRole) ; 
-                } ; 
+            # 10:38 AM 12/10/2025 move pltcxo build outside of useexo: we need it for building dependant connection splats
+            $pltCXO = [ordered]@{
+                Prefix = $XODefaultPrefix ;
+                TenOrg = $TenOrg ; 
+                Silent = $($silent) ; 
+                #Verbose = ($PSBoundParameters['Verbose'] -eq $true); 
+            } ;
+            if($AdminAccount){
+                $pltCXO.add('UserPrincipalName',$AdminAccount) ; 
+            } ; 
+            if($Credential){
+                $pltCXO.add('Credential',$Credential) ; 
+            } ; 
+            if(-not ($AdminAccount -OR $Credential) -AND $UserRole){
+                $pltCXO.add('UserRole',$UserRole) ; 
+            } ; 
+            # we need a Prefix-less splat for connect-aad and connect-msol (neither supports prfx):
+            $pltCAAD = $pltCXO ; 
+            $pltCAAD.remove('Prefix')
+            if($useEXO){                
                 $smsg = "Connect-EXO w`n$(($pltCXO|out-string).trim())" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                connect-exo @pltCXO ; 
+                connect-exo @pltCXO ;                 
             } else {
                 $smsg = "(`$useEXO:$($useEXO))" ;
                 if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
@@ -1040,7 +1045,7 @@
                 $smsg = "(loading MSOL...)" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } Error|Warn|Debug
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                connect-msol @pltRXOC ;
+                connect-msol @pltCAAD ;
                 TRY{$MsolCo = Get-MsolCompanyInformation -ea stop ; $ret_ccO365S.hasMSOL = $true} CATCH {$ret_ccO365S.hasMSOL = $false } 
             } else {
                 $smsg = "(`$UseMSOL:$($UseMSOL))" ;
@@ -1057,7 +1062,7 @@
                 $smsg = "(loading AAD...)" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                Connect-AAD @pltRXOC ;
+                Connect-AAD @pltCAAD ;
                 TRY{$AADTenant = Get-AzureADTenantDetail -ea stop ; $ret_ccO365S.hasAAD = $true} CATCH {$ret_ccO365S.hasAAD = $false }  ; 
             } else {
                 $smsg = "(`$UseAAD:$($UseAAD))" ;
@@ -1238,8 +1243,8 @@
                 $verbose = ($VerbosePreference -eq "Continue") ;
             } ;
             disconnect-exo ;
-            if ($script:useEXOv2) { Connect-EXO2 @pltRXOC }
-            else { Connect-EXO @pltRXOC } ;
+            if ($script:useEXOv2) { Connect-EXO2 @pltCXO }
+            else { Connect-EXO @pltCXO } ;
             # reenable VerbosePreference:Continue, if set, during mod loads
             if($VerbosePrefPrior -eq "Continue"){
                 $VerbosePreference = $VerbosePrefPrior ;
