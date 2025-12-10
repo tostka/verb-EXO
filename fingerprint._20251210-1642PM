@@ -225,7 +225,6 @@ Get-EXOMessageTraceExported:End
 Get-EXOMessageTraceExported:Days
 Get-EXOMessageTraceExported:subject
 Get-EXOMessageTraceExported:MessageSubject
-Get-EXOMessageTraceExported:SubjectFilterType
 Get-EXOMessageTraceExported:Status
 Get-EXOMessageTraceExported:DeliveryStatus
 Get-EXOMessageTraceExported:EventId
@@ -233,7 +232,6 @@ Get-EXOMessageTraceExported:MessageId
 Get-EXOMessageTraceExported:MessageTraceId
 Get-EXOMessageTraceExported:FromIP
 Get-EXOMessageTraceExported:ToIP
-Get-EXOMessageTraceExported:ResultSize
 Get-EXOMessageTraceExported:SimpleTrack
 Get-EXOMessageTraceExported:DetailedReportRuleHits
 Get-EXOMessageTraceExported:MessageTraceDetailLimit
@@ -284,7 +282,6 @@ Get-EXOMessageTraceTDO:End
 Get-EXOMessageTraceTDO:Days
 Get-EXOMessageTraceTDO:subject
 Get-EXOMessageTraceTDO:MessageSubject
-Get-EXOMessageTraceTDO:SubjectFilterType
 Get-EXOMessageTraceTDO:Status
 Get-EXOMessageTraceTDO:DeliveryStatus
 Get-EXOMessageTraceTDO:EventId
@@ -292,7 +289,6 @@ Get-EXOMessageTraceTDO:MessageId
 Get-EXOMessageTraceTDO:MessageTraceId
 Get-EXOMessageTraceTDO:FromIP
 Get-EXOMessageTraceTDO:ToIP
-Get-EXOMessageTraceTDO:ResultSize
 Get-EXOMessageTraceTDO:SimpleTrack
 Get-EXOMessageTraceTDO:DetailedReportRuleHits
 Get-EXOMessageTraceTDO:MessageTraceDetailLimit
@@ -343,7 +339,6 @@ get-EXOMsgTraceDetailed:End
 get-EXOMsgTraceDetailed:Days
 get-EXOMsgTraceDetailed:subject
 get-EXOMsgTraceDetailed:MessageSubject
-get-EXOMsgTraceDetailed:SubjectFilterType
 get-EXOMsgTraceDetailed:Status
 get-EXOMsgTraceDetailed:DeliveryStatus
 get-EXOMsgTraceDetailed:EventId
@@ -351,7 +346,6 @@ get-EXOMsgTraceDetailed:MessageId
 get-EXOMsgTraceDetailed:MessageTraceId
 get-EXOMsgTraceDetailed:FromIP
 get-EXOMsgTraceDetailed:ToIP
-get-EXOMsgTraceDetailed:ResultSize
 get-EXOMsgTraceDetailed:SimpleTrack
 get-EXOMsgTraceDetailed:DetailedReportRuleHits
 get-EXOMsgTraceDetailed:MessageTraceDetailLimit
@@ -1080,7 +1074,6 @@ Get-EXOMessageTraceExportedTDO:End
 Get-EXOMessageTraceExportedTDO:Days
 Get-EXOMessageTraceExportedTDO:subject
 Get-EXOMessageTraceExportedTDO:MessageSubject
-Get-EXOMessageTraceExportedTDO:SubjectFilterType
 Get-EXOMessageTraceExportedTDO:Status
 Get-EXOMessageTraceExportedTDO:DeliveryStatus
 Get-EXOMessageTraceExportedTDO:EventId
@@ -1088,7 +1081,6 @@ Get-EXOMessageTraceExportedTDO:MessageId
 Get-EXOMessageTraceExportedTDO:MessageTraceId
 Get-EXOMessageTraceExportedTDO:FromIP
 Get-EXOMessageTraceExportedTDO:ToIP
-Get-EXOMessageTraceExportedTDO:ResultSize
 Get-EXOMessageTraceExportedTDO:SimpleTrack
 Get-EXOMessageTraceExportedTDO:DetailedReportRuleHits
 Get-EXOMessageTraceExportedTDO:MessageTraceDetailLimit
@@ -1627,12 +1619,10 @@ resolve-user:getMobile
 resolve-user:Mobile
 resolve-user:getQuotaUsage
 resolve-user:Quota
-resolve-user:DeletedItems
 resolve-user:getPerms
 resolve-user:Perms
 resolve-user:getPermissions
 resolve-user:ResolveForwards
-resolve-user:xoMobileDeviceOLDThreshold
 resolve-user:rgxAccentedNameChars
 resolve-user:TenOrg
 resolve-user:Credential
