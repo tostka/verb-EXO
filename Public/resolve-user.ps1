@@ -18,6 +18,30 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 4:40 PM 12/11/2025 finished conversion to - marginally functional MG\get-MGUser, get-MGUserLicenseDetails, get-MGUserManager support. 
+    rebuilt the property filters to accomodate the mg variant property names; 
+    added get-mguserFull(), which force pulls a complete set of usable properties, returns the mguser object to pipeline
+    rejiggered properties to populate fields that are there, but empty by default, at least the useful ones. 
+    There are some audit log & service tied props, that throw Access Denied.
+    Also had to add Group read all scope to get memberof (and still went to the long-functional Exchange-based memberof resolution, the MG is another 💩 show).
+    $MGPermissionsScope = @("User.Read.All","Group.Read.All")
+    renamed regions AAD -> MG refs 
+    Shift of cloud user to MG rEsulted in a new bug - convert-clixml suddenly began never infishing, and genreated a 8gb .xml file
+    Attempts to test scale revealed graph.api produces broken unclosed xml elements: 
+        `Get-MgUser` piped to `Export-Clixml` is often caused by an issue in how 
+        PowerShell handles complex or deeply nested objects during the XML 
+        serialization process. This is a known issue within PowerShell itself, 
+        especially when dealing with certain object structures returned by the 
+        Microsoft Graph cmdlets.  
+    Recommendations were to simplfiy the objects:
+    Everything but the new MGUser, MGUserManager were long standing normal objs
+    - I reselected MGUser with the same $prpMGUser set that spec'd the -propertiees for the Get-MgUser cmd
+    - I also converted the MGUserManager hashtable (what comes out of the qry) into a psCustomObject, and remounded it to the exportable object. 
+    That ccombo worked past the issues, and resulted in 800k-1.7mb xml files for single accounts. 
+    Ridiculous that MS forces this type of half baked garbage on us, when we've had long-standing high-function solutions *for years*
+
+
+    * 4:35 PM 12/10/2025 extensive fixes: damage from MS fully blocking al AzureAdUser access, and forced march to marginally compat get-MGUser command. Had to do a lot of revising, including in connecto o365 functions. Also fixed breaks in start-log call (was logging into module dir). 
     * 9:39 AM 10/10/2025 add: if -getQuotaUsage, and sharedmailbox recipienttypedetails, output info about Deleted Items & Sent Items OL mgmt regkeys.
     * 1:45 PM 9/23/2025 removed err-source connect-exo2 call (retured) ; added expanded mobile device reporting, testing Microsoft Nativ esync protocol (Outlook|REST clienttype) tests, explciit 'EAS' stigma tagging in outputs (wastes time t-shooting unsupported 3rd-party clients; given Security formally prefers OLM client over otheres).
     * 2:24 PM 8/1/2025 pulled unused whpassfail defs
@@ -451,7 +475,7 @@ function resolve-user {
         8/18/2017 4:13:54 PM | 2/23/2024 8:23:33 AM
         Desc : 8/21/17 FT for FNAME LNAME 146294 -bk
         LicenseGroup:(direct-assigned E3)
-        ===$hSum.AADUserMgr: 
+        ===$hSum.MGUserMgr: 
         UserPrincipalName       | Mail                   
         FNAME.LNAME@DOMAIN.COM | FNAME.LNAME@DOMAIN.COM
         OpOU : OU=Users,OU=ELP,DC=SD,DC=sub,DC=domain,DC=com
@@ -894,6 +918,10 @@ function resolve-user {
         $propsAADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName',
             'StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone','Enabled','DistinguishedName' ;
         #'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime','AccountEnabled' ;
+        $propsMGU = 'UserPrincipalName','DisplayName','GivenName','Surname','JobTitle','CompanyName','Department','officeLocation',
+            'StreetAddress','City','State','PostalCode','BusinessPhones','MobilePhone','accountEnabled'
+        # 12:34 PM 12/11/2025 doesn't exist in MGU proprs (onprem,'onPremisesDistinguishedName' is closest, OnPrem OU) ;
+        #'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime','AccountEnabled' ;
         # 3:59 PM 10/9/2024 used for complete miss gadu search results props
         $prpADU = 'DistinguishedName','GivenName','Surname','Name','UserPrincipalName','mailNickname','SamAccountName','physicalDeliveryOfficeName','msExchRecipientDisplayType','msExchRecipientTypeDetails','msExchRemoteRecipientType','msExchWhenMailboxCreated' ; 
         $propsAADUfed = 'UserPrincipalName','name','ImmutableId','DirSyncEnabled','LastDirSyncTime' ;
@@ -924,7 +952,7 @@ function resolve-user {
         $propsADL5 = 'whenCreated','whenChanged' ; 
         $propsADL6 = @{Name='Desc';Expression={$_.Description }} ;
         $propsADL7 = 'Info' ;
-
+        
         # line1-5 AADU outputs
         <# full size
         $propsAADL1 = 'UserPrincipalName','DisplayName','GivenName','Surname','JobTitle' ;
@@ -944,6 +972,19 @@ function resolve-user {
         $propsAADL4 = @{Name='Dsync';Expression={$_.DirSyncEnabled }}, @{Name='ImutID';Expression={$_.ImmutableId }}, 
             @{Name='LastDSync';Expression={$_.LastDirSyncTime }}, @{Name='UseLoc';Expression={$_.UsageLocation }};
         $propsAADL5 = 'ObjectType','UserType', @{Name='Enabled';Expression={$_.AccountEnabled }} ;
+        # MGU equivs
+        $propsMGUL1 = @{Name='UPN';Expression={$_.UserPrincipalName }}, @{Name='DName';Expression={$_.DisplayName }},
+            @{Name='FName';Expression={$_.GivenName }},@{Name='LName';Expression={$_.Surname }},
+            @{Name='Title';Expression={$_.JobTitle }};
+        $propsMGUL2 = @{Name='Company';Expression={$_.CompanyName }},@{Name='Dept';Expression={$_.Department }},
+            @{Name='Ofc';Expression={$_.officeLocation }} ;    
+        $propsMGUL3 = @{Name='Street';Expression={$_.StreetAddress }}, 'City','State',
+            @{Name='Zip';Expression={$_.PostalCode }}, @{Name='Phone';Expression={$_.BusinessPhones }},
+            @{Name='Mobile';Expression={$_.MobilePhone }} ; 
+        $propsMGUL4 = @{Name='Dsync';Expression={$_.OnPremisesSyncEnabled }}, @{Name='ImutID';Expression={$_.OnPremisesImmutableId }},
+            @{Name='LastDSync';Expression={$_.OnPremisesLastSyncDateTime }}, @{Name='UseLoc';Expression={$_.UsageLocation }};
+        $propsMGUL5 = @{Name='ObjectType';Expression={'User'}}, @{Name='UserType';Expression={$_.UserType}}
+        # configured ObjectType as a static 'User', as it's no longer a property and implied by the underlying class/object type returned.
 
         #$propsAADMgr = 'UserPrincipalName','Mail',@{Name='OpDN';Expression={$_.ExtensionProperty.onPremisesDistinguishedName }} ;
         # get mgr OU, not DN: ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1 ) -join ','
@@ -951,6 +992,15 @@ function resolve-user {
             @{Name='OpOU';Expression={($_.ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;
         $propsAADMgrL1 = 'UserPrincipalName','Mail' ;
         $propsAADMgrL2 = @{Name='OpOU';Expression={($_.ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;
+        # MGU vers
+        $propsMGUMgr = @{Name='userPrincipalName';Expression={$_.userPrincipalName }},
+            @{Name='mail';Expression={$_.mail}} ; 
+        #$propsMGUMgrL1 = 'UserPrincipalName','Mail' ;
+        #$propsMGUMgrL2 = @{Name='OpOU';Expression={($_.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;
+        # NOTE w mg, and the mgUserManager, it's a hashtable/dictionary, and to get it to return key/values, YOU HAVE TO EXACTLY MATCH THE CASE OF THE KEY! userPrincipalName <> UserPrincipalName (1st works, 2nd doesn't)
+        $propsMGUMgrL1 = @{Name='userPrincipalName';Expression={$_.userPrincipalName }},
+            @{Name='mail';Expression={$_.mail}} 
+        $propsMGUMgrL2 = @{Name='OpOU';Expression={ ($_.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;  
         $sQot = [char]34 ;
         $sQotS = [char]39 ;
 
@@ -1227,56 +1277,135 @@ function resolve-user {
         function get-MgUserFull{
             <#
             .SYNOPSIS
-            Wrapper for get-MGUser that *forces* it to return a full set of user properties, to approx the get-AzureAdUser that they've taken away, wo less f'ing around retrying queries.
-            .EXAMPLE
-            PS> $MGU = get-MgUserFul -userid xxx@yyy.com  ;             
+            get-MgUserFull.ps1 - Wrapper for get-MGUser that *forces* it to return a full set of user properties, to approx the get-AzureAdUser that they've taken away, wo less f'ing around retrying queries.
             .NOTES
-             MS has lobotomized get-MgUser as compares to the long-standing functional get-AzureAdUser 
-             and returning the full suite of user properties now requires a bunch of horse hockey to retrieve - in favor of their cheesball, money grubbing 'lean' property set. 
-             fk-em! We're going to force a full property set return, *every time*
-             For fancier filter & top use, use those to return an MGUser with a userid, and then recycle the user ID into this, to retrieve a fully populated user object
-            VERSION:
+            Version     : 0.0.
+            Author      : Todd Kadrie
+            Website     : http://www.toddomation.com
+            Twitter     : @tostka / http://twitter.com/tostka
+            CreatedDate : 2025-
+            FileName    : get-MgUserFull.ps1
+            License     : MIT License
+            Copyright   : (c) 2025 Todd Kadrie
+            Github      : https://github.com/tostka/verb-XXX
+            Tags        : Powershell
+            AddedCredit : REFERENCE
+            AddedWebsite: URL
+            AddedTwitter: URL
+            REVISIONS
+            * 10:46 AM 12/11/2025 reworked $prpMGUser list, added items that are unpop'd propoerties, and pushed useful Additionalproperties from OnPrem, into expansion, updated CBH
             * 12:18 PM 12/10/2025 init
+            .DESCRIPTION
+            get-MgUserFull.ps1 - Wrapper for get-MGUser that *forces* it to return a full set of user properties, to approx the get-AzureAdUser that they've taken away, wo less f'ing around retrying queries.
+
+            MS has lobotomized get-MgUser as compares to the long-standing functional get-AzureAdUser 
+            and returning the full suite of user properties now requires a bunch of horse hockey to retrieve - in favor of their cheesball, money grubbing 'lean' property set. 
+            fk-em! We're going to force a full property set return, *every time*
+            For fancier filter & top use, use those to return an MGUser with a userid, and then recycle the user ID into this, to retrieve a fully populated user object
+
+            .PARAMETER  UserID
+            Useridentifier (UPN, GUID etc) [-UserID UPN@DOMAIN.COM]
+            .INPUTS
+            None. Does not accepted piped input.(.NET types, can add description)
+            .OUTPUTS
+            Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser
+            System.Boolean
+            [| get-member the output to see what .NET obj TypeName is returned, to use here]
+            .EXAMPLE
+            PS> $mgu = get-MgUserFull -userid UPN@DOMAIN.COM ; 
+            Typical call
+            .LINK
+            https://github.com/tostka/verb-MG
             #>
             [CmdletBinding()]
             PARAM(
-                [Parameter(HelpMessage="Source Profile Machine [-SourceProfileMachine CLIENT]")]
-                    # if you want to default a value but ensure user doesn't override with null, don't use Mandetory, use...
+                [Parameter(HelpMessage="Array of Useridentifiers (UPN, GUID etc) [-UserID UPN@DOMAIN.COM]")]
                     [ValidateNotNullOrEmpty()]
-                    [string]$UserID
+                    [string[]]$UserID
             )
-            $prpMGUser = @(
-              # Identity
-              'id','userPrincipalName','mail','mailNickname','proxyAddresses','otherMails',
-              # Display/profile
-              'displayName','givenName','surname','jobTitle','department','companyName',
-              'mobilePhone','businessPhones','preferredLanguage',
-              # Location
-              'city','state','country','officeLocation',          # AzureAD's PhysicalDeliveryOfficeName maps to officeLocation
-              # Account state
-              'accountEnabled','userType',
-              # Licensing
-              'assignedLicenses','assignedPlans',
-              # Hybrid / sync
-              'onPremisesImmutableId','onPremisesDistinguishedName',
-              'onPremisesSamAccountName','onPremisesSecurityIdentifier',
-              'onPremisesSyncEnabled','onPremisesDomainName',
-              # On‑prem extension attrs 1–15
-              'onPremisesExtensionAttributes',
-              # Misc often used
-              'creationType'
-            )
-            # Retrieve one user with those properties
-            if($MGUser = Get-MgUser -UserId "user@contoso.com" -Property $prpMGUser){
-                $MGUser | write-output ; 
-            } ; 
+            BEGIN{
+                # FORCE fully populated key user properties (overrides default return of subset garbage)
+                $prpMGUser = @(
+                    # Identity
+                    'id','userPrincipalName','mail','mailNickname','proxyAddresses','otherMails','otherMails',
+                    # Display/profile
+                    'displayName','givenName','surname','jobTitle','department','companyName',
+                    'mobilePhone','businessPhones','preferredLanguage',
+                    'jobTitle',
+                    'department','companyName',
+                    'StreetAddress','city','state','PostalCode','country',
+                    'officeLocation','UsageLocation',
+                    # Account state
+                    'accountEnabled','userType',
+                    # Licensing
+                    'assignedLicenses','assignedPlans',
+                    # Hybrid / sync
+                    'onPremisesImmutableId','onPremisesDistinguishedName','onPremisesSecurityIdentifier',
+                    'OnPremisesUserPrincipalName','onPremisesSamAccountName','onPremisesDomainName',
+                    'onPremisesSyncEnabled','OnPremisesLastSyncDateTime','OnPremisesProvisioningErrors','onPremisesExtensionAttributes'
+                    # add prev missing sync data props
+                    # Misc often used
+                    'creationType', 'CreatedDateTime','DeletedDateTime','EmployeeHireDate','EmployeeId','EmployeeType','HireDate',  
+                    'Manager',
+                    'LicenseAssignmentStates','LicenseDetails','ProvisionedPlans',
+                    'MemberOf',
+                    # add AdditionalProperties pulls (should move to primary property, also accessible as .additionalproperties['xxx'] property      
+                    'mobilePhone','businessPhones',
+                    'preferredLanguage'
+                ) | select -unique ; 
+                if(-not (get-command Get-MgUser)){
+                    $smsg = "Missing Get-MgUser!" ; 
+                    $smsg += "`nPre-connect to Microsoft.Graph via:" ;
+                    $smsg += "`nConnect-MgGraph -Scopes 'User.Read.All', 'Directory.Read.All', 'Group.Read.All'" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    BREAK ; 
+                } ; 
+                #region IS_PIPELINE ; #*------v IS_PIPELINE v------
+                # check if using Pipeline input or explicit params:
+                if ($PSCmdlet.MyInvocation.ExpectingInput) {
+                    $smsg = "Data received from pipeline input: '$($InputObject)'" ;
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } else {
+                    # doesn't actually return an obj in the echo
+                    #$smsg = "Data received from parameter input: '$($InputObject)'" ;
+                    #if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    #else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                } ;
+                #endregion IS_PIPELINE ; #*------^ END IS_PIPELINE ^------
+            } 
+            PROCESS{
+                foreach($id in $userid){
+                    TRY{
+                        $smsg = "Get-MgUser -UserId $($id)" ; 
+                        if($VerbosePreference -eq "Continue"){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        $MGUser = Get-MgUser -UserId $id -Property $prpMGUser -erroraction STOP ; 
+                    } CATCH {$ErrTrapd=$Error[0] ;
+                        write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
+                        $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        CONTINUE
+                     } ;            
+                    if($MGUser){
+                        $MGUser | write-output ; 
+                    } else{
+                        $smsg = "UNABLE TO: Get-MgUser -UserId $($userid)" ; 
+                        if(gcm Write-MyWarning -ea 0){Write-MyWarning $smsg } else {
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN} else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        } ;
+                    }; 
+                } # loop-E
+            } ;  # PROC-E
         } ; 
         #endregion GET_MGUSERFULL ; #*------^ END get-MgUserFull ^------
 
         #endregion FUNCTIONS ; #*======^ END FUNCTIONS ^======
 
         #region SERVICE_CONNECTIONS #*======v END SERVICE_CONNECTIONS v======
-        $MGPermissionsScope = "User.Read.All" # get-AzureAdUser baseline requirements
+        $MGPermissionsScope = @("User.Read.All","Group.Read.All") # get-AzureAdUser baseline requirements, memberof requires groupread as well
 
         #region BROAD_SVC_CONTROL_VARIS ; #*======v BROAD_SVC_CONTROL_VARIS  v======   
         $useO365 = $true ; 
@@ -2175,7 +2304,8 @@ function resolve-user {
                 IsLicensed = $false ; 
                 IsDisabledOU = $false ; 
                 IsADDisabled = $false ; 
-                IsAADDisabled = $false ; 
+                #IsAADDisabled = $false ; 
+                IsMGDisabled = $false ; 
             } ;
             $procd++ ;
             write-verbose "processing:$($usr)" ;
@@ -2207,7 +2337,8 @@ function resolve-user {
                 $hsum.add('xoMailboxFolderStats',$null) ; 
                 $hsum.add('xoEffectiveQuotas',$null) ; 
                 $hsum.add('xoNetOfSendReceiveQuotaMB',$null) ; 
-                [string]$ofMbxFolderStats = $ofile.replace('REPORT',"folder-sizes-NONHIDDEN-NONZERO") ; 
+                [string]$ofMbxFolderStats = $logfile.replace('LOG-BATCH-EXEC',"folder-sizes-NONHIDDEN-NONZERO").replace('-log','') ; 
+                #$ofile.replace('REPORT',"folder-sizes-NONHIDDEN-NONZERO") ; 
 
             } ; 
             # 2:35 PM 12/26/2024 getPerms
@@ -3596,7 +3727,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     } ; 
                 } 
                 #endregion GADU_NAME ; #*------^ END GADU_NAME ^------
-                #region GAADU_NAME ; #*------v GAADU_NAME v------
+                #region GMGU_NAME ; #*------v GMGU_NAME v------
                 # do MGUser search on fname/lname
                 if($hSum.lname){
                     # try as surname & givenname
@@ -3649,7 +3780,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                        } ; 
                     } ; 
                 } 
-                #endregion GAADU_NAME ; #*------^ END GAADU_NAME ^------
+                #endregion GMGU_NAME ; #*------^ END GMGU_NAME ^------
 
                 $abortReport = $true ; 
 
@@ -3841,30 +3972,30 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
             #endregion xogetPerms2 ; #*------^ END xogetPerms2 ^------
             #endregion FORCE_XOMBXINFO ; #*------^ END FORCE_XOMBXINFO ^------
 
-            #region RV_VIA_GAADU ; #*------v RV_VIA_GAADU v------
+            #region RV_VIA_GMGU ; #*------v RV_VIA_GMGU v------
             #$pltgMsoUsr=@{UserPrincipalName=$null ; MaxResults= $MaxRecips; ErrorAction= 'STOP' } ;
             # maxresults is documented:
             # but causes a fault with no $error[0], doesn't seem to be functional param, post-filter
             # ren refs of $pltgMsoUsr -> $pltgAADUsr
-            $pltgAADUsr=@{UserPrincipalName=$null ; ErrorAction= 'STOP' } ;
-            if($hSum.ADUser){$pltgAADUsr.UserPrincipalName  +=  $hSum.ADUser.UserPrincipalName }
-            elseif($hSum.xoMailbox){$pltgAADUsr.UserPrincipalName += $hsum.xoMailbox.UserPrincipalName }
-            elseif($hSum.xoMUser){$pltgAADUsr.UserPrincipalName  +=  $hSum.xoMUser.UserPrincipalName }
-            elseif($hSum.txGuest){$pltgAADUsr.UserPrincipalName  +=  $hSum.txGuest.userprincipalname }
+            $pltgMGUsr=@{UserPrincipalName=$null ; ErrorAction= 'STOP' } ;
+            if($hSum.ADUser){$pltgMGUsr.UserPrincipalName  +=  $hSum.ADUser.UserPrincipalName }
+            elseif($hSum.xoMailbox){$pltgMGUsr.UserPrincipalName += $hsum.xoMailbox.UserPrincipalName }
+            elseif($hSum.xoMUser){$pltgMGUsr.UserPrincipalName  +=  $hSum.xoMUser.UserPrincipalName }
+            elseif($hSum.txGuest){$pltgMGUsr.UserPrincipalName  +=  $hSum.txGuest.userprincipalname }
             else{} ;
 
-            if($pltgAADUsr.UserPrincipalName){
-                #region FORCE_GAADU ; #*------v FORCE_GAADU v------
+            if($pltgMGUsr.UserPrincipalName){
+                #region FORCE_GMGU ; #*------v FORCE_GMGU v------
                 if(-not($hSum.MGUser)){
-                    write-host -foregroundcolor yellow "=get-MGUser -userid $($pltgAADUsr.UserPrincipalName)>:" ;
+                    write-host -foregroundcolor yellow "=get-MGUser -userid $($pltgMGUsr.UserPrincipalName)>:" ;
                     TRY{
                         #caad  -Verbose:$false -silent ;
-                        #write-verbose "get-AzureAdUser  -objectid $($pltgAADUsr.UserPrincipalName)" ;
-                        write-verbose "Get-MgUser -userid  $($pltgAADUsr.UserPrincipalName)" ;
+                        #write-verbose "get-AzureAdUser  -objectid $($pltgMGUsr.UserPrincipalName)" ;
+                        write-verbose "Get-MgUser -userid  $($pltgMGUsr.UserPrincipalName)" ;
                         # have to postfilter, if want specific count -maxresults catch's with no $error[0]
-                        #$hSum.AADUser   +=  get-AzureAdUser  -objectid $pltgAADUsr.UserPrincipalName  | select -first $MaxRecips;  ;
+                        #$hSum.AADUser   +=  get-AzureAdUser  -objectid $pltgMGUsr.UserPrincipalName  | select -first $MaxRecips;  ;
                         # forced migration AAD -> MG
-                        $hSum.MGUser   +=  get-MgUserFull -userid $pltgAADUsr.UserPrincipalName | select -first $MaxRecips;  ;
+                        $hSum.MGUser   +=  get-MgUserFull -userid $pltgMGUsr.UserPrincipalName | select -first $MaxRecips;  ;
                         <# for remote federated, AADU brings in summary of remote ADUser:
                             $hsum.aaduser.ExtensionProperty
                             Key                                                       Value
@@ -3880,12 +4011,25 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             extension_9d88b2c96135413e88afff067058e860_employeeNumber 1234
                              $hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName
                             CN=XXX,OU=XXX,...
+
+                            # MGUser has these: (unpop'd in some cases)
+                            OnPremisesDistinguishedName           : CN=Todd Kadrie,OU=IS,OU=Users,OU=LYN,DC=global,DC=ad,DC=toro,DC=com
+                            OnPremisesDomainName                  : global.ad.toro.com
+                            OnPremisesExtensionAttributes         : Microsoft.Graph.PowerShell.Models.MicrosoftGraphOnPremisesExtensionAttributes
+                            OnPremisesImmutableId                 : UC7OjGZAYUK/qsVZatOR6g==
+                            OnPremisesLastSyncDateTime            :
+                            OnPremisesProvisioningErrors          :
+                            OnPremisesSamAccountName              : kadrits
+                            OnPremisesSecurityIdentifier          : S-1-5-21-2222296782-158576315-1096482972-75073
+                            OnPremisesSyncEnabled                 : True
+                            OnPremisesUserPrincipalName           :
+
                         #>
                         #write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser|out-string).trim())" ;
                         # ObjectId                             DisplayName   UserPrincipalName      UserType
 
                         #lic pull: $hSum.AADUser | Get-AzureADUserLicenseDetail -ea STOP | select -exp SkuPartNumber
-                        write-verbose "`$hsum.AADUserLics = AADU | Get-AzureADUserLicenseDetail -ea STOP | select -exp SkuPartNumber" ;
+                        write-verbose "`$hSum.MGUserLics = Get-MgUserLicenseDetail -userid $($hSum.MGUser.userprincipalname) | select -exp SkuPartNumber" ;
                         #$hsum.AADUserLics  +=   $hSum.AADUser | Get-AzureADUserLicenseDetail -ea STOP | select -exp SkuPartNumber ; 
                         # forcedmigr aad -> mg: Get-MgUserLicenseDetail -userid $mgu.userprincipalname
                         #$hsum.MGUserLics  +=   $hSum.MGUser | Get-MgUserLicenseDetail -ea STOP | select -exp SkuPartNumber ; 
@@ -3901,21 +4045,23 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     } ;
 
                 } ;
-                #endregion FORCE_GAADU ; #*------^ END FORCE_GAADU ^------
-                #region FORCE_AADU_MGR ; #*------v FORCE_AADU_MGR v------
-                if(-not($hSum.AADUserMgr) -AND $hSum.AADUser ){
-                    write-host -foregroundcolor yellow "=get-AADuserManager $($hSum.AADUser.UserPrincipalName)>:" ;
+                #endregion FORCE_GMGU ; #*------^ END FORCE_GMGU ^------
+                #region FORCE_MGU_MGR ; #*------v FORCE_MGU_MGR v------
+                #if(-not($hSum.AADUserMgr) -AND $hSum.AADUser ){
+                if(-not($hSum.MGUserMgr) -AND $hSum.MGUser ){
+                    write-host -foregroundcolor yellow "=Get-MgUserManager $($hSum.MGUser.UserPrincipalName)>:" ;
                     TRY{
-                        caad  -Verbose:$false -silent ;
-                        write-verbose "get-AzureAdUserManager  -objectid $($hSum.AADUser.UserPrincipalName)" ;
+                        #caad  -Verbose:$false -silent ;
+                        write-verbose "Get-MgUserManager  -objectid $($hSum.MGUser.UserPrincipalName)" ;
                         # have to postfilter, if want specific count -maxresults catch's with no $error[0]
-                        #$hSum.MGUserMgr   +=  get-AzureAdUserManager  -objectid $hSum.AADUser.UserPrincipalName  | select -first $MaxRecips;  ;
+                        #$hSum.MGUserMgr   +=  get-AzureAdUserManager  -objectid $hSum.MGUser.UserPrincipalName  | select -first $MaxRecips;  ;
                         # forcedmigr aad -> mg: 
                         # they've buried all but the id property in AdditionalProperties [fk that!]
-                        $hSum.AADUserMgr   +=  (Get-MgUserManager   -objectid $hSum.AADUser.UserPrincipalName  -Property $prpMGUser | select -first $MaxRecips).AdditionalProperties                        
-                        #write-verbose "`$hSum.AADUserMgr:`n$(($hSum.AADUserMgr|out-string).trim())" ;
+                        #$hSum.MGUserMgr   +=  (Get-MgUserManager  -userid $hSum.MGUser.UserPrincipalName  -Property $prpMGUser | select -first $MaxRecips).AdditionalProperties                        
+                        $hSum.MGUserMgr   +=  (Get-MgUserManager  -userid $hSum.MGUser.UserPrincipalName  -Property $prpMGUser | select -first $MaxRecips).AdditionalProperties                        
+                        #write-verbose "`$hSum.MGUserMgr:`n$(($hSum.MGUserMgr|out-string).trim())" ;
                         # (returns a full AADUser obj for the mgr)
-                        # we can output the DN: $hSum.AADUserMgr.ExtensionProperty.onPremisesDistinguishedName
+                        # we can output the DN: $hSum.MGUserMgr.ExtensionProperty.onPremisesDistinguishedName
                         # useful for determining what 'org' user should be for email address assigns - they get same addr dom as their mgr
                         # |ft -a  $propsaadmgr
                     } CATCH {
@@ -3927,14 +4073,50 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     } ;
 
                 } ;
-                #endregion FORCE_AADU_MGR ; #*------^ END FORCE_AADU_MGR ^------
-
+                #endregion FORCE_MGU_MGR ; #*------^ END FORCE_MGU_MGR ^------
+                #region FORCE_MGU_MEMBEROF ; #*------v FORCE_MGU_MEMBEROF v------
+                if(-not $hSum.xoMemberOf -AND $hsum.xoMailbox.DistinguishedName){
+                    TRY {
+                        write-verbose "get-xorecipient -Filter {Members -eq '$($hsum.xoMailbox.DistinguishedName)'}`n -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup"
+                        $hSum.xoMemberOf  +=  get-xorecipient -Filter "Members -eq '$($hsum.xoMailbox.DistinguishedName)'" -RecipientTypeDetails GroupMailbox,MailUniversalDistributionGroup,MailUniversalSecurityGroup ;
+                        write-verbose "`$hSum.xoMemberOf:`n$(($hSum.xoMemberOf|out-string).trim())" ;
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Continue ;
+                    } ;
+                }else{
+                    $smsg = "Unable to: `$hSum.xoMemberOf = Get-MgUserMemberOf -UserId $($hSum.MGUser.UserPrincipalName)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                }
+                # as is typical, the MG command is too big a PITA and doesn't return what you want anyway. Use the XO cmdlets. 
+                <#
+                if(-not $hSum.xoMemberOf -AND $hSum.MGUser.UserPrincipalName){
+                    TRY{
+                        $hSum.xoMemberOf = (Get-MgUserMemberOf -UserId $hSum.MGUser.UserPrincipalName -Property "DisplayName", "mailNickname" -ConsistencyLevel eventual -ea STOP ).AdditionalProperties.mailNickname
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Continue ;
+                    } ;
+                }else{
+                    $smsg = "Unable to: `$hSum.xoMemberOf = Get-MgUserMemberOf -UserId $($hSum.MGUser.UserPrincipalName)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                }
+                #>
+                #endregion FORCE_MGU_MEMBEROF ; #*------^ END FORCE_MGU_MEMBEROF ^------
                 # display user info:
                 #region OUTPUT_P1 ; #*------v OUTPUT_P1 v------
                 if(-not($hSum.ADUser)){
-                    if($hSum.AADUser.DirSyncEnabled -AND $hSum.aaduser.ExtensionProperty.onPremisesDistinguishedName){
+                    if($hSum.MGUser.OnPremisesSyncEnabled -AND $hSum.aaduser.ExtensionProperty.onPremisesDistinguishedName){
                         #region ADU_FEDERATED ; #*------v ADU_FEDERATED v------
-                        $pltGadu.Identity = $hSum.aaduser.ExtensionProperty.onPremisesDistinguishedName ; 
+                        $pltGadu.Identity = $hSum.MGUser.ExtensionProperty.onPremisesDistinguishedName ; 
                         $hSum.ADUser  += Get-ADUser @pltGadu | select -first $MaxRecips ;
                         if($pltGadu.identity){
                             write-verbose "Get-ADUser w`n$(($pltGadu|out-string).trim())" ;
@@ -3972,15 +4154,23 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     } else { 
                         #region REMOTE_ADU_FEDERATED ; #*------v REMOTE_ADU_FEDERATED v------
                         # remote fed, use AADU to proxy remote AD hybrid info:
-                        write-host -foreground yellow "===`$hSum.AADUser: " #-nonewline;
+                        write-host -foreground yellow "===`$hSum.MGUser: " #-nonewline;
+                        <#
                         $smsg = "$(($hSum.AADUser| select $propsAADL1 |out-markdowntable @MDtbl |out-string).trim())" ;
                         $smsg += "`n$(($hSum.AADUser|select $propsAADL2 |out-markdowntable @MDtbl|out-string).trim())" ;
                         $smsg += "`n$(($hSum.AADUser|select $propsAADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                         $smsg += "`n$(($hSum.AADUser|select $propsAADL4 |out-markdowntable @MDtbl|out-string).trim())" ;
                         $smsg += "`n$(($hSum.AADUser|select $propsAADL5 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        #>
+                        # retool for MGU
+                        $smsg = "$(($hSum.MGUser| select $propsMGUL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                        $smsg += "`n$(($hSum.MGUser|select $propsMGUL2 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        $smsg += "`n$(($hSum.MGUser|select $propsMGUL3 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        $smsg += "`n$(($hSum.MGUser|select $propsMGUL4 |out-markdowntable @MDtbl|out-string).trim())" ;
+                        $smsg += "`n$(($hSum.MGUser|select $propsMGUL5 |out-markdowntable @MDtbl|out-string).trim())" ;
                         #$hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName
                         if($hSum.Federator -ne $TORMeta.adforestname){
-                            $smsg += "`n$($hSum.Federator):Remote ADUser.DN:`n$(($hsum.aaduser.ExtensionProperty.onPremisesDistinguishedName|out-string).trim())" ;
+                            $smsg += "`n$($hSum.Federator):Remote ADUser.DN:`n$(($hSum.MGUser.ExtensionProperty.onPremisesDistinguishedName|out-string).trim())" ;
                         }  ;
                         #endregion REMOTE_ADU_FEDERATED ; #*------^ END REMOTE_ADU_FEDERATED ^------
                     }; 
@@ -3988,9 +4178,9 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     write-host $smsg
 
                     # assert the real names from the user obj
-                    $hSum.dname  +=  $hSum.AADUser.DisplayName ;
-                    $hSum.fname  +=  $hSum.AADUser.GivenName ;
-                    $hSum.lname  +=  $hSum.AADUser.Surname ;
+                    $hSum.dname  +=  $hSum.MGUser.DisplayName ;
+                    $hSum.fname  +=  $hSum.MGUser.GivenName ;
+                    $hSum.lname  +=  $hSum.MGUser.Surname ;
 
                 } else {
                     #region OUTPUT_ADU_INFO ; #*------v OUTPUT_ADU_INFO v------
@@ -4036,16 +4226,16 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     } ; 
                 } ;
                 # AADUser enabled/disabled: .aaduser.AccountEnabled
-                if($hSum.AADUser){
+                if($hSum.MGUser){
                     # 2:31 PM 9/23/2025 fixed typo: .Enabled -> .AccountEnabled
-                    if($hSum.AADUser.AccountEnabled){
+                    if($hSum.MGUser.AccountEnabled){
                         if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){
-                            $smsg = "ADUser:$($hSum.AADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) mbx is *ENABLED!*"
+                            $smsg = "ADUser:$($hSum.MGUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) mbx is *ENABLED!*"
                             write-warning $smsg ;
                         } ;
                     } else {
                         if($hsum.xoRcp.RecipientTypeDetails -match 'SharedMailbox|RoomMailbox|EquipmentMailbox'){} else { 
-                            $smsg = "ADUser:$($hSum.AADUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) is *DISABLED!*"
+                            $smsg = "ADUser:$($hSum.MGUser.userprincipalname) AD Account w $($hsum.xoRcp.RecipientTypeDetails) is *DISABLED!*"
                             write-warning $smsg ;
                         } ; 
                     } ; 
@@ -4059,30 +4249,34 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 # $hSum.AADUser ; $aadu | Get-AzureADUserLicenseDetail  | select -exp SkuPartNumber
                 #if(-not ($hSum.LicenseGroup) -AND ( $hsum.AADUserLics  -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup  +=  '(direct-assigned E3)'} ;
                 # no dom, with aadu licenses
-                if(-not ($hSum.LicenseGroup) -AND ( $hsum.AADUserLics  -contains "ENTERPRISEPACK")){$hSum.LicenseGroup  +=  '(direct-assigned E3)'} ;
+                if(-not ($hSum.LicenseGroup) -AND ( $hSum.MGUserLics  -contains "ENTERPRISEPACK")){$hSum.LicenseGroup  +=  '(direct-assigned E3)'} ;
                 if($hSum.LicenseGroup){$smsg = "LicenseGroup:$($hSum.LicenseGroup)"}
                 else{$smsg = "LicenseGroup:(unresolved, direct-assigned other?)" } ;
                 write-host $smsg ;
                 #endregion LIC_GRP ; #*------^ END LIC_GRP ^------
-                #region OUTPUT_AADUserMgr ; #*------v OUTPUT_AADUserMgr v------
-                if($hSum.AADUserMgr){
+                #region OUTPUT_MGUserMgr ; #*------v OUTPUT_MGUserMgr v------
+                if($hSum.MGUserMgr){
                     #($hSum.AADUserMgr) |ft -a  $propsaadmgr
                     #$smsg += "`nAADUserMgr:`n$(($hSum.AADUserMgr|select $propsAadMgr |out-markdowntable @MDtbl|out-string).trim())" ;
                     # $propsAADMgrL1, $propsAADMgrL2
-                    write-host -foreground yellow "===`$hSum.AADUserMgr: " #-nonewline;
-                    $smsg = "$(($hSum.AADUserMgr| select $propsAADMgrL1 |out-markdowntable @MDtbl |out-string).trim())" ;
-                    #$smsg += "`n$(($hSum.AADUserMgr|select $propsAADMgrL2 |out-markdowntable @MDtbl|out-string).trim())" ;
-                    $smsg += "`n$(($hSum.AADUserMgr|Format-List $propsAADMgrL2|out-string).trim())" ;
-                    #$smsg += "`n$(($hSum.AADUserMgr|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
+                    write-host -foreground yellow "===`$hSum.MGUserMgr: " #-nonewline;
+                    #$smsg = "$(($hSum.MGUserMgr| select $propsAADMgrL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                    $smsg = "$(($hSum.MGUserMgr| select $propsMGUMgrL1 |out-markdowntable @MDtbl |out-string).trim())" ;
+                    #$smsg += "`n$(($hSum.MGUserMgr|select $propsAADMgrL2 |out-markdowntable @MDtbl|out-string).trim())" ;
+                    #$smsg += "`n$(($hSum.MGUserMgr|Format-List $propsAADMgrL2|out-string).trim())" ;
+                    #$smsg += "`n$(($hSum.MGUserMgr|Format-List $propsMGUMgrL2|out-string).trim())" ;
+                    # for mguser, and it's hash, have to change the syntax:
+                    $smsg += "`n$(($hSum.MGUserMgr | select $propsMGUMgrL2|out-string).trim())"
+                    #$smsg += "`n$(($hSum.MGUserMgr|select $propsADL3 |out-markdowntable @MDtbl|out-string).trim())" ;
                 } else {
                     $smsg = "(AADUserMgr was blank, or unresolved)" ;
                 } ;
                 write-host $smsg ;
-                #endregion OUTPUT_AADUserMgr ; #*------^ END OUTPUT_AADUserMgr ^------
+                #endregion OUTPUT_MGUserMgr ; #*------^ END OUTPUT_MGUserMgr ^------
                 #region OUTPUT_QUOTA_N_SIZE ; #*------v OUTPUT_QUOTA_N_SIZE v------
                 if($getQuotaUsage -AND $hSum.xoMailbox){
 
-                    $smsg += "`n`nLicenses:`n$(($hsum.AADUserLics -join ', ' |out-string).trim())`n`n" ; 
+                    $smsg += "`n`nLicenses:`n$(($hSum.MGUserLics -join ', ' |out-string).trim())`n`n" ; 
                     $smsg += "`nwhich specify the following size limits:`n$(($hSum.xoEffectiveQuotas| fl |out-string).trim())`n(UseDatabaseQuotaDefaults:$($hSum.xoMailbox.UseDatabaseQuotaDefaults))" ; 
                     $smsg += "`n`nCurrent TotalMailboxSizeMB: $($hSum.xoMailboxStats.TotalMailboxSizeMB)`n`n" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level PROMPT } 
@@ -4412,7 +4606,7 @@ Mailbox itself :
                 } ;
                 #endregion OUTPUT_MOBILE ; #*------^ END OUTPUT_MOBILE ^------
             } ;
-            #endregion RV_VIA_GAADU ; #*------^ END RV_VIA_GAADU ^------
+            #endregion RV_VIA_GMGU ; #*------^ END RV_VIA_GMGU ^------
             
             # switch ($hSum.OPRcp.recipienttypedetails){
             <#
@@ -4449,15 +4643,15 @@ Mailbox itself :
              } else {
                 write-verbose "(no ADUser found)" ;
             } ;
-            if($hsum.AADUser){
-                $hsum.IsAADDisabled  +=  [boolean]($hsum.AADUser.AccountEnabled -eq $true) ; 
-                $hsum.isDirSynced  +=  [boolean]($hsum.AADUser.DirSyncEnabled  -eq $True)
+            if($hSum.MGUser){
+                $hsum.IsMGDisabled  +=  [boolean]($hSum.MGUser.AccountEnabled -eq $true) ; 
+                $hsum.isDirSynced  +=  [boolean]($hSum.MGUser.OnPremisesSyncEnabled  -eq $True)
             } else {
                 write-verbose "(no AADUser found)" ;
             } ;
             # shift test to aadu
-            if($hSum.AADUser){
-                $hsum.IsLicensed  +=  [boolean]($hSum.AADUser.assignedlicenses.count -gt 0)
+            if($hSum.MGUser){
+                $hsum.IsLicensed  +=  [boolean]($hSum.MGUser.assignedlicenses.count -gt 0)
             } else {
                 write-verbose "(no AADUser found)" ;
             } ;
@@ -4558,10 +4752,10 @@ Mailbox itself :
                 } else {
                     write-verbose "(no ADUser found)" ;
                 } ;
-                if($hsum.IsAADDisabled){
-                    $smsg += "`n--AADUser:$($hsum.AADUser.UserPrincipalName) is *DISABLED* for logon (likely TERM)" ;
+                if($hsum.IsMGDisabled){
+                    $smsg += "`n--AADUser:$($hSum.MGUser.UserPrincipalName) is *DISABLED* for logon (likely TERM)" ;
                 } else {
-                    $smsg += "`n--AADUser:$($hsum.AADUser.UserPrincipalName) is *UN-DISABLED* for logon (improperly offboarded TERM?)" ;
+                    $smsg += "`n--AADUser:$($hSum.MGUser.UserPrincipalName) is *UN-DISABLED* for logon (improperly offboarded TERM?)" ;
                 } ;
                 $smsg += "`n"
                 write-warning $smsg ;
@@ -4574,7 +4768,7 @@ Mailbox itself :
                 ($hsum.oprcp.recipienttypedetails -eq 'RemoteUserMailbox'),
                 ($hsum.xorcp.recipienttypedetails -eq 'Mailuser'),
                 (-not $hsum.xoMailbox),
-                $hsum.AADUser,
+                $hSum.MGUser,
                 $hsum.ADUser,
                 $hsum.isDirSynced,
                 ($hsum.IsNoBrain -eq 1),
@@ -4626,6 +4820,22 @@ opRemoteMailbox.RemoteRoutingAddress:`t$($hsum.opRemoteMailbox.RemoteRoutingAddr
             #endregion ISSUE_DETECT ; #*------^ END ISSUE_DETECT ^------
 
             #region WRITE_OUTPUT ; #*------v WRITE_OUTPUT v------
+            # 4:11 PM 12/11/2025 with move to MG module for user access, I've wound up with massive export .xml files, that were fine pulling from azuread
+            <# even running simple export depth tesets, shows broken xml: 
+                $xmlString = $Rpt | ConvertTo-Xml -Depth $dpth -NoTypeInformation ; 
+                ConvertTo-Xml : Unexpected end of file has occurred. The following elements are not closed: Property, Property, Object, Objects. Line 10, position 47281.
+                At line:1 char:21
+
+                A recommendation is to simplify the object
+                - for MGUser, force select just the targete props (again)
+                $rpt.mguser = $rpt.mguser | select $prpMGUser
+                - for the MGUserMgr hashtable/dict, convert it to pscustomobject
+                $rpt.MGUserMgr = [pscustomobject]$rpt.MGUserMgr ;
+            #>
+            write-verbose "MGUser massive xml export impact: pre strip the objects";
+            $hSum.mguser = $hSum.mguser | select $prpMGUser
+            $hSum.MGUserMgr = [pscustomobject]$hSum.MGUserMgr
+            write-verbose 'Test here'
             if($outObject){
                 if($PSCmdlet.MyInvocation.ExpectingInput){
                     write-verbose "(pipeline input, skipping aggregator, dropping into pipeline)" ;
@@ -4636,7 +4846,9 @@ opRemoteMailbox.RemoteRoutingAddress:`t$($hsum.opRemoteMailbox.RemoteRoutingAddr
             } ELSE {
                 # 3:59 PM 9/18/2023 else export to report file 
                 $Rpt += New-Object PSObject -Property $hSum ;
-                $Rpt | export-clixml -Path $ofile -Depth 100 ;
+                #$Rpt | export-clixml -Path $ofile -Depth 100 ;
+                write-verbose "exporting to $($logfile.replace('LOG-BATCH-EXEC',"REPORT").replace('-log',''))"
+                $Rpt | export-clixml -Path $logfile.replace('LOG-BATCH-EXEC',"REPORT").replace('-log','') -Depth 100 ;
             } ;
             #endregion WRITE_OUTPUT ; #*------^ END WRITE_OUTPUT ^------
             write-host -foregroundcolor green $sBnr.replace('=v','=^').replace('v=','^=') ;
