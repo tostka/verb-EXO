@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 10.1.1.0
+  Version     : 10.1.2.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -23208,6 +23208,11 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:04 PM 12/12/2025 was still diverting logging when .psm1 module into modules dir; also outputing massive export-clixml 3gb files, needed testing of the content prior to exports. 
+    - found that, since adding Get-MgUser Microsoft.graph to the mix, export-clixml can no longer export importable xml code. Even if you message it and pretest with convertto-xml, and try/catch for export errors (none). 
+    still junk output xml. 
+    - so coded in json export support; added -useJson & -Depth parameter (defaults to 2), and along the way found that Value/value key use in exports causes json to throw up, so coded up vio\convert-fromJsonSmart() which works past the issue
+    (traps specific error, and mmd-conversion replaces instances of the first duplicated key, with the second key name). Necessary to get back to importable exported files from this process. 
     * 4:40 PM 12/11/2025 finished conversion to - marginally functional MG\get-MGUser, get-MGUserLicenseDetails, get-MGUserManager support. 
     rebuilt the property filters to accomodate the mg variant property names; 
     added get-mguserFull(), which force pulls a complete set of usable properties, returns the mguser object to pipeline
@@ -23587,6 +23592,10 @@ function resolve-user {
     Silent output (suppress status echos, defaults true)[-silent]
     .PARAMETER outObject
     switch to return a system.object summary to the pipeline[-outObject]
+    .PARAMETER useJson
+    switch to format object pipeline & file exports in JSON format (vs default .xml, avoids issues with export-cliXML and MG module data)[-useJson]
+    .PARAMETER Depth
+    Integer 'depth' to be used for export-clixml (or convertto-json, where -useJson specified) cmdlet for exporting report object to the output format. Directly impacts resulting file size and extent to which full nested objects are captured in the export. Defaults to 2
     .INPUTS
     None. Does not accepted piped input.(.NET types, can add description)
     .OUTPUTS
@@ -23786,6 +23795,9 @@ function resolve-user {
         8/17/2023 10:50:16 PM 1/16/2025 10:08:42 AM 1/16/2025 5:45:14 PM 1/16/2025 5:45:14 PM Outlook     nXnXXn0XnnnXn0nnAAXA0XnnX0XnnnnX Outlook-Android/2.0
     
     Demo with the -getMobile parameter, to return details on xo MobileDevices in use with the EXO mailbox. Demos default output 'xoMobileDeviceStats Count' echo, and detailed xoMobileDeviceStats object output
+    .EXAMPLE
+    PS> resolve-user -users FNAME.LNAME@DOMAIN.com -Ticket 999999 -usejson -depth 2 ; 
+    Example using json output, to Depth of 2.
     .LINK
     https://github.com/tostka/verb-exo
     #>
@@ -23845,7 +23857,11 @@ function resolve-user {
         [Parameter(HelpMessage="Silent output (suppress status echos, defaults true)[-silent]")]
             [switch] $silent=$true,
         [Parameter(HelpMessage="switch to return a system.object summary to the pipeline[-outObject]")]
-            [switch] $outObject
+            [switch] $outObject,        
+        [Parameter(HelpMessage="switch to format object pipeline & file exports in JSON format (vs default .xml, avoids issues with export-cliXML and MG module data)[-useJson]")]
+            [switch]$useJson,
+        [Parameter(HelpMessage="Integer 'depth' to be used for export-clixml (or convertto-json, where -useJson specified) cmdlet for exporting report object to the output format. Directly impacts resulting file size and extent to which full nested objects are captured in the export. Defaults to 2")]
+            [int]$Depth = 2
     ) ;
     BEGIN{
         #region CONSTANTS_AND_ENVIRO ; #*======v CONSTANTS_AND_ENVIRO v======
@@ -24964,8 +24980,6 @@ function resolve-user {
             
             #region START_LOG_OPTIONS #*======v START_LOG_OPTIONS v======
             $useSLogHOl = $true ; # one or 
-            $useSLogSimple = $false ; #... the other
-            $useTransName = $false ; # TRANSCRIPTNAME
             $useTransPath = $false ; # TRANSCRIPTPATH
             $useTransRotate = $false ; # TRANSCRIPTPATHROTATE
             $useStartTrans = $false ; # STARTTRANS
@@ -25023,6 +25037,19 @@ function resolve-user {
                     elseif($rvEnv.MyInvocationproxy.MyCommand.Definition){$prxPath2 = $rvEnv.MyInvocationproxy.MyCommand.Definition } ; 
                 } ; 
                 if($prxPath){
+                    # 12/12/2025 new code to patch no-ext $prxPath
+                    if(-not [System.IO.Path]::GetExtension($prxPath)){
+                        write-verbose "no-extension `$prxpath, asserting fake ext (.ps1|.psm1 as approp)" ;                         
+                        switch($rvEnv.runSource){
+                            'Function'{$prxPath = "$($prxPath).psm1" }
+                            'ExternalScript'{$prxPath = "$($prxPath).ps1" }
+                            default {
+                                $smsg = "NO RECOGNIZED `$rvEnv.runSource: '$($rvEnv.runSource)'`nUNABLE TO SAFELY TEST FOR AllUsers or CU SCOPE!: ABORTING (Could log into module hosting dir!)" ; 
+                                write-warning $smsg ; throw $smsg ; 
+                                BREAK ; 
+                            }
+                        } ; 
+                    } ; 
                     if(($prxPath -match $rgxPSAllUsersScope) -OR ($prxPath -match $rgxPSCurrUserScope)){
                         $bDivertLog = $true ; 
                         switch -regex ($prxPath){
@@ -25044,6 +25071,19 @@ function resolve-user {
                         $pltSL.Path = $prxPath ;
                     } ;
                 }elseif($prxPath2){
+                    # 12/12/2025 new code to patch no-ext $prxPath2
+                    if(-not [System.IO.Path]::GetExtension($prxPath2)){
+                        write-verbose "no-extension `$prxPath2, asserting fake ext (.ps1|.psm1 as approp)" ;                         
+                        switch($rvEnv.runSource){
+                            'Function'{$prxPath2 = "$($prxPath2).psm1" }
+                            'ExternalScript'{$prxPath2 = "$($prxPath2).ps1" }
+                            default {
+                                $smsg = "NO RECOGNIZED `$rvEnv.runSource: '$($rvEnv.runSource)'`nUNABLE TO SAFELY TEST FOR AllUsers or CU SCOPE!: ABORTING (Could log into module hosting dir!)" ; 
+                                write-warning $smsg ; throw $smsg ; 
+                                BREAK ; 
+                            }
+                        } ; 
+                    } ; 
                     if(($prxPath2 -match $rgxPSAllUsersScope) -OR ($prxPath2 -match $rgxPSCurrUserScope) ){
                             $pltSL.Path = (join-path -Path "$($budrv):\scripts" -ChildPath (split-path $prxPath2 -leaf)) ;
                     } elseif(test-path $prxPath2) {
@@ -25121,102 +25161,8 @@ function resolve-user {
                 } ;
             } ; 
             #endregion START_LOG_HOLISTIC #*------^ END START_LOG_HOLISTIC ^------
-            #region START_LOG-SIMPLE #*------v START-LOG-SIMPLE v------
-            if($useSLogSimple){
-                $pltSL=@{ NoTimeStamp=$false ; Tag="$($ticket)-$($TenOrg)-LASTPASS-" ; showdebug=$($showdebug) ; whatif=$($whatif) ; Verbose=$($VerbosePreference -eq 'Continue') ; } ;
-                # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
-                #$pltSL=@{ NoTimeStamp=$false ; Tag="$($ticket)-$($TenOrg)-LASTPASS-" ; showdebug=$($showdebug) ; whatif=$($WhatIfPreference) ; Verbose=$($VerbosePreference -eq 'Continue') ; } ;
-                # overrides
-                #$pltSL.NoTimeStamp=$true ; 
-                #$pltSL.Tag = $null ; Tag="$($ticket)-$($TenOrg)-LASTPASS-$($users -join ',')" ;Tag="$($ticket)-$($TenOrg)-LASTPASS-" ; showdebug=$($showdebug) ;
-
-                if($forceall){
-                    #$pltSL.Tag += "$($TenOrg)-ForceAll" ;
-                    $pltSL.Tag += "-ForceAll" ;
-                } else {
-                    #$pltSL.Tag += "($TenOrg)-LASTPASS" ;
-                    $pltSL.Tag += "-LASTPASS" ;
-                }
-                if((get-command -Name start-log).source -eq 'verb-transcript'){
-                    get-module verb-transcript | remove-module ;
-                } ;
-                if($rvEnv.isScript){
-                    if($rvEnv.PSCommandPathproxy){   $logspec = start-Log -Path $rvEnv.PSCommandPathproxy  @pltSL }
-                    if($PSCommandPath){   $logspec = start-Log -Path $PSCommandPath  @pltSL }
-                    else {    $logspec = start-Log -Path ($rvEnv.MyInvocationproxy.MyCommand.Definition)  @pltSL ;  } ;
-                } ; 
-                if($rvEnv.isFunc){
-                    if($rvEnv.FuncDir -AND $rvEnv.FuncName){
-                            $logspec = start-Log -Path (join-path -path $rvEnv.FuncDir -ChildPath $rvEnv.FuncName) ; 
-                    } else {
-                        write-warning "Missing either `$rvEnv.FuncDir -OR `$rvEnv.FuncName!" ; 
-                    } ;  
-                } ; 
-                if($logspec){
-                    $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
-                    $logging=$logspec.logging ;
-                    $logfile=$logspec.logfile ;
-                    $transcript=$logspec.transcript ;
-                    #Configure default logging from parent script name
-                    if(Test-TranscriptionSupported){
-                        # throwing up on other running transcripts (out of scope)
-                        $error.clear() ;
-                        TRY {
-                            $startResults = start-Transcript -Path $transcript #-Verbose:($VerbosePreference -eq 'Continue')
-                            if($startResults){
-                                $smsg = "start-transcript:$($startResults)" ; 
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                            } ; 
-                        } CATCH {
-                            $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
-                            $startResults = start-Transcript -Path $transcript #-Verbose:($VerbosePreference -eq 'Continue')
-                            if($startResults){
-                                $smsg = "start-transcript:$($startResults)" ; 
-                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                            } ; 
-                            Write-Warning "$(get-date -format 'HH:mm:ss'): Failed processing $($_.Exception.ItemName). `nError Message: $($_.Exception.Message)`nError Details: $($_)" ;
-                            Exit #Opts: STOP(debug)|EXIT(close)|CONTINUE(move on in loop cycle)|BREAK(exit loop iteration)|THROW $_/'CustomMsg'(end script with Err output)
-                        } ;
-                    } else { write-warning "$($host.name) v$($host.version.major) does *not* support Transcription!" } ;
-                } else {throw "Unable to configure logging!" } ;
-            } ; 
-            #endregion START_LOG-SIMPLE #*------^ END START-LOG SIMPLE ^------
-            #region TRANSCRIPTNAME ; #*------v TRANSCRIPT FROM SCRIPT/MODULENAME v------
-            if($useTransName){
-                # ISSUES with use of start-log(), even local, deps on Remove-StringDiacritic() etc, that are in dep modules, so alt: (see 7psOFile for other alts)
-                if($rvEnv.isScript){
-                    $transcript = "$($rvEnv.ScriptDir)\logs" ; 
-                } elseif($rvEnv.isFunc -AND $rvEnv.FuncDir){
-                    $transcript = "$($rvEnv.FuncDir)\logs" ; 
-                } ; 
-                if(-not (test-path -path $transcript)){ mkdir $transcript -verbose:$true ; } ; 
-                # - FOR FUNCTIONS, build from ${CmdletName}
-                #$transcript +=  "\$($rvEnv.CmdletName)" ;
-                #$transcript +=  "\$($rvEnv.FuncName)" ; 
-                # - OR FOR SCRIPTS, use $rvEnv.ScriptBaseName/$rvEnv.ScriptNameNoExt (which reflect name of hosting .psm1/.ps1 a function was loaded from)
-                $transcript +=  "\$($rvEnv.ScriptNameNoExt)" ;
-                <# - OR PULLING DIRECTLY FROM THE INVOCATION OBJ
-                $transcript = join-path -path (Split-Path -parent $rvEnv.MyInvocationproxy.MyCommand.Definition) -ChildPath "logs" ;
-                if(-not (test-path -path $transcript)){ write-host "Creating missing log dir $($transcript)..." ; mkdir $transcript -verbose:$true ; } ;
-                $transcript = join-path -path $transcript -childpath "$([system.io.path]::GetFilenameWithoutExtension($rvEnv.MyInvocationproxy.InvocationName))"  ;
-                #>
-                # -- common v
-                if(get-variable whatif -ea 0){
-                    $transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
-                    if(-not $whatif){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
-                } ; 
-                # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
-                <#if(get-variable WhatIfPreference -ea 0){
-                    $transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
-                    if(-not $WhatIfPreference){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
-                } ; 
-                #>
-                write-verbose "set dep varis for Write-Log() use" ; 
-                $logfile = $transcript.replace('-trans','-log') ; $logging = $true ; 
-            } ; 
-            #endregion TRANSCRIPTNAME ; #*------^ END TRANSCRIPT FROM SCRIPT/MODULENAME ^------
+            # prior: START_LOG => USE TRANSCRIPT_NODEP, covers the niche, and supports full range of variant hosting options.     
+            # prior TRANSCRIPTNAME => USE TRANSCRIPT_NODEP, covers the niche, and supports full range of variant hosting options.     
             #region TRANSCRIPT_NODEP ; #*------v TRANSCRIPT FROM ENV WO DEPS FOR SCRIPT, FUNC, ADVFUNC v------
             if($useTransNoDep){
                 # VERS: 20251201-0257PM # revised module-hosted Func pathing
@@ -28035,10 +27981,65 @@ opRemoteMailbox.RemoteRoutingAddress:`t$($hsum.opRemoteMailbox.RemoteRoutingAddr
                 } ;
             } ELSE {
                 # 3:59 PM 9/18/2023 else export to report file 
+                <#
                 $Rpt += New-Object PSObject -Property $hSum ;
                 #$Rpt | export-clixml -Path $ofile -Depth 100 ;
                 write-verbose "exporting to $($logfile.replace('LOG-BATCH-EXEC',"REPORT").replace('-log',''))"
                 $Rpt | export-clixml -Path $logfile.replace('LOG-BATCH-EXEC',"REPORT").replace('-log','') -Depth 100 ;
+                #>
+                $Rpt += New-Object PSObject -Property $hSum ;
+                if($useJson){                    
+                    TRY{
+                        $ofile = $logfile.replace('LOG-BATCH-EXEC',"REPORT").replace('-log','').replace('.txt','.json')
+                        $smsg = "exporting to:`n$($ofile)" ; 
+                        $smsg += "-useJson: exporting in .json format " ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        $Rpt | ConvertTo-Json -depth $Depth -ea STOP | 
+                            Out-String | Out-File -Encoding utf8 -LiteralPath $ofile -ErrorAction STOP -verbose ; 
+                        <# generating:
+                            ConvertFrom-Json : Cannot convert the JSON string because a dictionary that was converted from the string contains the duplicated keys 'value' and 'Value'.
+
+                            ...occurs because PowerShell objects and hashtables are **case-insensitive** for property names, while the JSON standard allows keys to be case-sensitive. 
+                            The best solutions involve modifying the JSON string _before_ conversion or using an alternative parsing method. 
+                        #>
+                        # so try 2-staging it, and sub 'value' -> 'Value'?
+
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
+                        $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                        write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+                     } ;
+                    
+                }else{
+                    $ofile = $logfile.replace('LOG-BATCH-EXEC',"REPORT").replace('-log','').replace('.txt','.xml')
+                    $smsg = "exporting to:`n$($ofile)" ;
+                    write-host $smsg ; 
+                    TRY{
+                        # try to pre-detect issues in the source Microsoft.Graph data, by preconverting to xml
+                        $xmlString = $Rpt | ConvertTo-Xml -Depth $Depth -NoTypeInformation -ea STOP;
+                        write-verbose "`$xmlString.length: $(($xmlString.length|out-string).trim())" ;
+                        $xmlString = $NULL ; 
+                        #$Rpt | export-clixml -Path $ofile -Depth 100 ;
+                        write-verbose "exporting to $($ofile)"
+                        $Rpt | export-clixml -Path $ofile -Depth $Depth -ea STOP -verbose ;
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "XML conversion issue: failed attempt:`$Rpt | ConvertTo-Xml -Depth 1" ;
+                        $smsg += "`nABORTING XML OUTPUT (STATUS RESULTS IN SEMI-HUNG EXPORTS & MULTI-GB XML FILES!)" ;
+                        $smsg += "`nPossibly rerun with -outobject; capture return, and attempt to manually convert/export/workwith wo export" ;
+                        $smsg += "`nOr try use of -useJson, and play with the -Depth parameter to tune minimum functional export depth" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        if($ErrTrapd){
+                            write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
+                            $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+                            write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)"    
+                        } ; 
+                    } ;
+                }
             } ;
             #endregion WRITE_OUTPUT ; #*------^ END WRITE_OUTPUT ^------
             write-host -foregroundcolor green $sBnr.replace('=v','=^').replace('v=','^=') ;
