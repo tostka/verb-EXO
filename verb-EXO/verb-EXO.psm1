@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 10.1.2.0
+  Version     : 10.2.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -23208,6 +23208,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 10:35 AM 12/22/2025 pasted in latest start_log block for holistic from psparamt; added missing per-user lop stop transcript, right below write_output block
     * 3:04 PM 12/12/2025 was still diverting logging when .psm1 module into modules dir; also outputing massive export-clixml 3gb files, needed testing of the content prior to exports. 
     - found that, since adding Get-MgUser Microsoft.graph to the mix, export-clixml can no longer export importable xml code. Even if you message it and pretest with convertto-xml, and try/catch for export errors (none). 
     still junk output xml. 
@@ -25010,7 +25011,7 @@ function resolve-user {
                 #$pltSL.Tag += "-$($DomainName)"
                 #
                 if($rPSBoundParameters.keys){ # alt: leverage $rPSBoundParameters hash
-                    $sTag = @() ; 
+                    $sTag = @() ;
                     #$pltSL.TAG = $((@($rPSBoundParameters.keys) |?{$_}) -join ','); # join all params
                     if($rPSBoundParameters['Summary']){ $sTag+= @('Summary') } ; # build elements conditionally, string
                     if($rPSBoundParameters['Number']){ $sTag+= @("Number$($rPSBoundParameters['Number'])") } ; # and keyname,value
@@ -25161,247 +25162,6 @@ function resolve-user {
                 } ;
             } ; 
             #endregion START_LOG_HOLISTIC #*------^ END START_LOG_HOLISTIC ^------
-            # prior: START_LOG => USE TRANSCRIPT_NODEP, covers the niche, and supports full range of variant hosting options.     
-            # prior TRANSCRIPTNAME => USE TRANSCRIPT_NODEP, covers the niche, and supports full range of variant hosting options.     
-            #region TRANSCRIPT_NODEP ; #*------v TRANSCRIPT FROM ENV WO DEPS FOR SCRIPT, FUNC, ADVFUNC v------
-            if($useTransNoDep){
-                # VERS: 20251201-0257PM # revised module-hosted Func pathing
-                $Verbose = [boolean]($VerbosePreference -eq 'Continue') ;
-                $rPSCmdlet = $PSCmdlet ;
-                ${CmdletName} = $rMyInvocation.InvocationName.MyCommand.Name ;
-                $rPSScriptRoot = $PSScriptRoot ;
-                $rPSCommandPath = $PSCommandPath ;
-                $rMyInvocation = $MyInvocation ;
-                $rPSBoundParameters = $PSBoundParameters ;
-                $smsg = "`$rPSCmdlet : `n$(($rPSCmdlet|out-string).trim())`n`n" ; 
-                $smsg += "`n`${CmdletName} : `n$((${CmdletName}|out-string).trim())`n`n" ; 
-                $smsg += "`n`$rPSScriptRoot : `n$(($rPSScriptRoot |out-string).trim())`n`n" ; 
-                $smsg += "`n`$rPSCommandPath : `n$(($rPSCommandPath|out-string).trim())`n`n" ; 
-                $smsg += "`n`$rMyInvocation : `n$(($rMyInvocation|out-string).trim())`n`n" ; 
-                $smsg += "`n`$rPSBoundParameters : `n$(($rPSBoundParameters|out-string).trim())`n`n" ; 
-                if($VerbosePreference -eq "Continue"){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                if($rMyInvocation.mycommand.commandtype -eq 'ExternalScript'){
-                    $cmdType = 'Script' ; $isScript = $true ; $isfunc = $false ; $isFuncAdv = $false  ; 
-                    if($rMyInvocation.InvocationName){
-                        if($rMyInvocation.InvocationName -AND $rMyInvocation.InvocationName -ne '.'){
-                            $CmdPathed = (resolve-path $rMyInvocation.InvocationName -ea STOP).path ; 
-                        }elseif($rMyInvocation.mycommand.definition -and (test-path -path $rMyInvocation.mycommand.definition -pathtype Leaf)){
-                            $CmdPathed = (resolve-path $rMyInvocation.mycommand.definition -ea STOP).path ; 
-                        }
-                        $CmdName= split-path $CmdPathed -ea 0 -leaf ; 
-                        $CmdParentDir = split-path $CmdPathed -ea 0 ; 
-                        $CmdNameNoExt = [system.io.path]::GetFilenameWithoutExtension($CmdPathed) ;
-                        $smsg = "`$isScript : $(($isScript|out-string).trim())" ; 
-                        $smsg += "`n`$CmdPathed  : $(($CmdPathed|out-string).trim())" ; 
-                        $smsg += "`n`$CmdParentDir  : $(($CmdParentDir|out-string).trim())" ; 
-                        $smsg += "`n`$CmdNameNoExt  : $(($CmdNameNoExt|out-string).trim())" ; 
-                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-                    } else{
-                        throw "Unpopulated dependant:`$rMyInvocation.InvocationName!" ; 
-                    } ;     
-                }elseif($rMyInvocation.mycommand.commandtype -eq 'Function'){
-                    $cmdType = 'Function' ; $isScript = $false ; $isfunc = $true ; $isFuncAdv = $false  ; 
-                    if($rMyInvocation.mycommand.name){
-                        $CmdName = $rMyInvocation.mycommand.name ; 
-                        $CmdNameNoExt = [system.io.path]::GetFilenameWithoutExtension($CmdName) ;             
-                    } ; 
-                    if($rMyInvocation.ScriptName){
-                        if($CmdParentPathed = (resolve-path -path $rMyInvocation.ScriptName).path){
-                            $CmdParentDir = split-path $CmdParentPathed ;                  
-                            write-verbose "Hosted function, mock it up as a proxy path for transcription name" ; 
-                            $CmdParentPathedExt = [regex]::match($CmdParentPathed,'(\.\w+$)').value
-                            $CmdPathed = (join-path -Path $CmdParentDir -ChildPath "$($CmdName)$($CmdParentPathedExt)")           
-                        } else{
-                            throw "emtpy `$rMyInvocation.ScriptName!, unable to calculate isFunc: `$CmdParentDir!" ; 
-                        }
-                    }elseif($rPSCmdlet.MyInvocation.mycommand.commandtype -eq 'Function' -AND $rPSCmdlet.MyInvocation.mycommand.modulename -AND $rPSCmdlet.MyInvocation.mycommand.Module.path){
-                        # cover function, pathed into the Module.path
-                        if($CmdParentPathed = (resolve-path -path $rPSCmdlet.MyInvocation.mycommand.Module.path).path){
-                            $CmdParentDir = split-path $CmdParentPathed ;                  
-                            write-verbose "Hosted function, mock it up as a proxy path for transcription name" ; 
-                            $CmdParentPathedExt = [regex]::match($CmdParentPathed,'(\.\w+$)').value
-                            $CmdPathed = (join-path -Path $CmdParentDir -ChildPath "$($CmdName)$($CmdParentPathedExt)")   
-                        } else{
-                            throw "emtpy `$rMyInvocation.ScriptName!, unable to calculate isFunc: `$CmdParentDir!" ; 
-                        }
-                    } ; 
-                    if($isFunc -AND ((gv rPSCmdlet -ea 0).value -eq $null)){
-                        $isFuncAdv = $false
-                    } elseif($isFunc) {
-                        $isFuncAdv = [boolean]($isFunc -AND $rMyInvocation.InvocationName -AND ($CmdName -eq $rMyInvocation.InvocationName))         
-                    }
-                    $smsg = "`$isfunc : $(($isfunc|out-string).trim())" ; 
-                    $smsg += "`n`$CmdName :$(($CmdName|out-string).trim())" ; 
-                    $smsg += "`n`$CmdParentPathed : $(($CmdParentPathed|out-string).trim())" ; 
-                    $smsg += "`n`$CmdParentDir : $(($CmdParentDir|out-string).trim())" ; 
-                    $smsg += "`n`$CmdPathed (log proxy) : $(($CmdPathed|out-string).trim())" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-                } else{
-                    throw "unrecognized environment combo: unable to resolve Script v Function v FuncAdv!" ; 
-                } ;
-                if(-not (get-variable LogPathDrives -ea 0)){$LogPathDrives = 'd','c' };
-                foreach($budrv in $LogPathDrives){if(test-path -path "$($budrv):\scripts" -ea 0 ){break} } ;
-                # use local calc'd: workstations freq have ODFB etc, recalc always works
-                $rgxPSAllUsersScope="^$([regex]::escape([environment]::getfolderpath('ProgramFiles')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps(((d|m))*)1|dll)$" ;
-                $rgxPSCurrUserScope="^$([regex]::escape([Environment]::GetFolderPath('MyDocuments')))\\((Windows)*)PowerShell\\(Scripts|Modules)\\.*\.(ps((d|m)*)1|dll)$" ;
-                if(($CmdPathed  -match $rgxPSAllUsersScope) -OR ($CmdPathed  -match $rgxPSCurrUserScope)){
-                    switch -regex ($CmdPathed){
-                        $rgxPSAllUsersScope{$smsg = "AllUsers"} 
-                        $rgxPSCurrUserScope{$smsg = "CurrentUser"}
-                    } ;
-                    $smsg += " context script/module, divert logging into [$budrv]:\scripts" 
-                    write-verbose $smsg  ;
-                    $transcript = "$($budrv):\scripts\logs"        
-                } else {
-                    $transcript = "$($CmdParentDir)\logs"
-                } ;    
-                if(-not (test-path $transcript -PathType Container)){mkdir $transcript -verbose } ; 
-                $transcript +=  "\$($CmdNameNoExt)" ;
-                if(get-variable whatif -ea 0){
-                    $transcript += "-WHATIF"
-                    if(-not $whatif){$transcript = $transcript.replace('-WHATIF','-EXECUTE')} 
-                } ; 
-                #$transcript = "d:\cab\$($env:computername)-set-ExLicenseTDO-$(get-date -format 'yyyyMMdd-HHmmtt')-trans-log.txt" ; 
-                #VARIANT: $transcript += "-LASTPASS-trans-log.txt" ;
-                $transcript += "-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
-                $logfile = $transcript.replace('-trans','-log') ; 
-                $logging = [boolean](get-command write-log -ea 0) ; 
-                $smsg = "`$transcript: $($transcript)" ; 
-                $smsg += "`n`$logfile: $($logfile)" ; 
-                $smsg += "`n`$logging: $($logging)" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
-                if($stopResults){
-                    $smsg = "Stop-transcript:$($stopResults)" ;
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
-                } ;
-                $startResults = start-Transcript -path $transcript -whatif:$false -confirm:$false;
-                if($startResults){
-                    $smsg = "start-transcript:$($startResults)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                } ;
-                # DON'T FORGET TO ADD STOP TO END{}!
-            } ; 
-            #endregion TRANSCRIPT_NODEP ; #*------^ END TRANSCRIPT FROM ENV WO DEPS FOR SCRIPT, FUNC, ADVFUNC ^------
-            #region BASIC_SCRIPT_TRANSCRIPT ; #*------v BASIC_SCRIPT_TRANSCRIPT v------
-            if($useTransBasicScript){
-                # ZERO DEP - NOT EVEN RESOLVE-ENVIRONMENT()
-                # NOTE: USENODEP for -le psv3: below relies on psv5+ $PSCommandPath
-                $rPSCmdlet = $PSCmdlet ; # an object that represents the cmdlet or advanced function that's being run. Available on functions w CmdletBinding (& $args will not be available). (Blank on non-CmdletBinding/Non-Adv funcs).
-                $rPSScriptRoot = $PSScriptRoot ; # the full path of the executing script's parent directory., PS2: valid only in script modules (.psm1). PS3+:it's valid in all scripts. (Funcs: ParentDir of the file that hosts the func)
-                $rPSCommandPath = $PSCommandPath ; # the full path and filename of the script that's being run, or file hosting the funct. Valid in all scripts.
-                $rMyInvocation = $MyInvocation ; # populated only for scripts, function, and script blocks.    
-                $transcript = join-path -path (split-path (resolve-path $rPSCommandPath).path) -ChildPath logs ;
-                if(-not (test-path -path $transcript)){ write-host "Creating missing log dir $($transcript)..." ; mkdir $transcript -verbose:$true ; } ;
-                $transcript = join-path -path $transcript -childpath "$([system.io.path]::GetFilenameWithoutExtension((resolve-path $rPSCommandPath).path))"  ; ;
-                $transcript += "-LASTPASS-trans-log.txt" ;
-                $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
-                if($stopResults){
-                    $smsg = "Stop-transcript:$($stopResults)" ;
-                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
-                } ;
-                $startResults = start-Transcript -path $transcript -whatif:$false -confirm:$false;
-                if($startResults){
-                    $smsg = "start-transcript:$($startResults)" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
-                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                } ;
-            } ; 
-            #endregion BASIC_SCRIPT_TRANSCRIPT ; #*------^ END BASIC_SCRIPT_TRANSCRIPT ^------
-            #region TRANSCRIPTPATH ; #*------v TRANSCRIPT FROM A $PATH VARI v------
-            if($useTransPath){
-                $transcript = "$($path.directoryname)\logs" ; 
-                if(-not (test-path -path $transcript)){ write-host "Creating missing log dir $($transcript)..." ; mkdir $ofile -verbose:$true  ; } ;
-                $transcript += "\$($path.basename)"
-                $transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
-                if(get-variable whatif -ea 0){
-                    if(-not $whatif){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
-                } ; 
-                # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
-                <#if(get-variable WhatIfPreference -ea 0){
-                    $transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
-                    if(-not $WhatIfPreference){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
-                } ; 
-                #>
-                $logfile = $transcript.replace('-trans','-log') ; 
-                $logging = $true ; 
-            } ; 
-            #endregion TRANSCRIPTPATH ; #*------^ END TRANSCRIPT FROM A $PATH VARI ^------
-            #region TRANSCRIPTPATHROTATE ; #*------v TRANSCRIPT FROM A $PATH VARI W ROTATION v------
-            if($useTransRotate){
-                # simple root of path'd drive x:\scripts\logs transcript on the functionname
-                $transcript = "$((split-path $path[0]).split('\')[0])\scripts\logs" ; 
-                if(-not (test-path -path $transcript)){ write-host "Creating missing log dir $($transcript)..." ; mkdir $transcript -verbose:$true  ; } ;
-                $transcript += "\$($rvEnv.ScriptNameNoExt)" ; 
-                <#$transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
-                if(get-variable whatif -ea 0){
-                    if(-not $whatif){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
-                } ;
-                #>
-                # if using [CmdletBinding(SupportsShouldProcess)] + -WhatIf:$($WhatIfPreference):
-                <#if(get-variable WhatIfPreference -ea 0){
-                    $transcript += "-WHATIF-$(get-date -format 'yyyyMMdd-HHmmtt')-trans.txt" ; 
-                    if(-not $WhatIfPreference){$transcript = $transcript.replace('-WHATIF-','-EXECUTE-')} 
-                } ; 
-                #>
-                # rotating series of 4 logs named for the base $transcript
-                $transcript += "-transNO.txt" ; 
-                $rotation = (get-childitem $transcript.replace('NO','*')) ; 
-                if(-not $rotation ){
-                    write-verbose "Establishing 4 rotating log files ($transcript)..." ; 
-                    1..4 | foreach-object{echo $null > $transcript.replace('NO',"0$($_)") } ; 
-                    $rotation = (get-childitem $transcript.replace('NO','*')) ;
-                } ;
-                $transcript = $rotation | sort LastWriteTime | select -first 1 | select -expand fullname ; 
-                write-verbose "set dep varis for Write-Log() use" ; 
-                $logfile = $transcript.replace('-trans','-log') ; 
-            } ; 
-            #endregion TRANSCRIPTPATHROTATE ; #*------^ END TRANSCRIPT FROM A $PATH VARI W ROTATION ^------
-            #region STARTTRANS ; #*------v STARTTRANSCRIPT v------
-            if($useStartTrans){
-                TRY {
-                    if($transcript){
-                        $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
-                        if($stopResults){
-                            $smsg = "Stop-transcript:$($stopResults)" ; 
-                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                        } ; 
-                        $startResults = start-Transcript -path $transcript ;
-                        if($startResults){
-                            $smsg = "start-transcript:$($startResults)" ; 
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        } ; 
-                    } else {
-                        $smsg = "UNPOPULATED `$transcript! - ABORTING!" ; 
-                        write-warning $smsg ; 
-                        throw $smsg ; 
-                        break ; 
-                    } ;  
-                } CATCH [System.Management.Automation.PSNotSupportedException]{
-                    if($host.name -eq 'Windows PowerShell ISE Host'){
-                        $smsg = "This version of $($host.name):$($host.version) does *not* support native (start-)transcription" ; 
-                    } else { 
-                        $smsg = "This host does *not* support native (start-)transcription" ; 
-                    } ; 
-                    write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
-                } CATCH {
-                    $ErrTrapd=$Error[0] ;
-                    $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
-                    write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
-                } ;
-            } ; 
-            #endregion STARTTRANS ; #*------^ END STARTTRANSCRIPT ^------
             #endregion START_LOG_OPTIONS #*======^ START_LOG_OPTIONS ^======
 
             #region VARI_SETUP ; #*------v VARI_SETUP v------
@@ -28042,6 +27802,14 @@ opRemoteMailbox.RemoteRoutingAddress:`t$($hsum.opRemoteMailbox.RemoteRoutingAddr
                 }
             } ;
             #endregion WRITE_OUTPUT ; #*------^ END WRITE_OUTPUT ^------
+            # 10:34 AM 12/22/2025 missing per-user log stop
+            $stopResults = try {Stop-transcript -ErrorAction stop} catch {} ;
+            if($stopResults){
+                $smsg = "Stop-transcript:$($stopResults)" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ; 
+                        
             write-host -foregroundcolor green $sBnr.replace('=v','=^').replace('v=','^=') ;
 
         } ; # loop-E $users
@@ -31521,8 +31289,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUTU9OS0p7Q/N2RnWQcku9kX8h
-# Am2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUubvgAa8qDaEqvA6phE4UaD7H
+# ZdqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -31537,9 +31305,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTMRppV
-# JxCS9MSaXBIPV8kBJL14ojANBgkqhkiG9w0BAQEFAASBgAL57hJrcx4cXZq6AfHu
-# XpO3HY3rCyqOuuBQ2tQGPNPfKqJr+GfevT3HHpPJxo4t0wQB1uQeg4p5ayZ58PX7
-# onmtxxcRaa7cowBt8JhyUmj0kmtRjW0mtfJorMWfW3r+oeSKlpYCAUf8qcsLqJ45
-# ofikYHd8LLnCIDnYLw+tcC4U
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSknnEt
+# jwnsKL+yIVNaBWP8jIxDVzANBgkqhkiG9w0BAQEFAASBgChhjcPi6J5Q7Xp5J09r
+# 4OF/mOSYBsxBckYP1Pua43u8fqvHiKJ65wGpLLdDTnZf1caXsqH24GyJjXtQD63R
+# OtPNpFKqT9iW8DPWySzkvCJN8Otr0OSJGIcOmaOSh7H8u9Mswr1fRMyaljVKJxms
+# WoY2Aaa6N6NF8WrVhSFx2XT/
 # SIG # End signature block

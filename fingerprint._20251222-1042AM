@@ -1640,8 +1640,6 @@ resolve-user:UserRole
 resolve-user:useEXOv2
 resolve-user:silent
 resolve-user:outObject
-resolve-user:useJson
-resolve-user:Depth
 resolve-user:Verbose
 resolve-user:vb
 resolve-user:Debug
