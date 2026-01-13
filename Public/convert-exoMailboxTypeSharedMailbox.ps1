@@ -10,6 +10,7 @@ function convert-exoMailboxTypeSharedMailbox{
     Website:	http://www.toddomation.com
     Twitter:	@tostka, http://twitter.com/tostka
     REVISIONS   :
+    * 10:38 AM 1/13/2026 ADD: -ea stop  to try splats
     * 8:46 AM 5/17/2023 add to vXO; ren'd to convert-exoMailboxTypeSharedMailbox (rmvd _ internal prefix), and aliased orig name(convert-xoShared), strongly typed $Mailbox as [System.Object] (get-xomailbox returns that type, not a real 'Mailbox' class).
     # 1:09 PM 8/25/2021 ren convertExoShared -> _convert-xoShared
     # 10:00 AM 12/19/2018 revertExoUserMbx : added post confirm echo
@@ -75,6 +76,7 @@ function convert-exoMailboxTypeSharedMailbox{
                     Identity=$MBX.userprincipalname ;
                     Type="Shared" ;
                     whatif=$($whatif) ;
+                    ErrorAction = 'STOP'
                 } ;
                 $smsg="set-xomailbox with:`n$(($pltSxM|out-string).trim())`n" ; ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
