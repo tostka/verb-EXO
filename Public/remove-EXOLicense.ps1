@@ -20,6 +20,8 @@ function remove-EXOLicense {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    *1:54 PM 1/13/2026 finallyu got through whati fpass; WIP more AAD->MG code updates
+    * 1:30 PM 1/7/2026 WIP unupdated port from AADLicense -> MGUDLicense
     * 9:48 AM 6/17/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
     * 4:25 PM 5/22/2023 scrapped, rewrote adapted from functional add-exoLicense(); 
      * 3:37 PM 5/17/2023 added pltRXO support
@@ -47,9 +49,7 @@ function remove-EXOLicense {
     .PARAMETER Credential
     Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]
     .PARAMETER UserRole
-    Credential User Role spec (SID|CSID|UID|B2BI|CSVC)[-UserRole SID]
-    .PARAMETER Credential
-    Use specific Credentials (defaults to Tenant-defined SvcAccount)[-Credentials [credential object]]
+    Credential User Role spec (SID|CSID|UID|B2BI|CSVC)[-UserRole SID]    
     .PARAMETER silent
     Switch to specify suppression of all but warn/error echos.(unimplemented, here for cross-compat)
     .PARAMETER showDebug
@@ -101,14 +101,14 @@ function remove-EXOLicense {
     .LINK
     #>
     # migr to verb-exo, pull the dupe spec...
-    #Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-AAD, verb-Auth, verb-IO, verb-logging, verb-Mods, verb-Text
+    # #Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-MG, verb-Auth, verb-IO, verb-logging, verb-Mods, verb-Text
     #Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\s\regex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
     #[Alias('remove-o365License')]
     PARAM(
-        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,HelpMessage="Array of UserPrincipalNames (or AzureADUser objects) to have a temporary Exchange License applied")]
+        [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,HelpMessage="Array of UserPrincipalNames (or MGUser objects) to have a temporary Exchange License applied")]
             #[ValidateNotNullOrEmpty()]
             #[Alias('ALIAS1', 'ALIAS2')]
             #[ValidatePattern("^([0-9a-zA-Z]+[-._+&'])*[0-9a-zA-Z]+@([-0-9a-zA-Z]+[.])+[a-zA-Z]{2,63}$")]
@@ -140,7 +140,7 @@ function remove-EXOLicense {
                 if(-not ($_ -match $rgxPermittedUserRoles)){throw "'$($_)' doesn't match `$rgxPermittedUserRoles:`n$($rgxPermittedUserRoles.tostring())" ; } ; 
                 return $true ; 
             })]
-            [string[]]$UserRole = @('SID','CSVC'),
+            [string[]]$UserRole = @('ESvcCBA','CSvcCBA','SIDCBA','SID'),
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
             [switch] $silent,
         [Parameter(HelpMessage="switch to show extended debugging output [-showdebug]")]
@@ -162,7 +162,8 @@ function remove-EXOLicense {
 
         $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
-
+        # 9:58 AM 1/13/2026, EXCLUDE STRANGE EXO-MBX GRANTING LIC, THAT'S APPEARED:
+        $rgxLicAgentExclude = '^MICROSOFT_AGENT_' ; 
          <#
         # recycling the inbound above into next call in the chain
         # downstream commands
@@ -254,10 +255,157 @@ function remove-EXOLicense {
             $pltRxo.remove('Silent') ;
         } ; 
 
-        if(-not $LicenseSkuIds){
-            $smsg = "Retrieve & build LicenseSkuIDS from global Meta vari" ;  
-            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        # 2:37 PM 1/7/2026 mg support
+        #region cMG_SCAFFOLD ; #*------v cMG_SCAFFOLD v------
+        if(-not (get-command  test-mgconnection)){
+            if(-not (get-module -list Microsoft.Graph -ea 0)){
+                $smsg = "MISSING Microsoft.Graph!" ;
+                $smsg += "`nUse: install-module Microsoft.Graph -scope CurrentUser" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            } ;
+        } ;
+        $MGCntxt = test-mgconnection -Verbose:($VerbosePreference -eq 'Continue') ;
+        $o365Cred = $null ;
+        if($Credential -AND $MGCntxt.isConnected){
+            $smsg = "Explicit -Credential:$($Credential.username) -AND `$MGCntxt.isConnected: running pre:Disconnect-MgGraph" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            # Dmg returns a get-mgcontext into pipe, if you don't cap it corrupts the pipe on your current flow
+            $dOut = Disconnect-MgGraph -Verbose:($VerbosePreference -eq 'Continue')
+            $MGCntxt = test-mgconnection -Verbose:($VerbosePreference -eq 'Continue') ;
+        };
+        if($Credential){
+            $smsg = "`Credential:Explicit credentials specified, deferring to use..." ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            write-verbose "get-TenantCredentials() return format: (emulating)" ;
+            $o365Cred = [ordered]@{
+                Cred=$Credential ;
+                credType=$null ;
+            } ;
+            $uRoleReturn = resolve-UserNameToUserRole -UserName $Credential.username -verbose:$($VerbosePreference -eq "Continue") ; # Username
+            write-verbose "w full cred opt: $uRoleReturn = resolve-UserNameToUserRole -Credential $Credential -verbose = $($VerbosePreference -eq 'Continue')"  ;
+            if($uRoleReturn.UserRole){
+                $o365Cred.credType = $uRoleReturn.UserRole ;
+            } else {
+                $smsg = "Unable to resolve `$credential.username ($($credential.username))"
+                $smsg += "`nto a usable 'UserRole' spec!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN } #Error|Warn|Debug
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                Break ;
+            } ;
+        } else {
+            if($MGCntxt.isConnected){
+                if($MgCntxt.isUser){
+                    $TenantTag = $TenOrg = get-TenantTag -Credential $MgCntxt.Account ;
+                    $uRoleReturn = resolve-UserNameToUserRole -UserName $MgCntxt.CertificateThumbprint -verbose:$($VerbosePreference -eq "Continue") ;
+                    $credential = get-TenantCredentials -TenOrg $TenOrg -UserRole $uRoleReturn.UserRole -verbose:$($VerbosePreference -eq "Continue") ;
+                } elseif($MgCntxt.isCBA -AND $MgCntxt.AppName -match 'CBACert-(\w{3})'){
+                        #$MgCntxt.AppName.split('-')[-1]
+                        $TenantTag = $TenOrg = $matches[1]
+                        # also need credential
+                        $uRoleReturn = resolve-UserNameToUserRole -UserName $MgCntxt.CertificateThumbprint -verbose:$($VerbosePreference -eq "Continue") ;
+                        write-verbose "ret'd obj:$uRoleReturn = [ordered]@{     UserRole = $null ;     Service = $null ;     TenOrg = $null ; } " ;
+                        $credRet = get-TenantCredentials -TenOrg $TenOrg -UserRole $uRoleReturn.UserRole -verbose:$($VerbosePreference -eq "Continue")
+                        $credential = $credRet.Cred ;
+                }else{
+                    $smsg = "UNABLE TO RESOLVE mgContext to a working TenOrg!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                }
+            } ;
+            $pltGTCred=@{TenOrg=$TenOrg ; UserRole=$null; verbose=$($verbose)} ;
+            if($UserRole){
+                $smsg = "(`$UserRole specified:$($UserRole -join ','))" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $pltGTCred.UserRole = $UserRole;
+            } else {
+                $smsg = "(No `$UserRole found, defaulting to:'CSVC','SID' " ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $pltGTCred.UserRole = 'CSVC','SID' ;
+            } ;
+            $smsg = "get-TenantCredentials w`n$(($pltGTCred|out-string).trim())" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level verbose }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            $o365Cred = get-TenantCredentials @pltGTCred
+        } ;
+        if($o365Cred.credType -AND $o365Cred.Cred -AND $o365Cred.Cred.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+            $smsg = "(validated `$o365Cred contains .credType:$($o365Cred.credType) & `$o365Cred.Cred.username:$($o365Cred.Cred.username)" ;
+            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            write-verbose "populate $credential with return, if not populated (may be required for follow-on calls that pass common $Credentials through)" ;
+            if((gv Credential) -AND $Credential -eq $null){
+                $credential = $o365Cred.Cred ;
+            }elseif($credential.gettype().fullname -eq 'System.Management.Automation.PSCredential'){
+                $smsg = "(`$Credential is properly populated; explicit -Credential was in initial call)" ;
+                if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE }
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
+            } else {
+                $smsg = "`$Credential is `$NULL, AND $o365Cred.Cred is unusable to populate!" ;
+                $smsg = "downstream commands will *not* properly pass through usable credentials!" ;
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                throw $smsg ;
+                break ;
+            } ;
+        } else {
+            $smsg = "UNABLE TO RESOLVE FUNCTIONAL CredType/UserRole from specified explicit -Credential:$($Credential.username)!" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            break ;
+        } ;
+        $pltCMG = [ordered]@{
+            Credential = $Credential ;
+            verbose = $($VerbosePreference -eq "Continue")  ;
+        } ;
+        if((get-command Connect-MG).Parameters.keys -contains 'silent'){
+            $pltCMG.add('Silent',$silent) ;
+        } ;
+        #endregion cMG_SCAFFOLD ; #*------^ END cMG_SCAFFOLD ^------
+
+        # 9:24 AM 1/13/2026: make remove-exolicense dyn:
+        if(gcm get-ExoMailboxLicenses -ea 0){
+            IF($ExMbxLicenses = get-ExoMailboxLicenses){
+                TRY{
+                    $TenantShortName = ((Get-MgOrganization -EA STOP).verifieddomains |?{$_.isdefault}).name.split('.')[0] ;
+                    $ExGrantingLicenseSkuIds = @() ; 
+                    # exclude any variant of: MICROSOFT_AGENT_365_TIER_3
+                    #$rgxLicAgentExclude = '^MICROSOFT_AGENT_' ; (UP IN CONSTANTS)
+                    $ExMbxLicenses.GetEnumerator() |
+                        ?{$_.name -notmatch $rgxLicAgentExclude} | foreach-object{
+                          $ExGrantingLicenseSkuIds += "$($TenantShortName):$($_.name)" ; 
+                    } ; 
+                    $smsg = "Resolved `$ExGrantingLicenseSkuIds:`n$(($ExGrantingLicenseSkuIds|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    if($ExGrantingLicenseSkuIds){
+                        $LicenseSkuIds = $ExGrantingLicenseSkuIds ; 
+                    };
+                } CATCH {$ErrTrapd=$Error[0] ;
+                    write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
+                    $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;                    
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    BREAK ; 
+                } ;
+                
+            }ELSE{
+                $smsg = "UNABLE TO:VXO\get-ExoMailboxLicenses()!" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                BREAK 
+            }
+
+        }elseif(-not $LicenseSkuIds){
+            $smsg = "Missing vxo\get-ExoMailboxLicenses(): Retrieve & build LicenseSkuIDS from global Meta vari" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success 
             $LicenseSkuKeys | foreach-object { $LicenseSkuIds += @((get-variable -name "$($tenorg)META").value[$_]) } ; 
         } else { 
             $smsg = "Explicit -LicenseSkuIds specified, using those licenses (in preference order)" ; 
@@ -294,13 +442,21 @@ function remove-EXOLicense {
             switch($usr.GetType().FullName){
                 'Microsoft.Online.Administration.User' {
                     #$smsg = "(-user:MsolU detected:$($usr.userprincipalname), extracting the UPN...)" ;
-                    $smsg = "MSOLUSER OBJECT IS NO LONGER SUPPORTED BY THIS FUNCTION!" ;
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $smsg = "MSOLUSER OBJECT IS NO LONGER SUPPORTED BY THIS FUNCTION! (flipping to resolvable UPN)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                     $usr = $usr.userprincipalname ;
                 } ;
                 'Microsoft.Open.AzureAD.Model.User' {
-                    $smsg = "(-user:AzureADU detected)" ;
+                    #$smsg = "(-user:AzureADU detected)" ;
+                    $smsg = "AzureADU OBJECT IS NO LONGER SUPPORTED BY THIS FUNCTION! (flipping to resolvable UPN)" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    $usr = $usr.userprincipalname ;
+                } ;
+                # add missing MGGraphuser
+                'Microsoft.Graph.PowerShell.Models.MicrosoftGraphUser' {
+                    $smsg = "(-user:MGUser detected)" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     $usr = $usr.userprincipalname ;
@@ -317,7 +473,7 @@ function remove-EXOLicense {
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         $usr = $usr ;
                     } else {
-                        $smsg = "-Users: Unable to recognize either an AzureAD user object, or a UPN string, from the specified input:`n$($usr)" ; 
+                        $smsg = "-Users: Unable to recognize either an MG user object, an MGUser object or a UPN string, from the specified input:`n$($usr)" ; 
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                         break ; 
@@ -329,7 +485,7 @@ function remove-EXOLicense {
                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     Break ;
                 }
-            } ;
+            }
             #-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
             # Looks like 1/5/2022, there are no spare E3's, maybe shift to the F3 ($TORMETA.o365LicSkuF1 = works to get mbx back).
             # (below defaults to the 'office 365 F3', the E3 alt is:  $tormeta.o365LicSkuE3 )
@@ -342,15 +498,15 @@ function remove-EXOLicense {
                 $Exit = 0 ;
                 Do {
                     Try {
-                        connect-aad @pltRXO ; 
-                        $AADUser=$null ;
+                        #connect-aad @pltRXO ; 
+                        $MGUser=$null ;
                         #$TenantShortName = ((Get-AzureADTenantDetail).verifieddomains |?{$_._default}).name.split('.')[0] ;
-                        $pltGAADU=[ordered]@{ 
-                            ObjectId = $tUPN ;
+                        $pltGMGU=[ordered]@{ 
+                            UserID = $tUPN ;
                             ErrorAction = 'STOP' ;
                             verbose = $($VerbosePreference -eq "Continue") ;
                         } ;
-                        $AADUser = Get-AzureADUser @pltGAADU ;
+                        $MGUser = Get-MGUser @pltGMGU ;
                         $Exit = $Retries ;
                     } Catch {
                         Start-Sleep -Seconds $RetrySleep ;
@@ -368,25 +524,25 @@ function remove-EXOLicense {
                     }  ;
                 } Until ($Exit -eq $Retries) ;
 
-                # 8:44 AM 12/21/2022 no, use the verb-EXO:test-EXOIsLicensed(): test-EXOIsLicensed -User $AADUser -verbose
-                $IsExoLicensed = test-EXOIsLicensed -User $AADUser -Credential:$pltRXO.Credential -verbose:$pltRXO.verbose -silent:$pltRXO.silent ;
+                # 8:44 AM 12/21/2022 no, use the verb-EXO:test-EXOIsLicensed(): test-EXOIsLicensed -User $MGUser -verbose
+                $IsExoLicensed = test-EXOIsLicensed -User $MGUser -Credential:$pltRXO.Credential -verbose:$pltRXO.verbose -silent:$pltRXO.silent ;
                 $pltGLPList=[ordered]@{ 
                     TenOrg= $TenOrg;
                     verbose=$($VerbosePreference -eq "Continue") ;
                     credential= $pltRXO.credential ;
                     silent = $silent ; 
                 } ;
-                $smsg = "$($tenorg):get-AADlicensePlanList wn$(($pltGLPList|out-string).trim())" ;
+                $smsg = "$($tenorg):get-MGlicensePlanList wn$(($pltGLPList|out-string).trim())" ;
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info }else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 $skus = $null ;
-                $skus = get-AADlicensePlanList @pltGLPList ;
+                $skus = get-MGlicensePlanList @pltGLPList ;
 
-                $ombx = get-xomailbox -id $AADUser.UserPrincipalName -ea continue  ;
+                $ombx = get-xomailbox -id $MGUser.UserPrincipalName -ea continue  ;
                 $ombx = $ombx | ?{$_ -is [System.Management.Automation.PSObject]} # filtering any aberrant obj returned (legacy of prior problematic xow reliance to work around hybrid stepable pipeline bug)
-                $AADLicDetails = get-AADUserLicenseDetails -UPNs $AADUser.userprincipalname -Credential:$pltRXO.Credential -verbose:$pltRXO.verbose -silent:$pltRXO.silent ; 
-                #$AADLicDetails = get-AADUserLicenseDetails -UPNs $AADUser.userprincipalname -Verbose:$($VerbosePreference -eq "Continue")
+                $MGLicDetails = get-MGUserLicenseDetailTDO -UPNs $MGUser.userprincipalname -Credential:$pltRXO.Credential -verbose:$pltRXO.verbose #-silent:$pltRXO.silent ; 
+                #$MGLicDetails = get-MGUserLicenseDetailTDO -UPNs $MGUser.userprincipalname -Verbose:$($VerbosePreference -eq "Continue")
                 $smsg = "`nExisting Mbx:`n$(($ombx | ft -a 'RecipientType','RecipientTypeDetails'|out-string).trim())" ;
-                $smsg += "`n`$AADLicDetails`n$(($AADLicDetails|out-string).trim())" ;
+                $smsg += "`n`$MGLicDetails`n$(($MGLicDetails|out-string).trim())" ;
                 if($ombx.RecipientTypeDetails -eq 'SharedMailbox'){
                     $smsg += "`nSharedMailbox does not *require* a license" ;
                 } ;
@@ -402,15 +558,15 @@ function remove-EXOLicense {
                 } else
                 #>
                 if( ($IsExoLicensed) -OR ($Force) ){
-                    # not supported on aadu: defer to: verb-AAD:test-AADUserIsLicensed(): $isLicensed = test-AADUserIsLicensed -user $AzureADUser -verbose
-                    if($IsAADIsLicensed = test-AADUserIsLicensed -user $AADUser -Verbose:($VerbosePreference -eq 'Continue')){
+                    # not supported on aadu: defer to: verb-AAD:test-AADUserIsLicensed(): $isLicensed = test-AADUserIsLicensed -user $MGUser -verbose
+                    if($IsMGIsLicensed = test-MGUserIsLicensed -user $MGUser -Verbose:($VerbosePreference -eq 'Continue')){
                         # has a bozo lic that doesn't support a mailbox
-                        $smsg = "AADUser:$($tUPN):  isLicensed (has some form of license added), and has an EXO UserMailbox-supporting license!" ;
+                        $smsg = "MGUser:$($tUPN):  isLicensed (has some form of license added), and has an EXO UserMailbox-supporting license!" ;
                         $smsg += "`n(or is being -Force upgraded to an elevated license)" ;
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN }
                         else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                     } ;
-                    $smsg="confirmed $($AADUser.UserPrincipalName):is licensed/overlicensed" ;
+                    $smsg="confirmed $($MGUser.UserPrincipalName):is licensed/overlicensed" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
@@ -426,8 +582,8 @@ function remove-EXOLicense {
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-                        $pltRAADUL=[ordered]@{
-                            Users=$AADUser.UserPrincipalName ;
+                        $pltRMGUL=[ordered]@{
+                            Users=$MGUser.UserPrincipalName ;
                             skuid=$LicenseSkuId ;
                             Credential = $pltRXO.Credential ; 
                             verbose = $pltRXO.verbose  ; 
@@ -435,14 +591,14 @@ function remove-EXOLicense {
                             erroraction = 'STOP' ;
                             whatif = $($whatif) ;
                         } ;
-                        $smsg = "remove-AADUserLicense w`n$(($pltRAADUL|out-string).trim())" ;
+                        $smsg = "remove-MGUserLicense w`n$(($pltRMGUL|out-string).trim())" ;
                         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
-                        $bRet = remove-AADUserLicense @pltRAADUL ;
+                        $bRet = remove-MGUserLicense @pltRMGUL ;
                         if($bRet.Success){
-                            $smsg = "remove-AADUserLicense removed Licenses:$($bRet.RemovedLicenses)" ;
-                            # $AADUser.AssignedLicenses.skuid
-                            $smsg += "`n$(($AADUser.AssignedLicenses.skuid|out-string).trim())" ;
+                            $smsg = "remove-MGUserLicense removed Licenses:$($bRet.RemovedLicenses)" ;
+                            # $MGUser.AssignedLicenses.skuid
+                            $smsg += "`n$(($MGUser.AssignedLicenses.skuid|out-string).trim())" ;
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
@@ -473,25 +629,25 @@ function remove-EXOLicense {
 
                     } ;  # loop-E $LicenseSkuIds
 
-                    connect-aad @pltRXO ; 
-                    $AADUser=$null ;
+                    #connect-aad @pltRXO ; 
+                    $MGUser=$null ;
                     #$TenantShortName = ((Get-AzureADTenantDetail).verifieddomains |?{$_._default}).name.split('.')[0] ;
-                    $pltGAADU=[ordered]@{ 
-                        ObjectId = $tUPN ;
+                    $pltGMGU=[ordered]@{ 
+                        UserID = $tUPN ;
                         ErrorAction = 'STOP' ;
                         verbose = $($VerbosePreference -eq "Continue") ;
                     } ;
                     # refresh ADU post chgs & test xmbx lic stat
-                    $AADUser = Get-AzureADUser @pltGAADU ;
+                    $MGUser = Get-MGUser @pltGMGU ;
                     if(-not $LicenseSkuIds){
                         # running explicit LicenseSkuIds may not have removed all EXO lic's, so no point in doing a followup confirm license-free
-                        $IsExoLicensed = test-EXOIsLicensed -User $AADUser -Credential:$pltRXO.Credential -verbose:$pltRXO.verbose -silent:$pltRXO.silent ;
+                        $IsExoLicensed = test-EXOIsLicensed -User $MGUser -Credential:$pltRXO.Credential -verbose:$pltRXO.verbose -silent:$pltRXO.silent ;
                         if($IsExoLicensed){
-                            $smsg = "AADUser still coming back with mounted EXO-supporting license. `nRe-Running remove-EXOLicesnse pass..." ; 
+                            $smsg = "MGUser still coming back with mounted EXO-supporting license. `nRe-Running remove-EXOLicesnse pass..." ; 
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                             $pltRxLic=[ordered]@{
-                                users=$AADUser.userprincipalname ;
+                                users=$MGUser.userprincipalname ;
                                 ticket=$ticket ;
                                 whatif=$($whatif) ;
                                 Verbose=$($VerbosePreference -eq "Continue")
@@ -508,9 +664,9 @@ function remove-EXOLicense {
                             #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
                             #else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                             $bRet = remove-EXOLicense @pltRxLic ;
-                            if($bRet) {$AADUser = $bRet } ; 
+                            if($bRet) {$MGUser = $bRet } ; 
                         } else { 
-                            $smsg = "Validated:$($AADUser.userprincipalname): is now EXO-unlicensed" ; 
+                            $smsg = "Validated:$($MGUser.userprincipalname): is now EXO-unlicensed" ; 
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                             else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                             #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
@@ -548,7 +704,7 @@ function remove-EXOLicense {
                     write-host "." -NoNewLine ;
                     $1F=$true ;
                 #} Until (get-xomailbox -id $oMSUsr.userprincipalname -EA 0) ;
-                } Until ($ombx = get-xomailbox -id $AADUser.userprincipalname -EA 0) ; # capture return (prevent from dropping into pipe)
+                } Until ($ombx = get-xomailbox -id $MGUser.userprincipalname -EA 0) ; # capture return (prevent from dropping into pipe)
                 # get-xomailbox returns: System.Management.Automation.PSObject; not a real Mailbox object class
                 $ombx = $ombx | ?{$_ -is [System.Management.Automation.PSObject]} ; # looks like an attempt to filter just the mailbox out of the pipeline return
                 $smsg = "xo Mailbox confirmed!" ;
@@ -556,9 +712,9 @@ function remove-EXOLicense {
                 else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
             } ;
 
-            # return $AADUser to pipeline if populated
+            # return $MGUser to pipeline if populated
 
-            $AADUser | write-output ;
+            $MGUser | write-output ;
 
             $smsg =  $sBnr.replace('=v','=^').replace('v=','^=') ;
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
