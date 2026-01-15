@@ -20,6 +20,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 11:45 AM 1/15/2026 add alias: 'rvuser' (rv=resolve)
     * 4:31 PM 1/6/2026 fixed brace mismatch; updated in latest CONNECT_O365SERVICES, CALL_CONNECT_O365SERVICES, CALL_CONNECT_OPSERVICES, START_LOG_OPTIONS
     * 10:35 AM 12/22/2025 pasted in latest start_log block for holistic from psparamt; added missing per-user lop stop transcript, right below write_output block
     * 3:04 PM 12/12/2025 was still diverting logging when .psm1 module into modules dir; also outputing massive export-clixml 3gb files, needed testing of the content prior to exports. 
@@ -620,7 +621,7 @@ function resolve-user {
     ##Requires -RunasAdministrator
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
-    [Alias('ulu')]
+    [Alias('ulu','rvUser')]
     PARAM(
         [Parameter(Position=0,Mandatory=$False,ValueFromPipeline=$true,HelpMessage="Array of user descriptors: displayname, emailaddress, UPN, samaccountname (checks clipboard where unspecified)[-users 'xxx','yyy']")]
             #[ValidateNotNullOrEmpty()] # pulls string from clipboard if not populated
