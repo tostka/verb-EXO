@@ -20,7 +20,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 11:45 AM 1/15/2026 add alias: 'rvuser' (rv=resolve)
+    * 11:45 AM 1/15/2026 add alias: 'rvuser' (rv=resolve); fix typo in out-markdowntable
     * 4:31 PM 1/6/2026 fixed brace mismatch; updated in latest CONNECT_O365SERVICES, CALL_CONNECT_O365SERVICES, CALL_CONNECT_OPSERVICES, START_LOG_OPTIONS
     * 10:35 AM 12/22/2025 pasted in latest start_log block for holistic from psparamt; added missing per-user lop stop transcript, right below write_output block
     * 3:04 PM 12/12/2025 was still diverting logging when .psm1 module into modules dir; also outputing massive export-clixml 3gb files, needed testing of the content prior to exports. 
@@ -5132,7 +5132,7 @@ Mailbox itself :
                             foreach($grp in $hSum.xoRecipientPermissionGroups){
                                 $smsg += "`n-----------" ; 
                                 $smsg += "`n$(($grp |select $propsDG[0..1] |out-markdowntable @MDtbl|out-string).trim())" ;
-                                $smsg += "`n$(($grp |select $propsDG[3..6] |out-markdow ntable @MDtbl|out-string).trim())" ;
+                                $smsg += "`n$(($grp |select $propsDG[3..6] |out-markdowntable @MDtbl|out-string).trim())" ;
                                 $smsg += "`n$(($grp |select $propsDG[2] |fl |out-string).trim())" ;
                                 $smsg += "`n#### Members:`n$(($grp.members | ft -a $propsRcpTbl|out-string).trim())`n`n" ;
                             } ; 
