@@ -1,6 +1,6 @@
 ﻿# connect-O365Services.ps1
 
-#region CONNECT_O365SERVICES ; #*======v connect-O365Services v======
+    #region CONNECT_O365SERVICES ; #*======v connect-O365Services v======
     #if(-not (get-childitem function:connect-O365Services -ea 0)){
         function connect-O365Services {
             <#
@@ -9,6 +9,7 @@
             .NOTES
     
             REVISIONS
+            * 4:59 PM 1/20/2026 fixed returning populated CredentialO365 in return object
             * 4:12 PM 1/6/2026 revised for verb-MG compait
             *8:17 PM 6/1/2025 debugs functional for useexo & usesc now; 
     
@@ -578,7 +579,7 @@
                     $UseOPAD = $false ;
                 }
                 if($IsEdgeTransport){
-                    $UseExOP = $true ;
+                    #$UseExOP = $true ;
                     if($IsEdgeTransport -AND $psise){
                         $smsg = "powershell_ISE UNDER Exchange Edge Transport role!"
                         $smsg += "`nThis script is likely to fail the get-messagetrackingLog calls with Access Denied errors"
@@ -589,7 +590,7 @@
                     } ;
                 } ;
                 $useO365 = [boolean]($useO365 -OR $useEXO -or $useSC -OR $UseMSOL -OR $UseAAD -OR $UseMG) ; 
-                $UseOP = [boolean]($UseOP -OR $UseExOP -OR $UseOPAD) ;
+                #$UseOP = [boolean]($UseOP -OR $UseExOP -OR $UseOPAD) ;
                 #*------^ END STEERING VARIS ^------
                 #*------v EXO V2/3 steering constants v------
                 $EOMModName =  'ExchangeOnlineManagement' ;
@@ -723,10 +724,28 @@
                 if($useEXO -OR $useSC){
                     $XOconnections = test-exoconnectiontdo ; 
                     foreach($xcon in $XOconnections){
-                        if($xcon.connection -ANd $xcon.isXO -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){$ret_rxo = $xcon; $ret_ccO365S.hasEXO = $true} # else {$ret_rxo = $null ; $ret_ccO365S.hasEXO = $false } ;
-                        if($xcon.connection -ANd $xcon.isSC -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){$ret_rSC = $xcon; $ret_ccO365S.hasSC = $true} # else {$ret_rSC = $null; $ret_ccO365S.hasSC = $false } ;
+                        if($xcon.connection -ANd $xcon.isXO -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){
+                            $ret_rxo = $xcon; $ret_ccO365S.hasEXO = $true ; 
+                            if($rai = (resolve-AppIDToCBAFriendlyName -AppId $xcon.AppID)){
+                                $o365Cred = (gv -name "cred$($rai.service)$($rai.tenorg)$($rai.friendlyname.split('_')[1].split('-')[0].replace('Cert',''))" -ea STOP).value ; 
+                            }
+                        } # else {$ret_rxo = $null ; $ret_ccO365S.hasEXO = $false } ;
+                        if($xcon.connection -ANd $xcon.isSC -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){
+                            $ret_rSC = $xcon; $ret_ccO365S.hasSC = $true
+                            if(-not $o365Cred){
+                                if($rai = (resolve-AppIDToCBAFriendlyName -AppId $xcon.AppID)){
+                                    $o365Cred = (gv -name "cred$($rai.service)$($rai.tenorg)$($rai.friendlyname.split('_')[1].split('-')[0].replace('Cert',''))" -ea STOP).value ; 
+                                }
+                            }
+                        } # else {$ret_rSC = $null; $ret_ccO365S.hasSC = $false } ;
                     } ; 
                 } ; 
+                if(($ret_ccO365S.hasEXO -OR $ret_ccO365S.hasSC) -AND $o365Cred){
+                    $smsg = "Returning EXO Credential" ; 
+                    if($VerbosePreference -eq "Continue"){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    $ret_ccO365S.CredentialO365 = $o365Cred  ; 
+                }
                 #endregion VALIDATE_XOSC ; #*------^ END VALIDATE_XOSC ^------
                 #region MSOL_CONNECTION ; #*------v  MSOL CONNECTION v------
                 #$UseMSOL = $false
@@ -964,7 +983,15 @@
                     # need to update the hasMG flag: TRY{$AADTenant = Get-AzureADTenantDetail -ea stop ; $ret_ccO365S.hasAAD = $true} CATCH {$ret_ccO365S.hasAAD = $false }  ; 
                     TRY{
                         $MGCntxt = test-mgconnection -Verbose:($VerbosePreference -eq 'Continue') -ea Stop ;
-                        if($MGCntxt.isConnected){$ret_ccO365S.hasMG = $true}ELSE{$ret_ccO365S.hasMG = $FALSE}                        
+                        if($MGCntxt.isConnected){
+                            $ret_ccO365S.hasMG = $true ; 
+                            if($ret_ccO365S.hasMG -AND $pltCMG.Credential -AND -not $ret_ccO365S.CredentialO365){
+                                $smsg = "returning MG Credential" ; 
+                                if($VerbosePreference -eq "Continue"){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                                $ret_ccO365S.CredentialO365 = $pltCMG.Credential ; 
+                            } ; 
+                        }ELSE{$ret_ccO365S.hasMG = $FALSE}                        
                     } CATCH {
                         $ret_ccO365S.hasMG = $false 
                     }  

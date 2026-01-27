@@ -1,11 +1,11 @@
-﻿# verb-exo.psm1
+﻿# verb-EXO.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 11.0.2.0
+  Version     : 11.0.1.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -2344,7 +2344,6 @@ function connect-O365Services {
             .NOTES
     
             REVISIONS
-            * 4:59 PM 1/20/2026 fixed returning populated CredentialO365 in return object
             * 4:12 PM 1/6/2026 revised for verb-MG compait
             *8:17 PM 6/1/2025 debugs functional for useexo & usesc now; 
     
@@ -2914,7 +2913,7 @@ function connect-O365Services {
                     $UseOPAD = $false ;
                 }
                 if($IsEdgeTransport){
-                    #$UseExOP = $true ;
+                    $UseExOP = $true ;
                     if($IsEdgeTransport -AND $psise){
                         $smsg = "powershell_ISE UNDER Exchange Edge Transport role!"
                         $smsg += "`nThis script is likely to fail the get-messagetrackingLog calls with Access Denied errors"
@@ -2925,7 +2924,7 @@ function connect-O365Services {
                     } ;
                 } ;
                 $useO365 = [boolean]($useO365 -OR $useEXO -or $useSC -OR $UseMSOL -OR $UseAAD -OR $UseMG) ; 
-                #$UseOP = [boolean]($UseOP -OR $UseExOP -OR $UseOPAD) ;
+                $UseOP = [boolean]($UseOP -OR $UseExOP -OR $UseOPAD) ;
                 #*------^ END STEERING VARIS ^------
                 #*------v EXO V2/3 steering constants v------
                 $EOMModName =  'ExchangeOnlineManagement' ;
@@ -3059,28 +3058,10 @@ function connect-O365Services {
                 if($useEXO -OR $useSC){
                     $XOconnections = test-exoconnectiontdo ; 
                     foreach($xcon in $XOconnections){
-                        if($xcon.connection -ANd $xcon.isXO -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){
-                            $ret_rxo = $xcon; $ret_ccO365S.hasEXO = $true ; 
-                            if($rai = (resolve-AppIDToCBAFriendlyName -AppId $xcon.AppID)){
-                                $o365Cred = (gv -name "cred$($rai.service)$($rai.tenorg)$($rai.friendlyname.split('_')[1].split('-')[0].replace('Cert',''))" -ea STOP).value ; 
-                            }
-                        } # else {$ret_rxo = $null ; $ret_ccO365S.hasEXO = $false } ;
-                        if($xcon.connection -ANd $xcon.isSC -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){
-                            $ret_rSC = $xcon; $ret_ccO365S.hasSC = $true
-                            if(-not $o365Cred){
-                                if($rai = (resolve-AppIDToCBAFriendlyName -AppId $xcon.AppID)){
-                                    $o365Cred = (gv -name "cred$($rai.service)$($rai.tenorg)$($rai.friendlyname.split('_')[1].split('-')[0].replace('Cert',''))" -ea STOP).value ; 
-                                }
-                            }
-                        } # else {$ret_rSC = $null; $ret_ccO365S.hasSC = $false } ;
+                        if($xcon.connection -ANd $xcon.isXO -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){$ret_rxo = $xcon; $ret_ccO365S.hasEXO = $true} # else {$ret_rxo = $null ; $ret_ccO365S.hasEXO = $false } ;
+                        if($xcon.connection -ANd $xcon.isSC -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){$ret_rSC = $xcon; $ret_ccO365S.hasSC = $true} # else {$ret_rSC = $null; $ret_ccO365S.hasSC = $false } ;
                     } ; 
                 } ; 
-                if(($ret_ccO365S.hasEXO -OR $ret_ccO365S.hasSC) -AND $o365Cred){
-                    $smsg = "Returning EXO Credential" ; 
-                    if($VerbosePreference -eq "Continue"){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                    $ret_ccO365S.CredentialO365 = $o365Cred  ; 
-                }
                 #endregion VALIDATE_XOSC ; #*------^ END VALIDATE_XOSC ^------
                 #region MSOL_CONNECTION ; #*------v  MSOL CONNECTION v------
                 #$UseMSOL = $false
@@ -3318,15 +3299,7 @@ function connect-O365Services {
                     # need to update the hasMG flag: TRY{$AADTenant = Get-AzureADTenantDetail -ea stop ; $ret_ccO365S.hasAAD = $true} CATCH {$ret_ccO365S.hasAAD = $false }  ; 
                     TRY{
                         $MGCntxt = test-mgconnection -Verbose:($VerbosePreference -eq 'Continue') -ea Stop ;
-                        if($MGCntxt.isConnected){
-                            $ret_ccO365S.hasMG = $true ; 
-                            if($ret_ccO365S.hasMG -AND $pltCMG.Credential -AND -not $ret_ccO365S.CredentialO365){
-                                $smsg = "returning MG Credential" ; 
-                                if($VerbosePreference -eq "Continue"){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
-                                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
-                                $ret_ccO365S.CredentialO365 = $pltCMG.Credential ; 
-                            } ; 
-                        }ELSE{$ret_ccO365S.hasMG = $FALSE}                        
+                        if($MGCntxt.isConnected){$ret_ccO365S.hasMG = $true}ELSE{$ret_ccO365S.hasMG = $FALSE}                        
                     } CATCH {
                         $ret_ccO365S.hasMG = $false 
                     }  
@@ -29122,8 +29095,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU7hfYORWBCrLfTHM6PHBkkSu7
-# +QWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUjPsK35dLLWgDYIUtAQ/9ntlQ
+# 6FmgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -29138,9 +29111,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTU6G4t
-# Z3/NNRRKkEd4xiy6CL+2rTANBgkqhkiG9w0BAQEFAASBgGLal//w1GuKYoxiz2Oy
-# i+Ns6oXUB2IqhfOH8Vo0a5gWI/Egvbf0oJucbfTJivJ7PvO7j544RsFLUVOThjki
-# KmHPP3VbvE5WdSpyTRgbLtaGID2j8Gt5UetTd+Yq4CSvWggW0InAVVil1eDtLsaI
-# XmNKJKnGNL9bKhgXFiNyMPyO
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS7t4ql
+# n8elNfAHRf/NuyGruU3f0TANBgkqhkiG9w0BAQEFAASBgKb8JY4LkmcbC0Rz0dUR
+# RAsqn9YMzEl0cObeA6CXO9TtY0CDL9t2zpBoqPhj6ODKJPJCM/PYUEvYschv03p2
+# 1I3IuBzCOUDOYPqZGa9mKho/OP9RywuuDnYGtAXIzA/40ml/GfNARSvXfwVmsG4b
+# W7g8gK4jvT7ZL0eU4Crk6aSv
 # SIG # End signature block
