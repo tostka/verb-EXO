@@ -18,6 +18,7 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 10:48 AM 1/19/2026 bugfix: $pltCcOPSvcs.UserRole (postfilter, not match test)
     * 4:25 PM 1/6/2026 pulled in latest CONNECT_O365SERVICES, CALL_CONNECT_O365SERVICES, CALL_CONNECT_OPSERVICES, START_LOG_OPTIONS; 
         fundemental retool, porting from AzureAD -> MgGraph (f M$!), working again, for first time since they disabled AAD access! fundemental retooling in the CONNECT_O365SERVICES block, added test-MGConnection() etc. 
     * 4:27 PM 10/21/2025 fixed /tested more: loop (M$ v2 pagination offload) ; add: -ResultSize; fundemental update to use Get-xoMessageTraceV2 & Get-xoMessageTraceDetailV2 mandates (gxmt & gxmtd are now borked; fail) ; 
@@ -1525,7 +1526,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                 #UserRole = $UserRole ; # @('SID','ESVC') ;
                 # if inheriting same $userrole param/default, that was already used for cloud conn, filter out the op unsupported CBA roles
                 # exclude csvc as well, go with filter on the supported ValidateSet from get-HybridOPCredentials: ESVC|LSVC|SID
-                UserRole = ($UserRole -match '(ESVC|LSVC|SID)' -notmatch 'CBA') ; # @('SID','ESVC') ;
+                UserRole = $UserRole |?{$_ -match '(ESVC|LSVC|SID)' -AND $_ -notmatch 'CBA'} ; 
                 # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
                 silent = $silent ;
             } ;

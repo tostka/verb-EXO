@@ -18,6 +18,7 @@ function get-ExoMailboxLicenses {
     Github      : https://github.com/tostka/verb-ex2010
     Tags        : Powershell
     REVISIONS
+    * 10:48 AM 1/19/2026 bugfix: $pltCcOPSvcs.UserRole (postfilter, not match test)
     # 2:23 PM 1/12/2026 fixed op break: #804, FORCE:  $useOP = $false ; : This has NO NEED FOR ONPREM, IT JUST DOES A Get-MgSubscribedSku AND RUNS THE STATIC SERVICEPLANLIST CHECK, NOTHING ELSE!
     * 1:30 PM 1/7/2026 WIP unupdated port from AADLicense -> MGUDLicense
     * 10:23 AM 11/27/2024 cleaned up CBH expls, pulled spurious quota #1, added in its place a simple call & review; updated #2's comment to actually reflect what's going on (vs the original indexed hash pull for quotas, it wass lifted from).
@@ -823,7 +824,7 @@ function get-ExoMailboxLicenses {
                 #UserRole = $UserRole ; # @('SID','ESVC') ;
                 # if inheriting same $userrole param/default, that was already used for cloud conn, filter out the op unsupported CBA roles
                 # exclude csvc as well, go with filter on the supported ValidateSet from get-HybridOPCredentials: ESVC|LSVC|SID
-                UserRole = ($UserRole -match '(ESVC|LSVC|SID)' -notmatch 'CBA') ; # @('SID','ESVC') ;
+                UserRole = $UserRole |?{$_ -match '(ESVC|LSVC|SID)' -AND $_ -notmatch 'CBA'} ; 
                 # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
                 silent = $silent ;
             } ;

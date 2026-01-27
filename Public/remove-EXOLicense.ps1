@@ -150,7 +150,7 @@ function remove-EXOLicense {
             [switch] $whatIf
     ) ;
     BEGIN{
-        #region CONSTANTS-AND-ENVIRO #*======v CONSTANTS-AND-ENVIRO v======
+        #region CONSTANTS_AND_ENVIRO #*======v CONSTANTS-AND-ENVIRO v======
         # function self-name (equiv to script's: $MyInvocation.MyCommand.Path) ;
         ${CmdletName} = $PSCmdlet.MyInvocation.MyCommand.Name ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
@@ -160,10 +160,12 @@ function remove-EXOLicense {
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
 
+        #region LOCAL_CONSTANTS ; #*------v LOCAL_CONSTANTS v------
         $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
         # 9:58 AM 1/13/2026, EXCLUDE STRANGE EXO-MBX GRANTING LIC, THAT'S APPEARED:
         $rgxLicAgentExclude = '^MICROSOFT_AGENT_' ; 
+        #endregion LOCAL_CONSTANTS ; #*------^ END LOCAL_CONSTANTS ^------
          <#
         # recycling the inbound above into next call in the chain
         # downstream commands
