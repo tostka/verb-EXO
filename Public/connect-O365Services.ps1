@@ -9,6 +9,7 @@
             .NOTES
     
             REVISIONS
+            * 5:28 PM 1/28/2026 Err suppress: added pretest for $xcon.Appid, before trying to resolve it (only CBA creds have them)
             * 4:59 PM 1/20/2026 fixed returning populated CredentialO365 in return object
             * 4:12 PM 1/6/2026 revised for verb-MG compait
             *8:17 PM 6/1/2025 debugs functional for useexo & usesc now; 
@@ -726,9 +727,12 @@
                     foreach($xcon in $XOconnections){
                         if($xcon.connection -ANd $xcon.isXO -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){
                             $ret_rxo = $xcon; $ret_ccO365S.hasEXO = $true ; 
-                            if($rai = (resolve-AppIDToCBAFriendlyName -AppId $xcon.AppID)){
-                                $o365Cred = (gv -name "cred$($rai.service)$($rai.tenorg)$($rai.friendlyname.split('_')[1].split('-')[0].replace('Cert',''))" -ea STOP).value ; 
-                            }
+                            # 5:09 PM 1/28/2026 SID non cba don't have appid, exempt test, throws error in console
+                            if($xcon.AppID){
+                                if($rai = (resolve-AppIDToCBAFriendlyName -AppId $xcon.AppID)){
+                                    $o365Cred = (gv -name "cred$($rai.service)$($rai.tenorg)$($rai.friendlyname.split('_')[1].split('-')[0].replace('Cert',''))" -ea STOP).value ; 
+                                }
+                            } ; 
                         } # else {$ret_rxo = $null ; $ret_ccO365S.hasEXO = $false } ;
                         if($xcon.connection -ANd $xcon.isSC -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){
                             $ret_rSC = $xcon; $ret_ccO365S.hasSC = $true
