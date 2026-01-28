@@ -20,6 +20,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:41 PM 1/27/2026 latest conn_svcs block updated
     * 10:48 AM 1/19/2026 bugfix: $pltCcOPSvcs.UserRole (postfilter, not match test)
     * 4:31 PM 1/6/2026 fixed brace mismatch; updated in latest CONNECT_O365SERVICES, CALL_CONNECT_O365SERVICES, CALL_CONNECT_OPSERVICES, START_LOG_OPTIONS
     * 10:35 AM 12/22/2025 pasted in latest start_log block for holistic from psparamt; added missing per-user lop stop transcript, right below write_output block
@@ -1442,54 +1443,243 @@ function resolve-user {
 
         #endregion FUNCTIONS ; #*======^ END FUNCTIONS ^======
 
-        #region SERVICE_CONNECTIONS #*======v END SERVICE_CONNECTIONS v======
-        $MGPermissionsScope = @("User.Read.All","Group.Read.All") # get-AzureAdUser baseline requirements, memberof requires groupread as well
+        <# prior specs: 
+            $pltCco365Svcs=[ordered]@{
+                # environment parameters:
+                EnvSummary = $rvEnv ; 
+                NetSummary = $netsettings ; 
+                # service choices
+                useEXO = $true ;
+                useSC = $false ; 
+                UseMSOL = $false ;
+                UseAAD = $false ; # M$ is actively blocking all AAD access now: Message: Access blocked to AAD Graph API for this application. https://aka.ms/AzureADGraphMigration.
+                UseMG = $true ;
+                # Service Connection parameters
+                TenOrg = $TenOrg ; # $global:o365_TenOrgDefault ; 
+                Credential = $Credential ;
+                AdminAccount = $AdminAccount ; 
+                #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
+                UserRole = $UserRole ; # @('SID','CSVC') ;
+                # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
+                silent = $silent ;
+                MGPermissionsScope = $MGPermissionsScope ;
+                MGCmdlets = $MGCmdlets ;
+            } ;
 
+            $pltCcOPSvcs=[ordered]@{
+                # environment parameters:
+                EnvSummary = $rvEnv ;
+                NetSummary = $netsettings ;
+                XoPSummary = $lclExOP ;
+                # service choices
+                UseExOP = $true ;
+                useForestWide = $true ;
+                useExopNoDep = $false ;
+                ExopVers = 'Ex2010' ;
+                UseOPAD = $true ;
+                useExOPVers = $useExOPVers; # 'Ex2010' ;
+                # Service Connection parameters
+                TenOrg = $TenOrg ; # $global:o365_TenOrgDefault ;
+                Credential = $Credential ;
+                #[ValidateSet("SID","ESVC","LSVC")]
+                #UserRole = $UserRole ; # @('SID','ESVC') ;
+                # if inheriting same $userrole param/default, that was already used for cloud conn, filter out the op unsupported CBA roles
+                # exclude csvc as well, go with filter on the supported ValidateSet from get-HybridOPCredentials: ESVC|LSVC|SID
+                #UserRole = ($UserRole -match '(ESVC|LSVC|SID)' -notmatch 'CBA') ; # @('SID','ESVC') ;
+                # coming through as match $true, not filtered
+                UserRole = $UserRole |?{$_ -match '(ESVC|LSVC|SID)' -AND $_ -notmatch 'CBA'} ; 
+                # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
+                silent = $silent ;
+            } ;
+        #>
+        #region SERVICE_CONNECTIONS #*======v SERVICE_CONNECTIONS v======
+    
         #region BROAD_SVC_CONTROL_VARIS ; #*======v BROAD_SVC_CONTROL_VARIS  v======   
         $useO365 = $true ; 
         $useOP = $true ;     
         # (config individual svcs in each block)
         #endregion BROAD_SVC_CONTROL_VARIS ; #*======^ END BROAD_SVC_CONTROL_VARIS ^======
 
+        #region CALL_CONNECT_O365SERVICES ; #*======v CALL_CONNECT_O365SERVICES v======
+        #$useO365 = $true ; 
+        if($useO365){
+            $pltCco365Svcs=[ordered]@{
+                # environment parameters:
+                EnvSummary = $rvEnv ; 
+                NetSummary = $netsettings ; 
+                # service choices
+                useEXO = $true ;
+                useSC = $false ; 
+                UseMSOL = $false ;
+                UseAAD = $false ; # M$ is actively blocking all AAD access now: Message: Access blocked to AAD Graph API for this application. https://aka.ms/AzureADGraphMigration.
+                UseMG = $true ;
+                # Service Connection parameters
+                TenOrg = $TenOrg ; # $global:o365_TenOrgDefault ; 
+                Credential = $Credential ;
+                AdminAccount = $AdminAccount ; 
+                #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
+                UserRole = $UserRole ; # @('SID','CSVC') ;
+                # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
+                silent = $silent ;
+                MGPermissionsScope = $MGPermissionsScope ;
+                MGCmdlets = $MGCmdlets ;
+            } ;
+            write-verbose "(Purge no value keys from splat)" ; 
+            $mts = $pltCco365Svcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
+            if((get-command connect-O365Services -EA STOP).parameters.ContainsKey('whatif')){
+                $pltCco365SvcsnDSR.add('whatif',$($whatif))
+            } ; 
+            # add rertry on fail, up to $DoRetries
+            $Exit = 0 ; # zero out $exit each new cmd try/retried
+            # do loop until up to 4 retries...
+            Do {
+                $smsg = "connect-O365Services w`n$(($pltCco365Svcs|out-string).trim())" ; 
+                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $ret_ccSO365 = connect-O365Services @pltCco365Svcs ; 
+                #region CONFIRM_CCEXORETURN ; #*------v CONFIRM_CCEXORETURN v------
+                # matches each: $plt.useXXX:$true to matching returned $ret.hasXXX:$true 
+                $vplt = $pltCco365Svcs ; $vret = 'ret_ccSO365' ; $ACtionCommand = 'connect-O365Services' ; $vtests = @() ; $vFailMsgs = @()  ; 
+                $vplt.GetEnumerator() |?{$_.key -match '^use' -ANd $_.value -match $true} | foreach-object{
+                    $pltkey = $_ ;
+                    $smsg = "$(($pltkey | ft -HideTableHeaders name,value|out-string).trim())" ; 
+                    if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                    else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                    $tprop = $pltkey.name -replace '^use','has';
+                    if($rProp = (gv $vret).Value.psobject.properties | ?{$_.name -match $tprop}){
+                        $smsg = "$(($rprop | ft -HideTableHeaders name,value |out-string).trim())" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        if($rprop.Value -eq $pltkey.value){
+                            $vtests += $true ; 
+                            $smsg = "Validated: $($pltKey.name):$($pltKey.value) => $($rprop.name):$($rprop.value)" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        } else {
+                            $smsg = "NOT VALIDATED: $($pltKey.name):$($pltKey.value) => $($rprop.name):$($rprop.value)" ;
+                            $vtests += $false ; 
+                            $vFailMsgs += "`n$($smsg)" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        };
+                    } else{
+                        $smsg = "Unable to locate: $($pltKey.name):$($pltKey.value) to any matching $($rprop.name)!)" ;
+                        $smsg = "" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    } ; 
+                } ; 
+                if($vtests -notcontains $false){
+                    $smsg = "==> $($ACtionCommand): confirmed specified connections *all* successful " ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    # populuate the $pltRXO.credential
+                    if($ret_ccSO365.CredentialO365){
+                        $pltRXO = [ordered]@{
+                            Credential = $ret_ccSO365.CredentialO365 ;
+                            verbose = $($VerbosePreference -eq "Continue")  ;
+                        } ;
+                    }else{
+                        $smsg = "Unpopulated returnd:connect-O365Services.CredentialO365!" ; 
+                        $smsg += "`nUNABLE TO POPULATE `$pltRXO!" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    }
+                    $Exit = $DoRetries ;
+                } else {
+                    $smsg = "==> $($ACtionCommand): FAILED SOME SPECIFIED CONNECTIONS" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    $smsg = "MISSING SOME KEY CONNECTIONS. DO YOU WANT TO IGNORE, AND CONTINUE WITH CONNECTED SERVICES?" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    $Exit ++ ;
+                    $smsg = "Try #: $Exit" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } 
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                    if($Exit -eq $DoRetries){
+                        $smsg = "Unable to exec cmd!"; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        #-=-=-=-=-=-=-=-=
+                        $sdEmail.SMTPSubj = "FAIL Rpt:$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"
+                        $sdEmail.SmtpBody = "`n===Processing Summary:" ;
+                        if($vFailMsgs){
+                            $sdEmail.SmtpBody += "`n$(($vFailMsgs|out-string).trim())" ; 
+                        } ; 
+                        $sdEmail.SmtpBody += "`n" ;
+                        if($SmtpAttachment){
+                            $sdEmail.SmtpAttachment = $SmtpAttachment
+                            $sdEmail.smtpBody +="`n(Logs Attached)" ;
+                        };
+                        $sdEmail.SmtpBody += "Pass Completed $([System.DateTime]::Now)" ;
+                        $smsg = "Send-EmailNotif w`n$(($sdEmail|out-string).trim())" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Send-EmailNotif @sdEmail ;
+                        $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ;
+                        if ($bRet.ToUpper() -eq "YYY") {
+                            $smsg = "(Moving on), WITH THE FOLLOW PARTIAL CONNECTION STATUS" ;
+                            $smsg += "`n`n$(($ret_CcOPSvcs|out-string).trim())" ; 
+                            write-host -foregroundcolor green $smsg  ;
+                        } else {
+                            throw $smsg ; 
+                            break ; #exit 1
+                        } ;  
+                    } ;        
+                } ; 
+                #endregion CONFIRM_CCEXORETURN ; #*------^ END CONFIRM_CCEXORETURN ^------
+            } Until ($Exit -eq $DoRetries) ; 
+        } ; #  useO365-E
+        #endregion CALL_CONNECT_O365SERVICES ; #*======^ END CALL_CONNECT_O365SERVICES ^======
+
         #region TEST_EXO_CONN ; #*------v TEST_EXO_CONN v------
         # ALT: simplified verify EXO conn: ALT to full CONNECT_O365SERVICES block - USE ONE OR THE OTHER!
-        $useEXO = $true ; 
+        $useEXO = $FALSE ; 
         $useSC = $false ; 
         if(-not $XOConnectionUri ){$XOConnectionUri = 'https://outlook.office365.com'} ;
         if(-not $SCConnectionUri){$SCConnectionUri = 'https://ps.compliance.protection.outlook.com'} ;
         $EXOtestCmdlet = 'Get-xoOrganizationConfig' ; 
-        if(gcm $EXOtestCmdlet -ea 0){
-            $conns = Get-ConnectionInformation -ea STOP  ; 
-            $hasEXO = $hasSC = $false ; 
-            #if($conns | %{$_ | ?{$_.ConnectionUri -eq 'https://outlook.office365.com' -AND $_.State -eq 'Connected' -AND $_.TokenStatus -eq 'Active'}}){
-            $conns | %{
-                if($_ | ?{$_.ConnectionUri -eq $XOConnectionUri}){$hasEXO = $true } ; 
-                if($_ | ?{$_.ConnectionUri -eq $SCConnectionUri}){$hasSC = $true } ; 
-            }
-            if($useEXO -AND $hasEXO){
-                write-verbose "EXO ConnectionURI present" ; 
-            }elseif(-not $useEXO){}else{
-                $smsg = "No Active EXO connection: Run - Connect-ExchangeOnline -Prefix xo -  before running this script!" ; 
+        if($useEXO){
+            if(gcm $EXOtestCmdlet -ea 0){
+                $conns = Get-ConnectionInformation -ea STOP  ; 
+                $hasEXO = $hasSC = $false ; 
+                #if($conns | %{$_ | ?{$_.ConnectionUri -eq 'https://outlook.office365.com' -AND $_.State -eq 'Connected' -AND $_.TokenStatus -eq 'Active'}}){
+                $conns | %{
+                    if($_ | ?{$_.ConnectionUri -eq $XOConnectionUri}){$hasEXO = $true } ; 
+                    if($_ | ?{$_.ConnectionUri -eq $SCConnectionUri}){$hasSC = $true } ; 
+                }
+                if($useEXO -AND $hasEXO){
+                    write-verbose "EXO ConnectionURI present" ; 
+                }elseif(-not $useEXO){}else{
+                    $smsg = "No Active EXO connection: Run - Connect-ExchangeOnline -Prefix xo -  before running this script!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    BREAK ; 
+                } ; 
+                if($useSC -AND $hasSC){
+                    write-verbose "SCI ConnectionURI present" ; 
+                }elseif(-not $useSC){}else{
+                    $smsg = "No Active SC connection: Run - Connect-IPPSSession -Prefix SC -  before running this script!" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                    BREAK ; 
+                } ; 
+            }else {
+                $smsg = "Missing gcm get-xoMailboxFolderStatistics: ExchangeOnlineManagement module *not* loaded!" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 BREAK ; 
-            } ; 
-            if($useSC -AND $hasSC){
-                write-verbose "SCI ConnectionURI present" ; 
-            }elseif(-not $useSC){}else{
-                $smsg = "No Active SC connection: Run - Connect-IPPSSession -Prefix SC -  before running this script!" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                BREAK ; 
-            } ; 
-        }else {
-            $smsg = "Missing gcm get-xoMailboxFolderStatistics: ExchangeOnlineManagement module *not* loaded!" ; 
-            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-            BREAK ; 
-        } ;     
+            } ;    
+        }else{
+            $smsg = "useEXO:$($useEXO): skipping EXO tests" ; 
+            if($VerbosePreference -eq "Continue"){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+        } 
         #endregion TEST_EXO_CONN ; #*------^ END TEST_EXO_CONN ^------
-    
+
         #region CALL_CONNECT_OPSERVICES ; #*======v CALL_CONNECT_OPSERVICES v======
         #$useOP = $false ; 
         if($useOP){
@@ -1512,11 +1702,13 @@ function resolve-user {
                 #UserRole = $UserRole ; # @('SID','ESVC') ;
                 # if inheriting same $userrole param/default, that was already used for cloud conn, filter out the op unsupported CBA roles
                 # exclude csvc as well, go with filter on the supported ValidateSet from get-HybridOPCredentials: ESVC|LSVC|SID
-                UserRole = $UserRole |?{$_ -match '(ESVC|LSVC|SID)' -AND $_ -notmatch 'CBA'} ; # @('SID','ESVC') ;
+                #UserRole = ($UserRole -match '(ESVC|LSVC|SID)' -notmatch 'CBA') ; # @('SID','ESVC') ;
+                # coming through as match $true, not filtered
+                UserRole = $UserRole |?{$_ -match '(ESVC|LSVC|SID)' -AND $_ -notmatch 'CBA'} ; 
                 # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
                 silent = $silent ;
             } ;
-    
+
             write-verbose "(Purge no value keys from splat)" ;
             $mts = $pltCcOPSvcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCcOPSvcs.remove($_.Name)} ; rv mts -ea 0 ;
             if((get-command connect-OPServices -EA STOP).parameters.ContainsKey('whatif')){
@@ -1524,9 +1716,9 @@ function resolve-user {
             } ;
             $smsg = "connect-OPServices w`n$(($pltCcOPSvcs|out-string).trim())" ;
             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-            $ret_CcOPSvcs = connect-OPServices @pltCcOPSvcs ; 
-    
-            # #region CONFIRM_CCOPRETURN ; #*------v CONFIRM_CCOPRETURN v------
+            $ret_CcOPSvcs = connect-OPServices @pltCcOPSvcs ;
+
+            #region CONFIRM_CCOPRETURN ; #*------v CONFIRM_CCOPRETURN v------
             # matches each: $plt.useXXX:$true to matching returned $ret.hasXXX:$true
             $vplt = $pltCcOPSvcs ; $vret = 'ret_CcOPSvcs' ;  ; $ACtionCommand = 'connect-OPServices' ; 
             $vplt.GetEnumerator() |?{$_.key -match '^use' -ANd $_.value -match $true} | foreach-object{
@@ -1555,7 +1747,6 @@ function resolve-user {
                     };
                 } else{
                     $smsg = "Unable to locate: $($pltKey.name):$($pltKey.value) to any matching $($rprop.name)!)" ;
-                    $smsg = "" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 } ; 
@@ -1565,6 +1756,18 @@ function resolve-user {
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                # 11:01 AM 1/27/2026 populate followon:            
+                if($ret_CcOPSvcs.CredentialOP){
+                    $pltRx10 = [ordered]@{
+                        Credential = $ret_CcOPSvcs.CredentialOP ;
+                        verbose = $($VerbosePreference -eq "Continue")  ;
+                    } ;
+                }else{
+                    $smsg = "Unpopulated returned:connect-OPServices.CredentialOP!" ;
+                    $smsg += "`nUNABLE TO POPULATE `$pltRx10!" ;
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent}
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                }
             }elseif($vtests -contains $false -AND (get-variable ret_CcOPSvcs) -AND (gv -name "$($tenorg)meta").value.o365_opdomain.split('.')[0].toupper() -ne $env:userdomain){
                 $smsg = "==> $($ACtionCommand): FAILED SOME SPECIFIED CONNECTIONS" ; 
                 $smsg += "`nCROSS-ORG ONPREM CONNECTION: ATTEMPTING TO CONNECT TO ONPREM '$((gv -name "$($tenorg)meta").value.o365_Prefix)' $((gv -name "$($tenorg)meta").value.o365_opdomain.split('.')[0].toupper()) domain, FROM $($env:userdomain)!" ;
@@ -1600,6 +1803,7 @@ function resolve-user {
                 BREAK ; 
             } ; 
             #endregion CONFIRM_CCOPRETURN ; #*------^ END CONFIRM_CCOPRETURN ^------
+            
             #region CONFIRM_OPFORESTWIDE ; #*------v CONFIRM_OPFORESTWIDE v------    
             if($useOP -AND $pltCcOPSvcs.useForestWide -AND $ret_CcOPSvcs.hasForestWide -AND $ret_CcOPSvcs.AdGcFwide){
                 $smsg = "==> $($ACtionCommand): confirmed has BOTH .hasForestWide & .AdGcFwide ($($ret_CcOPSvcs.AdGcFwide))" ; 
@@ -1638,6 +1842,63 @@ function resolve-user {
             #endregion CONFIRM_OPFORESTWIDE ; #*------^ END CONFIRM_OPFORESTWIDE ^------
         } ; 
         #endregion CALL_CONNECT_OPSERVICES ; #*======^ END CALL_CONNECT_OPSERVICES ^======
+    
+        #endregion SERVICE_CONNECTIONS #*======^ END SERVICE_CONNECTIONS ^======
+    
+        <# Service Conditional if/thens: Tests above should BREAK on any fail, but these are for critical dependancy calls
+        # o365 calls
+        if($ret_ccSO365.hasAAD){ }else{
+            $smsg = "`$ret_ccSO365.hasAAD:$($ret_ccSO365.hasAAD): MISSING DEPENDANT CONNECTION!" ; 
+            $smsg += "`n(SKIPPING EXECUTION OF DEPENDANT COMMANDS)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } ;  ;
+        if($ret_ccSO365.hasEXO){ }else{
+            $smsg = "`$ret_ccSO365.hasEXO:$($ret_ccSO365.hasEXO): MISSING DEPENDANT CONNECTION!" ; 
+            $smsg += "`n(SKIPPING EXECUTION OF DEPENDANT COMMANDS)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } ; 
+        if($ret_ccO365S.hasSC){ }else{
+            $smsg = "`$ret_ccO365S.hasSC:$($ret_ccO365S.hasSC): MISSING DEPENDANT CONNECTION!" ; 
+            $smsg += "`n(SKIPPING EXECUTION OF DEPENDANT COMMANDS)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } ;         
+        if($ret_ccSO365.hasMG){ }else{
+            $smsg = "`$ret_ccSO365.hasMG:$($ret_ccSO365.hasMG): MISSING DEPENDANT CONNECTION!" ; 
+            $smsg += "`n(SKIPPING EXECUTION OF DEPENDANT COMMANDS)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } ; 
+        if($ret_ccSO365.hasMSOL){ }else{
+            $smsg = "`$ret_ccSO365.hasMSOL:$($ret_ccSO365.hasMSOL): MISSING DEPENDANT CONNECTION!" ; 
+            $smsg += "`n(SKIPPING EXECUTION OF DEPENDANT COMMANDS)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } ; 
+        # XOP calls
+        if($ret_ccOPSvcs.UseExOP){ }else{
+            $smsg = "`$ret_ccOPSvcs.UseExOP:$($ret_ccOPSvcs.UseExOP): MISSING DEPENDANT CONNECTION!" ; 
+            $smsg += "`n(SKIPPING EXECUTION OF DEPENDANT COMMANDS)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } ; 
+        if($ret_ccOPSvcs.UseOPAD){ }else{
+            $smsg = "`$ret_ccOPSvcs.UseOPAD:$($ret_ccOPSvcs.UseOPAD): MISSING DEPENDANT CONNECTION!" ; 
+            $smsg += "`n(SKIPPING EXECUTION OF DEPENDANT COMMANDS)" ;
+            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+        } ; 
+        #>
+
+        # connect to ExOP X10
+        <#
+        if($pltRX10){
+            ReConnect-Ex2010 @pltRX10 ;
+        } else { Reconnect-Ex2010 ; } ;
+        #>
+
     
         #endregion SERVICE_CONNECTIONS #*======^ END SERVICE_CONNECTIONS ^======
         

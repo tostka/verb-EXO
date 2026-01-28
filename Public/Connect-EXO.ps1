@@ -17,6 +17,7 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 9:01 AM 1/21/2026 NEVER pass whatif into a conn maint call, it's non-impactful, no real change;
     *2:48 PM 5/22/2025 rolled reconnect-exo into an alias of this (found updating it, that I was copying most of cxo's logic over, no point wo local baseicauth creds being moved anymore); 
         dbgd working cxo, rxo, csc & rsc, looks functional. put through a build, anduse it with Invoke-SCMailboxFolderContentPurgeV2.ps1; 
         -credential should work (though modernAuth wouldn't permit); -userprincipalname works; userRole specs work; SC connections appear to work. Put everything through this, instead of running bespoke code
@@ -770,11 +771,10 @@ Function Connect-EXO {
                             }elseif($xSess.Organization){
                                 $smsg += " ($($xSess.Organization.split('.')[0]))" ;
                             } ; 
-                        } ; 
-                        if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-
+                        } ;                         
+                        # 9:09 AM 1/21/2026 flip to verbose, it's echoing a bunch of dead conns
+                        if($silent){}elseif($VerbosePreference -eq "Continue"){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                         
                     } else {
                         # 3:17 PM 10/29/2024 disconnect them if borked!
@@ -782,7 +782,7 @@ Function Connect-EXO {
                             ConnectionId = $xSess.ConnectionId ; 
                             Confirm = $false ; 
                             erroraction = 'STOP' ;
-                            whatif = $($whatif) ;
+                            #whatif = $($whatif) ; 9:01 AM 1/21/2026 NEVER pass whatif into a conn maint call, it's non-impactful, no real change
                         } ;
                         $smsg = "Clear broken Connection: Disconnect-ExchangeOnline w`n$(($pltDXOC|out-string).trim())" ; 
                         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
@@ -816,9 +816,9 @@ Function Connect-EXO {
                         } else {
                             $smsg += " (neither Organization nor TenantID is populated)" ;
                         } ;
-                        if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
-                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        # 9:09 AM 1/21/2026 flip to verbose, it's echoing a bunch of dead conns
+                        if($silent){}elseif($VerbosePreference -eq "Continue"){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
                     } ;
                 } ;   # loop-E
             } ; 
@@ -1200,7 +1200,7 @@ $(
                             ConnectionId = $xSess.ConnectionId ; 
                             Confirm = $false ; 
                             erroraction = 'STOP' ;
-                            whatif = $($whatif) ;
+                            #whatif = $($whatif) ; 9:01 AM 1/21/2026 NEVER pass whatif into a conn maint call, it's non-impactful, no real change;
                         } ;
                         $smsg = "Clear broken Connection: Disconnect-ExchangeOnline w`n$(($pltDXOC|out-string).trim())" ; 
                         if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
