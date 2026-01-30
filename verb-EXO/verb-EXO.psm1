@@ -1,11 +1,11 @@
-﻿# verb-exo.psm1
+﻿# verb-Exo.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 11.0.3.0
+  Version     : 11.0.4.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -2344,6 +2344,7 @@ function connect-O365Services {
             .NOTES
     
             REVISIONS
+            * 5:28 PM 1/28/2026 Err suppress: added pretest for $xcon.Appid, before trying to resolve it (only CBA creds have them)
             * 4:59 PM 1/20/2026 fixed returning populated CredentialO365 in return object
             * 4:12 PM 1/6/2026 revised for verb-MG compait
             *8:17 PM 6/1/2025 debugs functional for useexo & usesc now; 
@@ -3061,9 +3062,12 @@ function connect-O365Services {
                     foreach($xcon in $XOconnections){
                         if($xcon.connection -ANd $xcon.isXO -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){
                             $ret_rxo = $xcon; $ret_ccO365S.hasEXO = $true ; 
-                            if($rai = (resolve-AppIDToCBAFriendlyName -AppId $xcon.AppID)){
-                                $o365Cred = (gv -name "cred$($rai.service)$($rai.tenorg)$($rai.friendlyname.split('_')[1].split('-')[0].replace('Cert',''))" -ea STOP).value ; 
-                            }
+                            # 5:09 PM 1/28/2026 SID non cba don't have appid, exempt test, throws error in console
+                            if($xcon.AppID){
+                                if($rai = (resolve-AppIDToCBAFriendlyName -AppId $xcon.AppID)){
+                                    $o365Cred = (gv -name "cred$($rai.service)$($rai.tenorg)$($rai.friendlyname.split('_')[1].split('-')[0].replace('Cert',''))" -ea STOP).value ; 
+                                }
+                            } ; 
                         } # else {$ret_rxo = $null ; $ret_ccO365S.hasEXO = $false } ;
                         if($xcon.connection -ANd $xcon.isSC -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){
                             $ret_rSC = $xcon; $ret_ccO365S.hasSC = $true
@@ -29622,8 +29626,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUm1XcWpiy3oZC/KxWUT9ukyO3
-# HCugggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU//X8flxzx0IIGgNLHrdo/JBu
+# y+WgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -29638,9 +29642,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTRf9zy
-# ejVrX9LJdW1jDQh/fZ3elDANBgkqhkiG9w0BAQEFAASBgCcTmBT0iRfygwF/uw2y
-# EAOcpPH8HMpKsOaw+xxJiD7Dag/6Zpbljxyslh6fUcCBNV2SXFhqZu7v0DozyOnB
-# hnRsOWOVoJp/kMAxYOgNNG0ntLDU/2L3lW0TaqT5gqos3CvCPxdNjvZ1lamWMBVV
-# ZE3Y/6wt69fM2vZfFYQKthTb
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSASM3l
+# D4DaEDwXETWuK04tj5gY6jANBgkqhkiG9w0BAQEFAASBgGvLYAp8Ll1yVo2V+V8m
+# KzzJow1D9nE/soy/1ioyjDFqrqT/EDRIyO4q/4p07SDm54BoP5ej7LxI5Ft/GEaz
+# bvvasOVdSJovUMSTdxaj9tDCQalnAtwdUnazBGjhZo1yNHs+GCuXGcSVuSlRLEWh
+# qstseey8CSoDRB4Pf3Wcm7sf
 # SIG # End signature block
