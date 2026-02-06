@@ -18,6 +18,7 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:34 PM 2/6/2026 fixed typo: no $ RetryThrottle
     * 12:41 PM 1/27/2026 latest conn_svcs block updated
     * 10:48 AM 1/19/2026 bugfix: $pltCcOPSvcs.UserRole (postfilter, not match test)
     * 4:25 PM 1/6/2026 pulled in latest CONNECT_O365SERVICES, CALL_CONNECT_O365SERVICES, CALL_CONNECT_OPSERVICES, START_LOG_OPTIONS; 
@@ -748,7 +749,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                         } CATCH [System.Exception] {
                             $ErrTrapd=$Error[0] ;
                             if($ErrTrapd.Exception -match $rgxEXOThrottle){
-                                $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                                $smsg = "MS 100-qry limit/5mins throttling detected, waiting $($RetryThrottle)s to retry..." ; 
                                 $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
@@ -2081,7 +2082,8 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                 Tony does in his [sample 
                 script](https://github.com/12Knocksinna/Office365itpros/blob/master/Analyze-MailTraffic.PS1)
 
-                > 
+                >
+ 
                 > Another downside of the new "no pagination" approach is that we cannot have a 
                 proper progress indicator, so instead I have added a "poor man's" variation of 
                 it, just so you know whether the script is progressing. Once we fetch the 
@@ -2206,7 +2208,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
             } CATCH [System.Exception] {
                 $ErrTrapd=$Error[0] ;
                 if($ErrTrapd.Exception -match $rgxEXOThrottle){
-                    $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                    $smsg = "MS 100-qry limit/5mins throttling detected, waiting $($RetryThrottle)s to retry..." ; 
                     $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
@@ -2285,7 +2287,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                     } CATCH [System.Exception] {
                         $ErrTrapd=$Error[0] ;
                         if($ErrTrapd.Exception -match $rgxEXOThrottle){
-                            $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                            $smsg = "MS 100-qry limit/5mins throttling detected, waiting $($RetryThrottle)s to retry..." ; 
                             $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
