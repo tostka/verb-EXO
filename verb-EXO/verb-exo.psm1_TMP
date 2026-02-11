@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 11.0.6.0
+  Version     : 11.0.7.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -21273,6 +21273,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 10:57 AM 2/11/2026 updated resolve-user to output detailed aduser.whencreated etc report for split brain misonboarding and output fix syntax.; fixed repair script name, added RemoteRoutingSuffix constant
     * 12:41 PM 1/27/2026 latest conn_svcs block updated
     * 10:48 AM 1/19/2026 bugfix: $pltCcOPSvcs.UserRole (postfilter, not match test)
     * 4:31 PM 1/6/2026 fixed brace mismatch; updated in latest CONNECT_O365SERVICES, CALL_CONNECT_O365SERVICES, CALL_CONNECT_OPSERVICES, START_LOG_OPTIONS
@@ -22166,7 +22167,7 @@ function resolve-user {
         #$DNDOM = @() ; 
         #$TORMeta.adforestname.split('.') | %{$dndom += "DC=$($_)"} ;
         #$rgxADDistNameAT = [regex]::Escape($DNDOM -join ',') ; 
-
+        $RemoteRoutingSuffix = 'toroco.mail.onmicrosoft.com'
         # props dyn filtering: write-host "=get-xMbx:>`n$(($hSum.xoMailbox |fl ($xMprops |?{$_     -notmatch '(sam.*|dist.*)'})|out-string).trim())`n-Title:$($hSum.xoUser.Title)";
         # $propsMailx: add email-drivers: CustomAttribute5, EmailAddressPolicyEnabled
         # 11:01 AM 12/27/2021 add forwarding settings (critical to bounce/block tracking for RM)
@@ -25833,7 +25834,7 @@ Mailbox itself :
                     $smsg += "`n`t(OR RECOVER AN EMPTY CLOUD MAILBOX (IF > 30D UNLICENED))" ;
                     $smsg += "`nSPLIT-BRAIN CREATED BY ONBOARD PROCESS VIOLATION" ;
                     $smsg += "`nREMOVAL OF ONPREM MBX & RECREATION OF GUID-SYNC'D RMBX REQUIRED TO REPAIR ONBOARD DAMAGE..." ;                    
-                    $smsg += "`n==>RUN:`n.\Repair-HybridSplitBrain.ps1 -UserPrincipalName $($hsum.aduser.userprincipalname) -RemoteRoutingSuffix 'toroco.mail.onmicrosoft.com' -CloudExchangeGuid '$($hsum.xomailbox.exchangeguid.guid)'" ;
+                    $smsg += "`n==>RUN:`nRepair-ExHybridSplitBrainMailbox.ps1 -UserPrincipalName $($hsum.aduser.userprincipalname) -RemoteRoutingSuffix 'toroco.mail.onmicrosoft.com' -CloudExchangeGuid '$($hsum.xomailbox.exchangeguid.guid)'" ;
                     # defer into trailing echo below
                     #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                     #else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
