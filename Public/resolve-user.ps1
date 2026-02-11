@@ -4553,6 +4553,40 @@ Mailbox itself :
                 $smsg += "LICENSED AADUSER CLOUD-FIRST XOMAILBOX  (No ADUser, No OPMailbox, No OPRemoteMailbox)~" ; 
             } ELSE { } ;
 
+            if($hsum.IsSplitBrain){
+                $smsg = "`n" ; 
+                if($hsum.aduser.whencreated){
+                    if($hsum.keys -contains 'aduAge'){}else{$hsum.add('aduAge',$null) ; $hsum.add('aduChangeAge',$null) } ; 
+                    $hsum.aduAge =  [int]((New-TimeSpan -Start $hsum.aduser.whencreated -End (get-date ) ).totaldays) ;     
+                    $hsum.aduChangeAge =  [int]((New-TimeSpan -Start $hsum.aduser.whenchanged -End (get-date ) ).totaldays) ;                                         
+                    $smsg += "`n-->EXISTING ADUSER.WHENCREATED $((get-date $hsum.aduser.whencreated -format 'MM/dd/yyyy')) $($hsum.aduAge) DAYS AGO!" ; 
+                } ; 
+                if($hsum.OPMailbox.whencreated){
+                    if($hsum.keys -contains 'opMbxAge'){}else{$hsum.add('opMbxAge',$null) ; $hsum.add('opMbxChangeAge',$null) } ; 
+                    $hsum.opMbxAge =  [int]((New-TimeSpan -Start $hsum.OPMailbox.whencreated -End (get-date ) ).totaldays) ;   
+                    $hsum.opMbxChangeAge =  [int]((New-TimeSpan -Start $hsum.OPMailbox.whenchanged -End (get-date ) ).totaldays) ;                                         
+                    $smsg += "`n-->EXISTING OPMailbox.WHENCHANGED  $((get-date $hsum.OPMailbox.WHENCHANGED -format 'MM/dd/yyyy')) $($hsum.opMbxChangeAge) DAYS AGO!" ; 
+                }
+                if($hsum.xoMailbox.whencreated){
+                    if($hsum.keys -contains 'xoMbxAge'){}else{$hsum.add('xoMbxAge',$null) ; $hsum.add('xoMbxChangeAge',$null) } ; 
+                    $hsum.xoMbxAge =  [int]((New-TimeSpan -Start $hsum.xoMailbox.whencreated -End (get-date ) ).totaldays) ;   
+                    $hsum.xoMbxChangeAge =  [int]((New-TimeSpan -Start $hsum.xoMailbox.whenchanged -End (get-date ) ).totaldays) ;                                         
+                    $smsg += "`n-->EXISTING xoMailbox.WHENCHANGED  $((get-date $hsum.xoMailbox.WHENCHANGED -format 'MM/dd/yyyy'))  $($hsum.xoMbxChangeAge) DAYS AGO!" ; 
+                }
+                if($hsum.aduAge -gt $hsum.opMbxChangeAge){
+                    $smsg += "`n==>MIS-ONBOARDED REHIRE: USER RE-ONBOARDED, WHEN EXISTING ADUSER ACCOUNT PRE-EXISTED!"
+                    $smsg += "`nPOLICY SPECIFIES REHIRES WITH EXISTING ADUSER ACCOUNTS (OR THOSE THAT CAN BE DUMPSTER RECOVERED BY SERVER TEAM)" ;
+                    $smsg += "`nBE _RE-LICENSED_, NOT ONBOARDED, TO RECOVER EXISTING CLOUD MAILBOX (IF < 30D UNLICENSED),"
+                    $smsg += "`n`t(OR RECOVER AN EMPTY CLOUD MAILBOX (IF > 30D UNLICENED))" ;
+                    $smsg += "`nSPLIT-BRAIN CREATED BY ONBOARD PROCESS VIOLATION" ;
+                    $smsg += "`nREMOVAL OF ONPREM MBX & RECREATION OF GUID-SYNC'D RMBX REQUIRED TO REPAIR ONBOARD DAMAGE..." ;                    
+                    $smsg += "`n==>RUN:`n.\Repair-HybridSplitBrain.ps1 -UserPrincipalName $($hsum.aduser.userprincipalname) -RemoteRoutingSuffix 'toroco.mail.onmicrosoft.com' -CloudExchangeGuid '$($hsum.xomailbox.exchangeguid.guid)'" ;
+                    # defer into trailing echo below
+                    #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    #else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                }
+            } ; 
+
             # conditional w-w, w-h block on status
             #if($hsum.IsSplitBrain -OR $hsum.IsNoBrain -OR (-not $hsum.IsLicensed -AND $hsum.xoRcp.RecipientTypeDetails -NOTmatch 'SharedMailbox|RoomMailbox|EquipmentMailbox') ){
             [boolean[]]$testArray = @(

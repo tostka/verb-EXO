@@ -1,11 +1,11 @@
-﻿# verb-Exo.psm1
+﻿# verb-exo.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 11.0.4.0
+  Version     : 11.0.6.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -7995,6 +7995,7 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 3:34 PM 2/6/2026 fixed typo: no $ RetryThrottle
     * 12:41 PM 1/27/2026 latest conn_svcs block updated
     * 10:48 AM 1/19/2026 bugfix: $pltCcOPSvcs.UserRole (postfilter, not match test)
     * 4:25 PM 1/6/2026 pulled in latest CONNECT_O365SERVICES, CALL_CONNECT_O365SERVICES, CALL_CONNECT_OPSERVICES, START_LOG_OPTIONS; 
@@ -8725,7 +8726,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                         } CATCH [System.Exception] {
                             $ErrTrapd=$Error[0] ;
                             if($ErrTrapd.Exception -match $rgxEXOThrottle){
-                                $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                                $smsg = "MS 100-qry limit/5mins throttling detected, waiting $($RetryThrottle)s to retry..." ; 
                                 $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
                                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                                 else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
@@ -10184,7 +10185,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
             } CATCH [System.Exception] {
                 $ErrTrapd=$Error[0] ;
                 if($ErrTrapd.Exception -match $rgxEXOThrottle){
-                    $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                    $smsg = "MS 100-qry limit/5mins throttling detected, waiting $($RetryThrottle)s to retry..." ; 
                     $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
@@ -10263,7 +10264,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
                     } CATCH [System.Exception] {
                         $ErrTrapd=$Error[0] ;
                         if($ErrTrapd.Exception -match $rgxEXOThrottle){
-                            $smsg = "MS 100-qry limit/5mins throttling detected, waiting $(RetryThrottle)s to retry..." ; 
+                            $smsg = "MS 100-qry limit/5mins throttling detected, waiting $($RetryThrottle)s to retry..." ; 
                             $smsg += "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
                             if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
                             else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
@@ -25805,6 +25806,40 @@ Mailbox itself :
                 $smsg += "LICENSED AADUSER CLOUD-FIRST XOMAILBOX  (No ADUser, No OPMailbox, No OPRemoteMailbox)~" ; 
             } ELSE { } ;
 
+            if($hsum.IsSplitBrain){
+                $smsg = "`n" ; 
+                if($hsum.aduser.whencreated){
+                    if($hsum.keys -contains 'aduAge'){}else{$hsum.add('aduAge',$null) ; $hsum.add('aduChangeAge',$null) } ; 
+                    $hsum.aduAge =  [int]((New-TimeSpan -Start $hsum.aduser.whencreated -End (get-date ) ).totaldays) ;     
+                    $hsum.aduChangeAge =  [int]((New-TimeSpan -Start $hsum.aduser.whenchanged -End (get-date ) ).totaldays) ;                                         
+                    $smsg += "`n-->EXISTING ADUSER.WHENCREATED $((get-date $hsum.aduser.whencreated -format 'MM/dd/yyyy')) $($hsum.aduAge) DAYS AGO!" ; 
+                } ; 
+                if($hsum.OPMailbox.whencreated){
+                    if($hsum.keys -contains 'opMbxAge'){}else{$hsum.add('opMbxAge',$null) ; $hsum.add('opMbxChangeAge',$null) } ; 
+                    $hsum.opMbxAge =  [int]((New-TimeSpan -Start $hsum.OPMailbox.whencreated -End (get-date ) ).totaldays) ;   
+                    $hsum.opMbxChangeAge =  [int]((New-TimeSpan -Start $hsum.OPMailbox.whenchanged -End (get-date ) ).totaldays) ;                                         
+                    $smsg += "`n-->EXISTING OPMailbox.WHENCHANGED  $((get-date $hsum.OPMailbox.WHENCHANGED -format 'MM/dd/yyyy')) $($hsum.opMbxChangeAge) DAYS AGO!" ; 
+                }
+                if($hsum.xoMailbox.whencreated){
+                    if($hsum.keys -contains 'xoMbxAge'){}else{$hsum.add('xoMbxAge',$null) ; $hsum.add('xoMbxChangeAge',$null) } ; 
+                    $hsum.xoMbxAge =  [int]((New-TimeSpan -Start $hsum.xoMailbox.whencreated -End (get-date ) ).totaldays) ;   
+                    $hsum.xoMbxChangeAge =  [int]((New-TimeSpan -Start $hsum.xoMailbox.whenchanged -End (get-date ) ).totaldays) ;                                         
+                    $smsg += "`n-->EXISTING xoMailbox.WHENCHANGED  $((get-date $hsum.xoMailbox.WHENCHANGED -format 'MM/dd/yyyy'))  $($hsum.xoMbxChangeAge) DAYS AGO!" ; 
+                }
+                if($hsum.aduAge -gt $hsum.opMbxChangeAge){
+                    $smsg += "`n==>MIS-ONBOARDED REHIRE: USER RE-ONBOARDED, WHEN EXISTING ADUSER ACCOUNT PRE-EXISTED!"
+                    $smsg += "`nPOLICY SPECIFIES REHIRES WITH EXISTING ADUSER ACCOUNTS (OR THOSE THAT CAN BE DUMPSTER RECOVERED BY SERVER TEAM)" ;
+                    $smsg += "`nBE _RE-LICENSED_, NOT ONBOARDED, TO RECOVER EXISTING CLOUD MAILBOX (IF < 30D UNLICENSED),"
+                    $smsg += "`n`t(OR RECOVER AN EMPTY CLOUD MAILBOX (IF > 30D UNLICENED))" ;
+                    $smsg += "`nSPLIT-BRAIN CREATED BY ONBOARD PROCESS VIOLATION" ;
+                    $smsg += "`nREMOVAL OF ONPREM MBX & RECREATION OF GUID-SYNC'D RMBX REQUIRED TO REPAIR ONBOARD DAMAGE..." ;                    
+                    $smsg += "`n==>RUN:`n.\Repair-HybridSplitBrain.ps1 -UserPrincipalName $($hsum.aduser.userprincipalname) -RemoteRoutingSuffix 'toroco.mail.onmicrosoft.com' -CloudExchangeGuid '$($hsum.xomailbox.exchangeguid.guid)'" ;
+                    # defer into trailing echo below
+                    #if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    #else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                }
+            } ; 
+
             # conditional w-w, w-h block on status
             #if($hsum.IsSplitBrain -OR $hsum.IsNoBrain -OR (-not $hsum.IsLicensed -AND $hsum.xoRcp.RecipientTypeDetails -NOTmatch 'SharedMailbox|RoomMailbox|EquipmentMailbox') ){
             [boolean[]]$testArray = @(
@@ -29626,8 +29661,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU//X8flxzx0IIGgNLHrdo/JBu
-# y+WgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUhbSn2invxxGahT4+Xbwnf1Ni
+# EKagggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -29642,9 +29677,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSASM3l
-# D4DaEDwXETWuK04tj5gY6jANBgkqhkiG9w0BAQEFAASBgGvLYAp8Ll1yVo2V+V8m
-# KzzJow1D9nE/soy/1ioyjDFqrqT/EDRIyO4q/4p07SDm54BoP5ej7LxI5Ft/GEaz
-# bvvasOVdSJovUMSTdxaj9tDCQalnAtwdUnazBGjhZo1yNHs+GCuXGcSVuSlRLEWh
-# qstseey8CSoDRB4Pf3Wcm7sf
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSUlM/D
+# Ycxmbxc3fMCr2xnNcCoh8DANBgkqhkiG9w0BAQEFAASBgGkQV6r3rw514fyMTvA8
+# uxGGTojwfJsFD8aZdweRuDqZtyOIc/XvyOTfC/ciuzFtpS/1NV/s3whbyokF6UxH
+# pZL2qrP1oFkDPuFiLo80SZUP6NDVIGlbdDLuiMe5ETLi1DfsuzTu6iHQJUABIiRH
+# 36P6IfvVEPxY0tXYDez/aOds
 # SIG # End signature block
