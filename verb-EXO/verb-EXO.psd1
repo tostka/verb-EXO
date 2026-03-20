@@ -12,7 +12,7 @@
 RootModule = 'verb-EXO.psm1'
 
 # Version number of this module.
-ModuleVersion = '11.1.0'
+ModuleVersion = '11.2.0'
 
 # Supported PSEditions
 # CompatiblePSEditions = @()
@@ -69,7 +69,7 @@ Description = 'Powershell Exchange Online generic functions module'
 # NestedModules = @()
 
 # Functions to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no functions to export.
-FunctionsToExport = @('add-EXOLicense','check-EXOLegalHold','Connect-EXO','Test-Uri','connect-O365Services','get-CodeProfileAST','get-MGCodeCmdletPermissionsTDO','2b4','2b4c','fb4','convert-ADUserRecipientTypeRemoteSharedMailbox','convert-ADUserRecipientTypeRemoteUserMailbox','convert-exoMailboxTypeSharedMailbox','convert-exoMailboxTypeUserMailbox','convert-HistoricalSearchCSV','copy-XPermissionGroupToCloudOnly','cxoTOL','cxoTOR','Disconnect-EXO','get-AADlicensePlanList','get-ADUsersWithSoftDeletedxoMailboxes','get-ExoGxMTEventType','get-ExoMailboxLicenses','2b4','2b4c','fb4','get-ExoMessageTraceEventType','Get-EXOMessageTraceExportedTDO','Remove-InvalidVariableNameChars','Initialize-exoStatusTable','pull-GetxoMessageTraceDetail','2b4','2b4c','fb4','get-ExoMessageTraceSourceType','get-EXOMsgTraceDetailed','Remove-InvalidVariableNameChars','get-MailboxFolderStats','get-MsgTrace','Get-OrgNameFromUPN','get-xoHistSearch','_cleanup','get-XOMailboxFolderList','Get-xoMailboxFolderPermissionsRecursive','get-XOMailboxFolderPermissionsSummary','get-xoMessageTraceLatencyTDO','Get-TraceDetailTotalLatency','move-MailboxToXo','check-ReqMods','new-DgTor','_cleanup','new-xoDGFromProperty','remove-EXOLicense','Reset-xoMailboxFolderPermissionsRecursive','resolve-AppIDToCBAFriendlyName','resolve-Name','resolve-user','2b4','2b4c','fb4','resolve-RMbxForwards','get-xoMobileData','get-MgUserFull','Resolve-xoRcps','rxoTOL','rxoTOR','test-EXOConnectionTDO','test-ExoDnsRecordTDO','test-EXOIsLicensed','test-EXOv2Connection','test-xoMailbox','_cleanup','test-xoMailboxHasEWSAccess','Update-EXOLinkedHybridObjectsTDO','Update-MGUIMmut')
+FunctionsToExport = @('add-EXOLicense','check-EXOLegalHold','Connect-EXO','Test-Uri','connect-O365Services','get-CodeProfileAST','get-MGCodeCmdletPermissionsTDO','2b4','2b4c','fb4','convert-ADUserRecipientTypeRemoteSharedMailbox','convert-ADUserRecipientTypeRemoteUserMailbox','convert-exoMailboxTypeSharedMailbox','convert-exoMailboxTypeUserMailbox','convert-HistoricalSearchCSV','copy-XPermissionGroupToCloudOnly','cxoTOL','cxoTOR','Disconnect-EXO','get-AADlicensePlanList','get-ADUsersWithSoftDeletedxoMailboxes','get-ExoGxMTEventType','get-ExoMailboxLicenses','2b4','2b4c','fb4','get-ExoMessageTraceEventType','Get-EXOMessageTraceExportedTDO','Remove-InvalidVariableNameChars','Initialize-exoStatusTable','pull-GetxoMessageTraceDetail','2b4','2b4c','fb4','get-ExoMessageTraceSourceType','get-EXOMsgTraceDetailed','Remove-InvalidVariableNameChars','get-MailboxFolderStats','get-MsgTrace','Get-OrgNameFromUPN','get-xoHistSearch','_cleanup','get-XOMailboxFolderList','Get-xoMailboxFolderPermissionsRecursive','get-XOMailboxFolderPermissionsSummary','get-xoMessageTraceLatencyTDO','Get-TraceDetailTotalLatency','move-MailboxToXo','check-ReqMods','new-DgTor','_cleanup','new-xoDGFromProperty','remove-EXOLicense','Reset-xoMailboxFolderPermissionsRecursive','resolve-AppIDToCBAFriendlyName','resolve-Name','resolve-user','2b4','2b4c','fb4','resolve-RMbxForwards','get-xoMobileData','get-MgUserFull','Resolve-xoRcps','rxoTOL','rxoTOR','test-EXOConnectionTDO','test-ExoDnsRecordTDO','test-EXOIsLicensed','test-EXOv2Connection','test-xoMailbox','_cleanup','test-xoMailboxHasEWSAccess')
 
 # Cmdlets to export from this module, for best performance, do not use wildcards and do not delete the entry, use an empty array if there are no cmdlets to export.
 CmdletsToExport = '*'
@@ -126,8 +126,8 @@ PrivateData = @{
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUi5eQv3QKbIHf1J3XSWj8Wu3+
-# r8OgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUJYtEricMbDKvNaU7rBW605D6
+# UPqgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -142,9 +142,9 @@ PrivateData = @{
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSvkXEt
-# sQ/wwvyBq6wHry4892yk2jANBgkqhkiG9w0BAQEFAASBgLkV/DWbAFvNVVcNGvFF
-# qwzkuU3kdx0yDlHHyj4hiWlo0yYJZ1r5HDUvoP7/cyUMBttPcNrzrpEZ/Hr8sP2r
-# uLU8ra/ITkS3PHVAVGtiD/gu2noMyG2UdYAzO9GuSaqU7+qdc1xUu+D+Vv7JbcjS
-# 5viqhQd445MGIDwVQUO3uXd6
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBS0p1R/
+# IL9KYKLr49ZHzLBB4FbkaTANBgkqhkiG9w0BAQEFAASBgDwd5sSmKuab3qRvpO2E
+# yI4s+bewkhOZRpHjo5qerDh87mL0huIg8pDfCmSi67Ls0g1rixc/e8dRaU5qL9Gp
+# YkoHtOV/dLKjaz/cSD9185lkOvigfkbVMzYFAB9gplu9iABGEyoyfCF8nqBVkqAL
+# mCk4nAlbx9WSOYRHICLS6fJ8
 # SIG # End signature block
