@@ -20,7 +20,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    * 4:07 PM 3/27/2026 add backup lookup against samaccountname@UPNSuffix for provisnion conflicted non-upn-aligned mgu (they are still ahrdmatched for ad lookup, just not mgu);
+    * 4:25 PM 3/27/2026 fixed OpOU output; add backup lookup against samaccountname@UPNSuffix for provisnion conflicted non-upn-aligned mgu (they are still ahrdmatched for ad lookup, just not mgu);
          added $hsum.iSProvisioningErrors flag to output;
          roughed in mgu.onPremisesProvisioningErrors Errors reporting;
          add: Convert-ADUserObjectGuidToImmutableID() & Convert-MGUserOnPremisesImmutableIdToADUserObjectGuid()
@@ -1016,7 +1016,7 @@ function resolve-user {
         #$propsAADMgr = 'UserPrincipalName','Mail',@{Name='OpDN';Expression={$_.ExtensionProperty.onPremisesDistinguishedName }} ;
         # get mgr OU, not DN: ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1 ) -join ','
         $propsAADMgr = 'UserPrincipalName','Mail',
-            @{Name='OpOU';Expression={($_.ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;
+            @{Name='OpOU';Expression={($_.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;
         $propsAADMgrL1 = 'UserPrincipalName','Mail' ;
         $propsAADMgrL2 = @{Name='OpOU';Expression={($_.ExtensionProperty.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;
         # MGU vers
@@ -4104,6 +4104,35 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                         #>
                         #write-verbose "`$hSum.AADUser:`n$(($hSum.AADUser|out-string).trim())" ;
                         # ObjectId                             DisplayName   UserPrincipalName      UserType
+
+                        # first try an immut lookup against AD hardmatch
+                        if(-not $hsum.mguser -ANd $hsum.ADUser){
+                            if( ($MguOPImmut = $hsum.aduser.objectguid | Convert-ADUserObjectGuidToImmutableID) -AND ($tmpMGU = Get-MgUser -Filter "onPremisesImmutableId eq '$MguOPImmut'") ){
+                                #$hSum.MGUser   +=  get-MgUserFull -userid $tmpMGU.id | select -first $MaxRecips;
+                                $smsg = "Failed get-MgUser on UPN" ; 
+                                $smsg += "`nRETRY:Found a Matching MGUser via ADUser.ObjectGuid Immuntable Lookup..." ;
+                                $smsg += "`nMGUser`n$(($tmpMgu | ft -a 'DisplayName','Id','Mail','UserPrincipalName' |out-string).trim())" ;
+                                $smsg += "`n(likely reflects provisioning errors: Conflict that has quarantined MGUser object)" ;
+                                write-host -foregroundcolor yellow $smsg;                                        
+                            }else{
+                                # then try backup samaccontname email proxyaddresses lookup (for conflicted non-UPN matche3d Mgu)
+                                $thisUPNSuffix = $hsum.ADUser.UserPrincipalName.split('@')[1] ;
+                                if($testSamEmail = (get-aduser $hsum.ADUser.sid -prop proxyaddresses | select -expand proxyaddresses |?{$_ -match $hsum.aduser.samaccountname -AND $_ -match [regex]::escape($thisUPNSuffix)})){
+                                    write-host -foregroundcolor yellow "Missing linked MGUser: Attempting to resolve missing MGUser on ADUser.samaccountname-based email address:$($testSamEmail)"
+                                    $fltr = "proxyAddresses/any(p:p eq '$($testSamEmail)')" ;
+                                    if($tmpMGU = Get-MgUser -All -Filter $fltr -Select "id,displayName,userPrincipalName"){
+                                        $smsg = "Found a Matching MGUser with the target proxyAddress entry..." ;
+                                        $smsg += "`nMGUser`n$(($tmpMgu | ft -a 'DisplayName','Id','Mail','UserPrincipalName' |out-string).trim())" ;
+                                        $smsg += "`n(likely reflects provisioning errors: Conflict that has quarantined MGUser object)" ;
+                                        write-host -foregroundcolor yellow $smsg;                                        
+                                    } ;                                    
+                                } ;                                
+                            }
+                            if($tmpMGU){
+                                write-verbose "performing expanded get-MgUserFull" ; 
+                                $hSum.MGUser += get-MgUserFull -userid $tmpMGU.id | select -first $MaxRecips
+                            }
+                        }
 
                         # backup samaccontname email proxyaddresses lookup (for conflicted non-UPN matche3d Mgu)
                         # stick last attempt missing MGUser lookup against email addr as samaccountname
