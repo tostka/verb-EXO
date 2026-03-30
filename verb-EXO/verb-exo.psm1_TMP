@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 12.0.0.0
+  Version     : 12.0.1.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -6326,7 +6326,7 @@ function get-ExoGxMTEventType {
     PS> $hQuotas['database2']
     Name           ProhibitSendReceiveQuotaGB ProhibitSendQuotaGB IssueWarningQuotaGB
     ----           -------------------------- ------------------- -------------------
-    database2      12.000                     10.000              9.000
+    database2      12.0.1                     10.000              9.000
     Retrieve local org on-prem MailboxDatabase quotas and assign to a variable, with verbose outputs. Then output the retrieved quotas from the indexed hash returned, for the mailboxdatabase named 'database2'.
     .LINK
     https://github.com/tostka/verb-EXO
@@ -21613,6 +21613,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 11:23 AM 3/30/2026 fadded conflict resolution lookups top the OnPrem conflict block, now pulls and puts up comparitive objects with UPN or proxyaddresseses clashes with the MGuser object.
     * 4:25 PM 3/27/2026 fixed OpOU output; add backup lookup against samaccountname@UPNSuffix for provisnion conflicted non-upn-aligned mgu (they are still ahrdmatched for ad lookup, just not mgu);
          added $hsum.iSProvisioningErrors flag to output;
          roughed in mgu.onPremisesProvisioningErrors Errors reporting;
@@ -22529,9 +22530,10 @@ function resolve-user {
         $propsXMFed = 'samaccountname','windowsemailaddress','DistinguishedName','Office','RecipientTypeDetails','RemoteRecipientType',
             'ImmutableId','ExternalDirectoryObjectId','CustomAttribute5','EmailAddressPolicyEnabled' ;
         $propsLic = @{Name='HasLic'; Expression={$_.IsLicensed }},@{Name='LicIssue'; Expression={$_.LicenseReconciliationNeeded }} ;
+        # 8:55 AM 3/30/2026 add proxyAddresses for ADC conflcit lookups
         $propsADU = 'UserPrincipalName','DisplayName','GivenName','Surname','Title','Company','Department','PhysicalDeliveryOfficeName',
             'StreetAddress','City','State','PostalCode','TelephoneNumber','MobilePhone','Enabled','DistinguishedName',
-            'Description','Info','whenCreated','whenChanged'
+            'Description','Info','whenCreated','whenChanged','proxyAddresses'
 
         #'samaccountname','UserPrincipalName','distinguishedname','Description','title','whenCreated','whenChanged','Enabled','sAMAccountType','userAccountControl' ;
         $propsADUsht = 'Enabled','Description','whenCreated','whenChanged','Title' ;
@@ -22621,6 +22623,9 @@ function resolve-user {
         $propsMGUMgrL1 = @{Name='userPrincipalName';Expression={$_.userPrincipalName }},
             @{Name='mail';Expression={$_.mail}} 
         $propsMGUMgrL2 = @{Name='OpOU';Expression={ ($_.onPremisesDistinguishedName.split(',') | select -skip 1) -join ',' }} ;  
+        # 10:37 AM 3/30/2026 conflict testing object details returned
+        $prpmgUXTest = "id","displayName","userPrincipalName","proxyAddresses","OnPremisesSyncEnabled","OnPremisesLastSyncDateTime","OnPremisesDistinguishedName"  ;
+        $prpadUXTest = "userprincipalname","samaccountname","distinguishedname","ObjectGUID","displayname"
         $sQot = [char]34 ;
         $sQotS = [char]39 ;
 
@@ -25713,7 +25718,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                                 if($testSamEmail = (get-aduser $hsum.ADUser.sid -prop proxyaddresses | select -expand proxyaddresses |?{$_ -match $hsum.aduser.samaccountname -AND $_ -match [regex]::escape($thisUPNSuffix)})){
                                     write-host -foregroundcolor yellow "Missing linked MGUser: Attempting to resolve missing MGUser on ADUser.samaccountname-based email address:$($testSamEmail)"
                                     $fltr = "proxyAddresses/any(p:p eq '$($testSamEmail)')" ;
-                                    if($tmpMGU = Get-MgUser -All -Filter $fltr -Select "id,displayName,userPrincipalName"){
+                                    if($tmpMGU = Get-MgUser -All -Filter $fltr -Select "id","displayName","userPrincipalName"){
                                         $smsg = "Found a Matching MGUser with the target proxyAddress entry..." ;
                                         $smsg += "`nMGUser`n$(($tmpMgu | ft -a 'DisplayName','Id','Mail','UserPrincipalName' |out-string).trim())" ;
                                         $smsg += "`n(likely reflects provisioning errors: Conflict that has quarantined MGUser object)" ;
@@ -25734,7 +25739,7 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                             if($testSamEmail = (get-aduser $hsum.ADUser.sid -prop proxyaddresses | select -expand proxyaddresses |?{$_ -match $hsum.aduser.samaccountname -AND $_ -match [regex]::escape($thisUPNSuffix)})){
                                 write-host -foregroundcolor yellow "Missing linked MGUser: Attempting to resolve missing MGUser on ADUser.samaccountname-based email address:$($testSamEmail)"
                                 $fltr = "proxyAddresses/any(p:p eq '$($testSamEmail)')" ;
-                                if($tmpMGU = Get-MgUser -All -Filter $fltr -Select "id,displayName,userPrincipalName"){
+                                if($tmpMGU = Get-MgUser -All -Filter $fltr -Select "id","displayName","userPrincipalName"){
                                     $smsg = "Found a Matching MGUser with the target proxyAddress entry..." ;
                                     $smsg += "`nMGUser`n$(($tmpMgu | ft -a 'DisplayName','Id','Mail','UserPrincipalName' |out-string).trim())" ;
                                     write-host -foregroundcolor yellow $smsg;
@@ -26388,9 +26393,104 @@ Mailbox itself :
                 $smsg += "`n`n$(($hSum.MGUser.OnPremisesProvisioningErrors|out-string).trim())`n`n" ; 
                 $smsg += $sBnr4.replace('`v','`^').replace('v`','^`')
                 $smsg += "`n`n" ;
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug 
-                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
-
+                write-warning  $smsg
+                # ATTEMPT CONFLICT OBJ QRYS
+                #$prpmgUXTest = "id","displayName","userPrincipalName","proxyAddresses","OnPremisesSyncEnabled","OnPremisesLastSyncDateTime"  ;
+                #$prpadUXTest = "userprincipalname","samaccountname","distinguishedname","ObjectGUID","displayname"
+                if($hsum.MGUser.OnPremisesProvisioningErrors.category -eq 'PropertyConflict'){
+                    switch -regex ($hsum.MGUser.OnPremisesProvisioningErrors.PropertyCausingError){
+                        'UserPrincipalName|ProxyAddresses'{
+                            # upn & proxy overlap: do both as a set - UPN may be a prox conflct
+                            # UPN                            
+                            #$fltr = "userPrincipalName eq '$($hsum.MGUser.Userprincipalname)'"            
+                            #$fltr = "userPrincipalName eq '$($hsum.MGUser.OnPremisesProvisioningErrors.value)'" ; 
+                            $fltr = "userPrincipalName eq '$( ($hsum.MGUser.OnPremisesProvisioningErrors.value) -replace 'smtp:','')'" ;
+                            write-host -foregroundcolor yellow "Find mgUser conflicts on :`n$($fltr)" ; 
+                            if($mgConflictMgUPN = Get-MgUser -All -Filter $fltr -Select $prpmgUXTest  | ?{$_.id -ne $hsum.MGUser.Id}){
+                                if($hsum.keys -contains 'mgConflictMgUPN'){}else{$hsum.add('mgConflictMgUPN',$null) } ; 
+                                $hsum.mgConflictMgUPN +=  @($mgConflictMgUPN| select -first $MaxRecips)                                  
+                            }else{
+                                write-verbose "No matches"
+                            }
+                            if($hsum.$mgConflictMgUPN){
+                                $hsum.$mgConflictMgUPN = $hsum.$mgConflictMgUPN | select -unique ; 
+                                foreach($mgC in $mgConflictMgUPN){               
+                                    $smsg = "`n`n-->CONFLICTING UPN(s):`n$(($mgC| select ($prpmgUXTest | ?{$_ -notmatch 'proxy'}) | fl | out-string).trim())" ; 
+                                    $smsg += "`n---proxyAddresses(s):`n$(($mgC| select -expand proxyAddresses | out-string).trim())`n`n" ; 
+                                    write-warning $smsg ; 
+                                } ; 
+                            } ;                             
+                            # PROXYADDRESSES 
+                            <#ProxyAddresses takes 2 targete qrys: SMTP
+                                Get-MgUser -All -Filter "proxyAddresses/any(p:p eq 'SMTP:jane.doe@contoso.com')" -Select "displayName,proxyAddresses"
+                                #smtp:
+                                Get-MgUser -All -Filter "proxyAddresses/any(p:p eq 'SMTP:Richard.Harris@toro.com')" -Select "displayName,proxyAddresses"
+                                #>
+                            $mgConflictMgProxy = @() ;                            
+                            $thisProx = $hsum.MGUser.OnPremisesProvisioningErrors.value -replace 'smtp:','' ; 
+                            foreach($type in @('SMTP','smtp')){
+                                $fltr = "proxyAddresses/any(p:p eq '$($type):$($thisProx)')"    
+                                write-host -foregroundcolor yellow "Find mgUser conflict on :`n$($fltr)" ;         
+                                #if($mgConflictMgProxy = Get-MgUser -All -Filter $fltr -Select $prpmgUXTest){
+                                # filter out the self obj
+                                if($mgConflictMgProxy = Get-MgUser -All -Filter $fltr -Select $prpmgUXTest | ?{$_.id -ne $hsum.MGUser.Id}){
+                                    if($hsum.keys -contains 'mgConflictMgProxy'){}else{$hsum.add('mgConflictMgProxy',$null) } ;                                     
+                                    $hsum.mgConflictMgProxy += @($mgConflictMgProxy| select -first $MaxRecips)                                    
+                                }else{
+                                    write-verbose "No matches"
+                                } ;                                 
+                            } ; 
+                            if($hsum.mgConflictMgProxy){
+                                $hsum.mgConflictMgProxy = $hsum.mgConflictMgProxy | select -unique ; 
+                                foreach($mgC in $hsum.mgConflictMgProxy){
+                                    $smsg = "`n`n-->CONFLICTING mgUser.proxyAddresses(s):`n$(($mgC| select ($prpmgUXTest | ?{$_ -notmatch 'proxy'}) | fl | out-string).trim())" ; 
+                                    $smsg += "`n---proxyAddresses(s):`n$(($mgC| select -expand proxyAddresses | out-string).trim())`n`n" ; 
+                                    write-warning $smsg ; 
+                                } ; 
+                            } ; # cmpare to mgu
+                            $smsg = "`n`n-->THIS MGUSER:`n$(($hsum.mguser| select ($prpmgUXTest | ?{$_ -notmatch 'proxy'}) | fl | out-string).trim())" ; 
+                            $smsg += "`n---proxyAddresses(s):`n$(($hsum.mguser| select -expand proxyAddresses | out-string).trim())`n`n" ; 
+                            write-warning $smsg ; 
+                            # DO ADUSER.PROXY
+                            $mgConflictAdProxy = @() ;                            
+                            write-verbose "Find mgUser UPC conflict on current mgUser.UPN: $()" ; 
+                            $thisProx = $hsum.MGUser.OnPremisesProvisioningErrors.value -replace 'smtp:','' ; 
+                            foreach($type in @('SMTP','smtp')){
+                                $fltr = "(proxyAddresses=$($type):$($thisProx))"
+                                write-host -foregroundcolor yellow "Find ADUser conflict on :`n$($fltr)" ; 
+                                #"proxyAddresses/any(p:p eq '$($type):$($thisProx)')"            
+                                #if($mgConflictAdProxy = Get-MgUser -All -Filter $fltr -Select $prpmgUXTest){
+                                # filter out the self obj
+                                if($mgConflictAdProxy = Get-ADUser -LDAPFilter $fltr -Properties $prpadUXTest){
+                                    # | ?{$_.id -ne $hsum.MGUser.Id}
+                                    if($hsum.keys -contains 'mgConflictAdProxy'){}else{$hsum.add('mgConflictAdProxy',$null) } ; 
+                                    $hsum.mgConflictAdProxy +=  @($mgConflictAdProxy| select -first $MaxRecips)                                     
+                                }else{
+                                    write-verbose "No matches"
+                                } ; 
+                            } ; 
+                            if($hsum.mgConflictAdProxy){
+                                $hsum.mgConflictAdProxy = $hsum.mgConflictAdProxy | select -unique ; 
+                                foreach($adC in $hsum.mgConflictAdProxy){
+                                    $smsg = "`n`n-->CONFLICTING ADUser.proxyAddress(s):`n$(($mgConflictAdProxy | select ($prpadUXTest|?{$_ -notmatch 'proxy'}) |fl | out-string).trim())" ; 
+                                    $smsg += "`n---proxyAddresses(s):`n$(($mgConflictAdProxy | select -expand proxyAddresses |fl | out-string).trim())`n`n" ; 
+                                    write-warning $smsg ; 
+                                } ;
+                            } ; 
+                            # cmpare to adu
+                            $smsg = "`n`n-->THIS ADUSER:`n$(($hsum.ADuser| select ($prpmgUXTest | ?{$_ -notmatch 'proxy'}) | fl | out-string).trim())" ; 
+                            $smsg += "`n---proxyAddresses(s):`n$(($hsum.ADuser| select -expand proxyAddresses | out-string).trim())`n`n" ; 
+                            write-warning $smsg ; 
+                        }                         
+                        default{
+                            $smsg = "Unconfigured `$hsum.MGUser.OnPremisesProvisioningErrors.PropertyCausingError: $($hsum.MGUser.OnPremisesProvisioningErrors.PropertyCausingError)`n(no follow-up conflict qry run)" ; 
+                            write-warning $smsg ; 
+                        }
+                    }
+                } else {
+                    $smsg = "Unconfigured `$hsum.MGUser.OnPremisesProvisioningErrors.category: $($hsum.MGUser.OnPremisesProvisioningErrors.category)`n(no follow-up conflict qry run)" ; 
+                    write-warning $smsg ; 
+                } ; 
             } ; 
             #endregion MGU_PROVISIONING_ERR ; #*------^ END MGU_PROVISIONING_ERR ^------
 

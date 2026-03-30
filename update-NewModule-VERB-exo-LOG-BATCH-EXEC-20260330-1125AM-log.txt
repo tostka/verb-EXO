@@ -1,30 +1,30 @@
-﻿2026-03-20 14:06:31 INFO:  : #*======v VERB-dev.psm1:VERB-exo v======
-2026-03-20 14:06:32 INFO:  : Run: reset-ModulePublishingDirectory -ModuleName VERB-exo
-2026-03-20 14:06:33 ##  : 
+﻿2026-03-30 11:25:35 INFO:  : #*======v VERB-dev.psm1:VERB-exo v======
+2026-03-30 11:25:36 INFO:  : Run: reset-ModulePublishingDirectory -ModuleName VERB-exo
+2026-03-30 11:25:37 ##  : 
 #*------v PROCESSING : VERB-exo v------
-2026-03-20 14:06:33 INFO:  : Pre-purge (CHANGELOG|README)\.md$ Root dir matches from :
-2026-03-20 14:06:34 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
+2026-03-30 11:25:37 INFO:  : Pre-purge (CHANGELOG|README)\.md$ Root dir matches from :
+2026-03-30 11:25:38 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
 $ModResPath:C:\sc\VERB-exo\Resource\
-2026-03-20 14:06:34 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
+2026-03-30 11:25:38 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
 $ModResPath:C:\sc\VERB-exo\Licenses\
-2026-03-20 14:06:35 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
+2026-03-30 11:25:39 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
 $ModResPath:C:\sc\VERB-exo\Docs\
-2026-03-20 14:06:35 INFO:  : ==C:\sc\VERB-exo\CHANGELOG.md:
-2026-03-20 14:06:35 INFO:  : ==C:\sc\VERB-exo\README.md:
-2026-03-20 14:06:36 INFO:  : ==C:\sc\VERB-exo\Docs\Quick-Start-Installation-and-Example.md:
-2026-03-20 14:06:36 ##  : 
+2026-03-30 11:25:39 INFO:  : ==C:\sc\VERB-exo\CHANGELOG.md:
+2026-03-30 11:25:40 INFO:  : ==C:\sc\VERB-exo\README.md:
+2026-03-30 11:25:40 INFO:  : ==C:\sc\VERB-exo\Docs\Quick-Start-Installation-and-Example.md:
+2026-03-30 11:25:41 ##  : 
 #*------^ PROCESSING : VERB-exo ^------
-2026-03-20 14:06:37 INFO:  : Run: populate-ModulePublishingDirectory -ModuleName VERB-exo
-2026-03-20 14:06:37 ##  : 
+2026-03-30 11:25:41 INFO:  : Run: populate-ModulePublishingDirectory -ModuleName VERB-exo
+2026-03-30 11:25:41 ##  : 
 #*------v PROCESSING : VERB-exo v------
-2026-03-20 14:06:38 INFO:  : Locating (CHANGELOG|README)\.md$ Root dir matches from :
-2026-03-20 14:06:38 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
+2026-03-30 11:25:42 INFO:  : Locating (CHANGELOG|README)\.md$ Root dir matches from :
+2026-03-30 11:25:42 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
 $ModResPath:C:\sc\VERB-exo\Resource\
-2026-03-20 14:06:39 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
+2026-03-30 11:25:43 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
 $ModResPath:C:\sc\VERB-exo\Licenses\
-2026-03-20 14:06:39 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
+2026-03-30 11:25:43 INFO:  : VERB-exo resolved $ModPubPath:C:\sc\VERB-exo\VERB-exo\
 $ModResPath:C:\sc\VERB-exo\Docs\
-2026-03-20 14:06:40 INFO:  : copy-item w
+2026-03-30 11:25:44 INFO:  : copy-item w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 path                           {C:\sc\VERB-exo\CHANGELOG.md, C:\sc\VERB-exo\README.md, C:\sc\VERB-exo\Docs\Quick-Start-Installation-and-Example.md}                                                                                                                           
@@ -37,12 +37,12 @@ whatif                         False
 C:\sc\VERB-exo\CHANGELOG.md
 C:\sc\VERB-exo\README.md
 C:\sc\VERB-exo\Docs\Quick-Start-Installation-and-Example.md
-2026-03-20 14:06:40 ##  : 
+2026-03-30 11:25:44 ##  : 
 #*------^ PROCESSING : VERB-exo ^------
-2026-03-20 14:06:41 INFO:  : Run: Remove any non-pub garbage cp'd into c:\sc\VERB-exo\VERB-exo -ModuleName VERB-exo
-2026-03-20 14:06:41 INFO:  : Validate updated VERB-exo\VERB-exo dir contents against Manifest:
+2026-03-30 11:25:45 INFO:  : Run: Remove any non-pub garbage cp'd into c:\sc\VERB-exo\VERB-exo -ModuleName VERB-exo
+2026-03-30 11:25:46 INFO:  : Validate updated VERB-exo\VERB-exo dir contents against Manifest:
 Run: test-modulemanifest -Path C:\sc\VERB-exo\VERB-exo\VERB-exo.psd1
-2026-03-20 14:06:41 INFO:  : NON-Republish pass detected:
+2026-03-30 11:25:46 INFO:  : NON-Republish pass detected:
 MERGE parm specified as well:`n-Merge Public|Internal|Classes include subdirs module content into updated .psm1
 -Sign updated files.
 -Uninstall/Remove existing profile module
@@ -53,176 +53,175 @@ MERGE parm specified as well:`n-Merge Public|Internal|Classes include subdirs mo
 -Remove existing installed profile module
 -Test Install-Module
 -Test Import-Module
-2026-03-20 14:06:42 INFO:  : -Merge specified...
-2026-03-20 14:06:42 INFO:  : ConvertTo-ModuleMergedTDO w
+2026-03-30 11:25:46 INFO:  : -Merge specified...
+2026-03-30 11:25:47 INFO:  : ConvertTo-ModuleMergedTDO w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 ModuleName                     VERB-exo                                                                                                                                                                                                                                       
 ModuleSourcePath               {c:\sc\VERB-exo\Public, c:\sc\VERB-exo\Internal}                                                                                                                                                                                               
 ModuleDestinationPath          c:\sc\VERB-exo\VERB-exo                                                                                                                                                                                                                        
-RequiredVersion                11.1.0                                                                                                                                                                                                                                         
+RequiredVersion                12.0.1                                                                                                                                                                                                                                         
 LogSpec                        {logging, logfile, transcript}                                                                                                                                                                                                                 
 NoAliasExport                                                                                                                                                                                                                                                                 
 ErrorAction                    Stop                                                                                                                                                                                                                                           
 showdebug                      False                                                                                                                                                                                                                                          
 whatif                         False
-2026-03-20 14:06:43 INFO:  : ConvertTo-ModuleMergedTDO w
+2026-03-30 11:25:47 INFO:  : ConvertTo-ModuleMergedTDO w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 ModuleName                     VERB-exo                                                                                                                                                                                                                                       
 ModuleSourcePath               {c:\sc\VERB-exo\Public, c:\sc\VERB-exo\Internal}                                                                                                                                                                                               
 ModuleDestinationPath          c:\sc\VERB-exo\VERB-exo                                                                                                                                                                                                                        
-RequiredVersion                11.1.0                                                                                                                                                                                                                                         
+RequiredVersion                12.0.1                                                                                                                                                                                                                                         
 LogSpec                        {logging, logfile, transcript}                                                                                                                                                                                                                 
 NoAliasExport                                                                                                                                                                                                                                                                 
 ErrorAction                    Stop                                                                                                                                                                                                                                           
 showdebug                      False                                                                                                                                                                                                                                          
 whatif                         False
-2026-03-20 14:06:45 INFO:  : (NON-dyn psm1 detected - purging existing non-CBH content...)
-2026-03-20 14:06:47 INFO:  : Initialize-PSModuleDirectories w
+2026-03-30 11:25:49 INFO:  : (NON-dyn psm1 detected - purging existing non-CBH content...)
+2026-03-30 11:25:51 INFO:  : Initialize-PSModuleDirectories w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 ModuleSourcePath               {c:\sc\VERB-exo\Public, c:\sc\VERB-exo\Internal}                                                                                                                                                                                               
 ModuleDestinationPath          c:\sc\VERB-exo\VERB-exo                                                                                                                                                                                                                        
 ErrorAction                    Stop                                                                                                                                                                                                                                           
 whatif                         False
-2026-03-20 14:06:47 INFO:  : 
+2026-03-30 11:25:52 INFO:  : 
 #*------v (1/2):C:\sc\VERB-exo\Public v------
-2026-03-20 14:06:48 INFO:  : Processing 47 $ComponentScripts files through Remove-AuthenticodeSignature...
-2026-03-20 14:06:48 INFO:  : Processing (1/47):C:\sc\VERB-exo\Public\add-EXOLicense.ps1...
-2026-03-20 14:06:49 INFO:  : Processing (2/47):C:\sc\VERB-exo\Public\check-EXOLegalHold.ps1...
-2026-03-20 14:06:49 INFO:  : Processing (3/47):C:\sc\VERB-exo\Public\Connect-EXO.ps1...
-2026-03-20 14:06:50 INFO:  : Processing (4/47):C:\sc\VERB-exo\Public\connect-O365Services.ps1...
-2026-03-20 14:06:51 INFO:  : Processing (5/47):C:\sc\VERB-exo\Public\convert-ADUserRecipientTypeRemoteSharedMailbox.ps1...
-2026-03-20 14:06:51 INFO:  : Processing (6/47):C:\sc\VERB-exo\Public\convert-ADUserRecipientTypeRemoteUserMailbox.ps1...
-2026-03-20 14:06:52 INFO:  : Processing (7/47):C:\sc\VERB-exo\Public\convert-exoMailboxTypeSharedMailbox.ps1...
-2026-03-20 14:06:52 INFO:  : Processing (8/47):C:\sc\VERB-exo\Public\convert-exoMailboxTypeUserMailbox.ps1...
-2026-03-20 14:06:53 INFO:  : Processing (9/47):C:\sc\VERB-exo\Public\convert-HistoricalSearchCSV.ps1...
-2026-03-20 14:06:53 INFO:  : Processing (10/47):C:\sc\VERB-exo\Public\copy-XPermissionGroupToCloudOnly.ps1...
-2026-03-20 14:06:54 INFO:  : Processing (11/47):C:\sc\VERB-exo\Public\cxotol.ps1...
-2026-03-20 14:06:54 INFO:  : Processing (12/47):C:\sc\VERB-exo\Public\cxotor.ps1...
-2026-03-20 14:06:55 INFO:  : Processing (13/47):C:\sc\VERB-exo\Public\Disconnect-EXO.ps1...
-2026-03-20 14:06:55 INFO:  : Processing (14/47):C:\sc\VERB-exo\Public\get-AADlicensePlanList.ps1...
-2026-03-20 14:06:56 INFO:  : Processing (15/47):C:\sc\VERB-exo\Public\get-ADUsersWithSoftDeletedxoMailboxes.ps1...
-2026-03-20 14:06:56 INFO:  : Processing (16/47):C:\sc\VERB-exo\Public\get-ExoGxMTEventType.ps1...
-2026-03-20 14:06:57 INFO:  : Processing (17/47):C:\sc\VERB-exo\Public\get-ExoMailboxLicenses.ps1...
-2026-03-20 14:06:57 INFO:  : Processing (18/47):C:\sc\VERB-exo\Public\get-ExoMessageTraceEventType.ps1...
-2026-03-20 14:06:58 INFO:  : Processing (19/47):C:\sc\VERB-exo\Public\Get-EXOMessageTraceExportedTDO.ps1...
-2026-03-20 14:06:59 INFO:  : Processing (20/47):C:\sc\VERB-exo\Public\get-ExoMessageTraceSourceType.ps1...
-2026-03-20 14:06:59 INFO:  : Processing (21/47):C:\sc\VERB-exo\Public\get-EXOMsgTraceDetailed.ps1...
-2026-03-20 14:07:00 INFO:  : Processing (22/47):C:\sc\VERB-exo\Public\get-MailboxFolderStats.ps1...
-2026-03-20 14:07:01 INFO:  : Processing (23/47):C:\sc\VERB-exo\Public\get-MsgTrace.ps1...
-2026-03-20 14:07:01 INFO:  : Processing (24/47):C:\sc\VERB-exo\Public\Get-OrgNameFromUPN.ps1...
-2026-03-20 14:07:02 INFO:  : Processing (25/47):C:\sc\VERB-exo\Public\get-xoHistSearch.ps1...
-2026-03-20 14:07:02 INFO:  : Processing (26/47):C:\sc\VERB-exo\Public\get-XOMailboxFolderList.ps1...
-2026-03-20 14:07:03 INFO:  : Processing (27/47):C:\sc\VERB-exo\Public\Get-xoMailboxFolderPermissionsRecursive.ps1...
-2026-03-20 14:07:04 INFO:  : Processing (28/47):C:\sc\VERB-exo\Public\get-XOMailboxFolderPermissionsSummary.ps1...
-2026-03-20 14:07:04 INFO:  : Processing (29/47):C:\sc\VERB-exo\Public\get-xoMessageTraceLatency.ps1...
-2026-03-20 14:07:05 INFO:  : Processing (30/47):C:\sc\VERB-exo\Public\move-MailboxToXo.ps1...
-2026-03-20 14:07:05 INFO:  : Processing (31/47):C:\sc\VERB-exo\Public\new-DgTor.ps1...
-2026-03-20 14:07:06 INFO:  : Processing (32/47):C:\sc\VERB-exo\Public\new-xoDGFromProperty.ps1...
-2026-03-20 14:07:06 INFO:  : Processing (33/47):C:\sc\VERB-exo\Public\remove-EXOLicense.ps1...
-2026-03-20 14:07:07 INFO:  : Processing (34/47):C:\sc\VERB-exo\Public\Reset-xoMailboxFolderPermissionsRecursive.ps1...
-2026-03-20 14:07:08 INFO:  : Processing (35/47):C:\sc\VERB-exo\Public\resolve-AppIDToCBAFriendlyName.ps1...
-2026-03-20 14:07:08 INFO:  : Processing (36/47):C:\sc\VERB-exo\Public\resolve-Name.ps1...
-2026-03-20 14:07:09 INFO:  : Processing (37/47):C:\sc\VERB-exo\Public\resolve-user.ps1...
-2026-03-20 14:07:10 INFO:  : Processing (38/47):C:\sc\VERB-exo\Public\resolve-xoRcps.ps1...
-2026-03-20 14:07:11 INFO:  : Processing (39/47):C:\sc\VERB-exo\Public\rxotol.ps1...
-2026-03-20 14:07:12 INFO:  : Processing (40/47):C:\sc\VERB-exo\Public\rxotor.ps1...
-2026-03-20 14:07:12 INFO:  : Processing (41/47):C:\sc\VERB-exo\Public\test-EXOConnectionTDO.ps1...
-2026-03-20 14:07:13 INFO:  : Processing (42/47):C:\sc\VERB-exo\Public\test-ExoDnsRecordTDO.ps1...
-2026-03-20 14:07:13 INFO:  : Processing (43/47):C:\sc\VERB-exo\Public\test-EXOIsLicensed.ps1...
-2026-03-20 14:07:14 INFO:  : Processing (44/47):C:\sc\VERB-exo\Public\test-EXOv2Connection.ps1...
-2026-03-20 14:07:15 INFO:  : Processing (45/47):C:\sc\VERB-exo\Public\test-xoMailbox.ps1...
-2026-03-20 14:07:16 INFO:  : Processing (46/47):C:\sc\VERB-exo\Public\test-xoMailboxHasEWSAccess.ps1...
-2026-03-20 14:07:17 INFO:  : Processing (47/47):C:\sc\VERB-exo\Public\Update-EXOLinkedHybridObjectsTDO.ps1...
-2026-03-20 14:07:17 INFO:  : 
+2026-03-30 11:25:52 INFO:  : Processing 46 $ComponentScripts files through Remove-AuthenticodeSignature...
+2026-03-30 11:25:53 INFO:  : Processing (1/46):C:\sc\VERB-exo\Public\add-EXOLicense.ps1...
+2026-03-30 11:25:54 INFO:  : Processing (2/46):C:\sc\VERB-exo\Public\check-EXOLegalHold.ps1...
+2026-03-30 11:25:55 INFO:  : Processing (3/46):C:\sc\VERB-exo\Public\Connect-EXO.ps1...
+2026-03-30 11:25:55 INFO:  : Processing (4/46):C:\sc\VERB-exo\Public\connect-O365Services.ps1...
+2026-03-30 11:25:56 INFO:  : Processing (5/46):C:\sc\VERB-exo\Public\convert-ADUserRecipientTypeRemoteSharedMailbox.ps1...
+2026-03-30 11:25:57 INFO:  : Processing (6/46):C:\sc\VERB-exo\Public\convert-ADUserRecipientTypeRemoteUserMailbox.ps1...
+2026-03-30 11:25:57 INFO:  : Processing (7/46):C:\sc\VERB-exo\Public\convert-exoMailboxTypeSharedMailbox.ps1...
+2026-03-30 11:25:58 INFO:  : Processing (8/46):C:\sc\VERB-exo\Public\convert-exoMailboxTypeUserMailbox.ps1...
+2026-03-30 11:25:58 INFO:  : Processing (9/46):C:\sc\VERB-exo\Public\convert-HistoricalSearchCSV.ps1...
+2026-03-30 11:25:59 INFO:  : Processing (10/46):C:\sc\VERB-exo\Public\copy-XPermissionGroupToCloudOnly.ps1...
+2026-03-30 11:25:59 INFO:  : Processing (11/46):C:\sc\VERB-exo\Public\cxotol.ps1...
+2026-03-30 11:26:00 INFO:  : Processing (12/46):C:\sc\VERB-exo\Public\cxotor.ps1...
+2026-03-30 11:26:00 INFO:  : Processing (13/46):C:\sc\VERB-exo\Public\Disconnect-EXO.ps1...
+2026-03-30 11:26:01 INFO:  : Processing (14/46):C:\sc\VERB-exo\Public\get-AADlicensePlanList.ps1...
+2026-03-30 11:26:01 INFO:  : Processing (15/46):C:\sc\VERB-exo\Public\get-ADUsersWithSoftDeletedxoMailboxes.ps1...
+2026-03-30 11:26:02 INFO:  : Processing (16/46):C:\sc\VERB-exo\Public\get-ExoGxMTEventType.ps1...
+2026-03-30 11:26:02 INFO:  : Processing (17/46):C:\sc\VERB-exo\Public\get-ExoMailboxLicenses.ps1...
+2026-03-30 11:26:03 INFO:  : Processing (18/46):C:\sc\VERB-exo\Public\get-ExoMessageTraceEventType.ps1...
+2026-03-30 11:26:03 INFO:  : Processing (19/46):C:\sc\VERB-exo\Public\Get-EXOMessageTraceExportedTDO.ps1...
+2026-03-30 11:26:04 INFO:  : Processing (20/46):C:\sc\VERB-exo\Public\get-ExoMessageTraceSourceType.ps1...
+2026-03-30 11:26:05 INFO:  : Processing (21/46):C:\sc\VERB-exo\Public\get-EXOMsgTraceDetailed.ps1...
+2026-03-30 11:26:05 INFO:  : Processing (22/46):C:\sc\VERB-exo\Public\get-MailboxFolderStats.ps1...
+2026-03-30 11:26:06 INFO:  : Processing (23/46):C:\sc\VERB-exo\Public\get-MsgTrace.ps1...
+2026-03-30 11:26:07 INFO:  : Processing (24/46):C:\sc\VERB-exo\Public\Get-OrgNameFromUPN.ps1...
+2026-03-30 11:26:07 INFO:  : Processing (25/46):C:\sc\VERB-exo\Public\get-xoHistSearch.ps1...
+2026-03-30 11:26:08 INFO:  : Processing (26/46):C:\sc\VERB-exo\Public\get-XOMailboxFolderList.ps1...
+2026-03-30 11:26:08 INFO:  : Processing (27/46):C:\sc\VERB-exo\Public\Get-xoMailboxFolderPermissionsRecursive.ps1...
+2026-03-30 11:26:09 INFO:  : Processing (28/46):C:\sc\VERB-exo\Public\get-XOMailboxFolderPermissionsSummary.ps1...
+2026-03-30 11:26:09 INFO:  : Processing (29/46):C:\sc\VERB-exo\Public\get-xoMessageTraceLatency.ps1...
+2026-03-30 11:26:10 INFO:  : Processing (30/46):C:\sc\VERB-exo\Public\move-MailboxToXo.ps1...
+2026-03-30 11:26:10 INFO:  : Processing (31/46):C:\sc\VERB-exo\Public\new-DgTor.ps1...
+2026-03-30 11:26:11 INFO:  : Processing (32/46):C:\sc\VERB-exo\Public\new-xoDGFromProperty.ps1...
+2026-03-30 11:26:11 INFO:  : Processing (33/46):C:\sc\VERB-exo\Public\remove-EXOLicense.ps1...
+2026-03-30 11:26:12 INFO:  : Processing (34/46):C:\sc\VERB-exo\Public\Reset-xoMailboxFolderPermissionsRecursive.ps1...
+2026-03-30 11:26:13 INFO:  : Processing (35/46):C:\sc\VERB-exo\Public\resolve-AppIDToCBAFriendlyName.ps1...
+2026-03-30 11:26:13 INFO:  : Processing (36/46):C:\sc\VERB-exo\Public\resolve-Name.ps1...
+2026-03-30 11:26:14 INFO:  : Processing (37/46):C:\sc\VERB-exo\Public\resolve-user.ps1...
+2026-03-30 11:26:15 INFO:  : Processing (38/46):C:\sc\VERB-exo\Public\resolve-xoRcps.ps1...
+2026-03-30 11:26:15 INFO:  : Processing (39/46):C:\sc\VERB-exo\Public\rxotol.ps1...
+2026-03-30 11:26:16 INFO:  : Processing (40/46):C:\sc\VERB-exo\Public\rxotor.ps1...
+2026-03-30 11:26:16 INFO:  : Processing (41/46):C:\sc\VERB-exo\Public\test-EXOConnectionTDO.ps1...
+2026-03-30 11:26:17 INFO:  : Processing (42/46):C:\sc\VERB-exo\Public\test-ExoDnsRecordTDO.ps1...
+2026-03-30 11:26:17 INFO:  : Processing (43/46):C:\sc\VERB-exo\Public\test-EXOIsLicensed.ps1...
+2026-03-30 11:26:18 INFO:  : Processing (44/46):C:\sc\VERB-exo\Public\test-EXOv2Connection.ps1...
+2026-03-30 11:26:18 INFO:  : Processing (45/46):C:\sc\VERB-exo\Public\test-xoMailbox.ps1...
+2026-03-30 11:26:19 INFO:  : Processing (46/46):C:\sc\VERB-exo\Public\test-xoMailboxHasEWSAccess.ps1...
+2026-03-30 11:26:20 INFO:  : 
 #*------v (2/2):C:\sc\VERB-exo\Internal v------
-2026-03-20 14:07:18 INFO:  : Processing 0 $ComponentScripts files through Remove-AuthenticodeSignature...
-2026-03-20 14:07:19 INFO:  : (Updating Psm1 Export-ModuleMember -Function to reflect Public modules)
-2026-03-20 14:07:19 INFO:  : Adding:FooterBlock...
-2026-03-20 14:07:20 INFO:  : confirm-ModuleBuildSync w
+2026-03-30 11:26:20 INFO:  : Processing 0 $ComponentScripts files through Remove-AuthenticodeSignature...
+2026-03-30 11:26:21 INFO:  : (Updating Psm1 Export-ModuleMember -Function to reflect Public modules)
+2026-03-30 11:26:21 INFO:  : Adding:FooterBlock...
+2026-03-30 11:26:22 INFO:  : confirm-ModuleBuildSync w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 ModPsdPath                     c:\sc\VERB-exo\VERB-exo\VERB-exo.psd1_TMP                                                                                                                                                                                                      
-RequiredVersion                11.1.0                                                                                                                                                                                                                                         
+RequiredVersion                12.0.1                                                                                                                                                                                                                                         
 NoTest                         True                                                                                                                                                                                                                                           
 whatif                         False                                                                                                                                                                                                                                          
 verbose                        False
-2026-03-20 14:07:20 INFO:  : (test-path confirms $ModPsm1 & $ModTestPs1)
-2026-03-20 14:07:21 INFO:  : Import-PowerShellDataFile w
+2026-03-30 11:26:22 INFO:  : (test-path confirms $ModPsm1 & $ModTestPs1)
+2026-03-30 11:26:23 INFO:  : Import-PowerShellDataFile w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Path                           c:\sc\VERB-exo\VERB-exo\VERB-exo.psd1_TMP                                                                                                                                                                                                      
 ErrorAction                    Stop                                                                                                                                                                                                                                           
 verbose                        False
-2026-03-20 14:07:21 INFO:  : (resolved Module attributes:
+2026-03-30 11:26:23 INFO:  : (resolved Module attributes:
 $ModuleName:	VERB-exo
 $ModRoot:	c:\sc\VERB-exo
 $ModPsd1:	c:\sc\VERB-exo\VERB-exo\VERB-exo.psd1_TMP
 $ModPsm1:	c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP
 $ModTestPs1:	c:\sc\VERB-exo\Tests\VERB-exo.tests.ps1
-$psd1Vers:	11.1.0
+$psd1Vers:	12.0.1
 $psd1guid:	b9637e55-12be-4916-8000-a949f9426fa3)
-2026-03-20 14:07:22 INFO:  : confirm-ModulePsd1Version w
+2026-03-30 11:26:24 INFO:  : confirm-ModulePsd1Version w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Path                           c:\sc\VERB-exo\VERB-exo\VERB-exo.psd1_TMP                                                                                                                                                                                                      
-RequiredVersion                11.1.0                                                                                                                                                                                                                                         
+RequiredVersion                12.0.1                                                                                                                                                                                                                                         
 whatif                         False                                                                                                                                                                                                                                          
 verbose                        False
-2026-03-20 14:07:22 INFO:  : (Version already updated to match)
-2026-03-20 14:07:23 INFO:  : $objReport
+2026-03-30 11:26:24 INFO:  : (Version already updated to match)
+2026-03-30 11:26:25 INFO:  : $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          False
-2026-03-20 14:07:23 INFO:  : (SET:$objReport.Valid = $true ;)
-2026-03-20 14:07:24 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+2026-03-30 11:26:25 INFO:  : (SET:$objReport.Valid = $true ;)
+2026-03-30 11:26:26 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
 $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          True
-2026-03-20 14:07:24 INFO:  : #*======^ confirm-ModulePsd1Version: c:\sc\VERB-exo\VERB-exo\VERB-exo.psd1_TMP ^======
-2026-03-20 14:07:25 INFO:  : (confirm-ModulePsd1Version:Success)
-2026-03-20 14:07:25 INFO:  : confirm-ModulePsm1Version w
+2026-03-30 11:26:26 INFO:  : #*======^ confirm-ModulePsd1Version: c:\sc\VERB-exo\VERB-exo\VERB-exo.psd1_TMP ^======
+2026-03-30 11:26:27 INFO:  : (confirm-ModulePsd1Version:Success)
+2026-03-30 11:26:27 INFO:  : confirm-ModulePsm1Version w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Path                           c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP                                                                                                                                                                                                      
-RequiredVersion                11.1.0                                                                                                                                                                                                                                         
+RequiredVersion                12.0.1                                                                                                                                                                                                                                         
 whatif                         False                                                                                                                                                                                                                                          
 verbose                        False
-2026-03-20 14:07:26 WARNING:  : In:c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP
-Version present:(11.0.8)
-*does not* properly match:11.1.0
+2026-03-30 11:26:28 WARNING:  : In:c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP
+Version present:(12.0.0)
+*does not* properly match:12.0.1
 FORCING MATCHING UPDATE!
-2026-03-20 14:07:28 INFO:  : $objReport
+2026-03-30 11:26:30 INFO:  : $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          False
-2026-03-20 14:07:29 INFO:  : (SET:$objReport.Valid = $true ;)
-2026-03-20 14:07:30 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+2026-03-30 11:26:30 INFO:  : (SET:$objReport.Valid = $true ;)
+2026-03-30 11:26:31 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
 $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          True
-2026-03-20 14:07:30 INFO:  : #*======^ confirm-ModulePsm1Version: c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP ^======
-2026-03-20 14:07:31 INFO:  : (confirm-ModulePsm1Version:Success)
-2026-03-20 14:07:31 INFO:  : (-NoTest: skipping confirm-ModuleTestPs1Guid)
-2026-03-20 14:07:32 INFO:  : $objReport
+2026-03-30 11:26:31 INFO:  : #*======^ confirm-ModulePsm1Version: c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP ^======
+2026-03-30 11:26:32 INFO:  : (confirm-ModulePsm1Version:Success)
+2026-03-30 11:26:32 INFO:  : (-NoTest: skipping confirm-ModuleTestPs1Guid)
+2026-03-30 11:26:33 INFO:  : $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Manifest                       c:\sc\VERB-exo\VERB-exo\VERB-exo.psd1_TMP                                                                                                                                                                                                      
 Module                         c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP                                                                                                                                                                                                      
 Pester                         (SKIPPED)                                                                                                                                                                                                                                      
 Guid                           (SKIPPED)                                                                                                                                                                                                                                      
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          False
-2026-03-20 14:07:32 INFO:  : (SET:$objReport.Valid = $true ;)
-2026-03-20 14:07:33 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+2026-03-30 11:26:33 INFO:  : (SET:$objReport.Valid = $true ;)
+2026-03-30 11:26:34 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
 $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
@@ -230,143 +229,143 @@ Manifest                       c:\sc\VERB-exo\VERB-exo\VERB-exo.psd1_TMP
 Module                         c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP                                                                                                                                                                                                      
 Pester                         (SKIPPED)                                                                                                                                                                                                                                      
 Guid                           (SKIPPED)                                                                                                                                                                                                                                      
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          True
-2026-03-20 14:07:33 INFO:  : #*======^ confirm-ModuleBuildSync:  ^======
-2026-03-20 14:07:34 INFO:  : (confirm-ModuleBuildSync:Success)
-2026-03-20 14:07:34 INFO:  : Test-ModuleTMPFiles w
+2026-03-30 11:26:34 INFO:  : #*======^ confirm-ModuleBuildSync:  ^======
+2026-03-30 11:26:34 INFO:  : (confirm-ModuleBuildSync:Success)
+2026-03-30 11:26:35 INFO:  : Test-ModuleTMPFiles w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 ModuleNamePSM1Path             c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP                                                                                                                                                                                                      
 verbose                        False
-2026-03-20 14:07:35 INFO:  : #*======v Test-ModuleTMPFiles: c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP v======
-2026-03-20 14:07:35 INFO:  : 
+2026-03-30 11:26:35 INFO:  : #*======v Test-ModuleTMPFiles: c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP v======
+2026-03-30 11:26:36 INFO:  : 
 Psm1:c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP
 Psd1:c:\sc\VERB-exo\VERB-exo\VERB-exo.psd1_TMP
-2026-03-20 14:07:36 INFO:  : Test-ModuleManifest:PASSED
-2026-03-20 14:07:36 INFO:  : Creating Testable c:\sc\VERB-exo\VERB-exo\1cdfa25c-1e38-490f-8688-0db06dcafada.psm1
+2026-03-30 11:26:36 INFO:  : Test-ModuleManifest:PASSED
+2026-03-30 11:26:37 INFO:  : Creating Testable c:\sc\VERB-exo\VERB-exo\7425a209-6b89-4c24-a7ca-f884899105a8.psm1
  to validate c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP will Import-Module
-2026-03-20 14:07:37 INFO:  : Ipmo: PASSED
-2026-03-20 14:07:38 INFO:  : (remove-module -name c:\sc\VERB-exo\VERB-exo\1cdfa25c-1e38-490f-8688-0db06dcafada.psm1 -force)
-2026-03-20 14:07:38 INFO:  : (remove-item -path c:\sc\VERB-exo\VERB-exo\1cdfa25c-1e38-490f-8688-0db06dcafada.psm1 -ErrorAction SilentlyContinue ; 
-2026-03-20 14:07:38 INFO:  : (remove-item -path c:\sc\VERB-exo\VERB-exo\1cdfa25c-1e38-490f-8688-0db06dcafada.psd1 -ErrorAction SilentlyContinue ; 
-2026-03-20 14:07:39 INFO:  : $objReport
+2026-03-30 11:26:38 INFO:  : Ipmo: PASSED
+2026-03-30 11:26:38 INFO:  : (remove-module -name c:\sc\VERB-exo\VERB-exo\7425a209-6b89-4c24-a7ca-f884899105a8.psm1 -force)
+2026-03-30 11:26:39 INFO:  : (remove-item -path c:\sc\VERB-exo\VERB-exo\7425a209-6b89-4c24-a7ca-f884899105a8.psm1 -ErrorAction SilentlyContinue ; 
+2026-03-30 11:26:39 INFO:  : (remove-item -path c:\sc\VERB-exo\VERB-exo\7425a209-6b89-4c24-a7ca-f884899105a8.psd1 -ErrorAction SilentlyContinue ; 
+2026-03-30 11:26:40 INFO:  : $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
-Manifest                       1cdfa25c-1e38-490f-8688-0db06dcafada                                                                                                                                                                                                           
-Module                         1cdfa25c-1e38-490f-8688-0db06dcafada                                                                                                                                                                                                           
+Manifest                       7425a209-6b89-4c24-a7ca-f884899105a8                                                                                                                                                                                                           
+Module                         7425a209-6b89-4c24-a7ca-f884899105a8                                                                                                                                                                                                           
 Valid                          False
-2026-03-20 14:07:40 INFO:  : (SET:$objReport.Valid = $true ;)
-2026-03-20 14:07:40 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+2026-03-30 11:26:40 INFO:  : (SET:$objReport.Valid = $true ;)
+2026-03-30 11:26:41 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
 $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
-Manifest                       1cdfa25c-1e38-490f-8688-0db06dcafada                                                                                                                                                                                                           
-Module                         1cdfa25c-1e38-490f-8688-0db06dcafada                                                                                                                                                                                                           
+Manifest                       7425a209-6b89-4c24-a7ca-f884899105a8                                                                                                                                                                                                           
+Module                         7425a209-6b89-4c24-a7ca-f884899105a8                                                                                                                                                                                                           
 Valid                          True
-2026-03-20 14:07:40 INFO:  : #*======^ Test-ModuleTMPFiles: c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP ^======
-2026-03-20 14:07:41 INFO:  : #*======^ ConvertTo-ModuleMergedTDO: ^======
-2026-03-20 14:07:41 INFO:  : (Test-ModuleManifest:PASSED)
-2026-03-20 14:07:42 INFO:  : Checking sync of Psd1 module guid to the Pester Test Script: c:\sc\VERB-exo\Tests\VERB-exo.tests.ps1
-2026-03-20 14:07:42 INFO:  : confirm-ModuleBuildSync w
+2026-03-30 11:26:41 INFO:  : #*======^ Test-ModuleTMPFiles: c:\sc\VERB-exo\VERB-exo\VERB-exo.psm1_TMP ^======
+2026-03-30 11:26:42 INFO:  : #*======^ ConvertTo-ModuleMergedTDO: ^======
+2026-03-30 11:26:42 INFO:  : (Test-ModuleManifest:PASSED)
+2026-03-30 11:26:42 INFO:  : Checking sync of Psd1 module guid to the Pester Test Script: c:\sc\VERB-exo\Tests\VERB-exo.tests.ps1
+2026-03-30 11:26:43 INFO:  : confirm-ModuleBuildSync w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 ModPsdPath                     C:\sc\VERB-exo\VERB-exo\VERB-exo.psd1                                                                                                                                                                                                          
-RequiredVersion                11.1.0                                                                                                                                                                                                                                         
+RequiredVersion                12.0.1                                                                                                                                                                                                                                         
 whatif                         False                                                                                                                                                                                                                                          
 verbose                        False
-2026-03-20 14:07:43 INFO:  : (test-path confirms $ModPsm1 & $ModTestPs1)
-2026-03-20 14:07:43 INFO:  : Import-PowerShellDataFile w
+2026-03-30 11:26:43 INFO:  : (test-path confirms $ModPsm1 & $ModTestPs1)
+2026-03-30 11:26:44 INFO:  : Import-PowerShellDataFile w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Path                           C:\sc\VERB-exo\VERB-exo\VERB-exo.psd1                                                                                                                                                                                                          
 ErrorAction                    Stop                                                                                                                                                                                                                                           
 verbose                        False
-2026-03-20 14:07:44 INFO:  : (resolved Module attributes:
+2026-03-30 11:26:44 INFO:  : (resolved Module attributes:
 $ModuleName:	VERB-exo
 $ModRoot:	c:\sc\VERB-exo
 $ModPsd1:	C:\sc\VERB-exo\VERB-exo\VERB-exo.psd1
 $ModPsm1:	C:\sc\VERB-exo\VERB-exo\VERB-exo.psm1
 $ModTestPs1:	c:\sc\VERB-exo\Tests\VERB-exo.tests.ps1
-$psd1Vers:	11.1.0
+$psd1Vers:	12.0.1
 $psd1guid:	b9637e55-12be-4916-8000-a949f9426fa3)
-2026-03-20 14:07:44 INFO:  : confirm-ModulePsd1Version w
+2026-03-30 11:26:45 INFO:  : confirm-ModulePsd1Version w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Path                           C:\sc\VERB-exo\VERB-exo\VERB-exo.psd1                                                                                                                                                                                                          
-RequiredVersion                11.1.0                                                                                                                                                                                                                                         
+RequiredVersion                12.0.1                                                                                                                                                                                                                                         
 whatif                         False                                                                                                                                                                                                                                          
 verbose                        False
-2026-03-20 14:07:44 INFO:  : (Version already updated to match)
-2026-03-20 14:07:45 INFO:  : $objReport
+2026-03-30 11:26:45 INFO:  : (Version already updated to match)
+2026-03-30 11:26:46 INFO:  : $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          False
-2026-03-20 14:07:45 INFO:  : (SET:$objReport.Valid = $true ;)
-2026-03-20 14:07:46 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+2026-03-30 11:26:46 INFO:  : (SET:$objReport.Valid = $true ;)
+2026-03-30 11:26:47 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
 $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          True
-2026-03-20 14:07:46 INFO:  : #*======^ confirm-ModulePsd1Version: C:\sc\VERB-exo\VERB-exo\VERB-exo.psd1 ^======
-2026-03-20 14:07:47 INFO:  : (confirm-ModulePsd1Version:Success)
-2026-03-20 14:07:47 INFO:  : confirm-ModulePsm1Version w
+2026-03-30 11:26:47 INFO:  : #*======^ confirm-ModulePsd1Version: C:\sc\VERB-exo\VERB-exo\VERB-exo.psd1 ^======
+2026-03-30 11:26:48 INFO:  : (confirm-ModulePsd1Version:Success)
+2026-03-30 11:26:48 INFO:  : confirm-ModulePsm1Version w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Path                           C:\sc\VERB-exo\VERB-exo\VERB-exo.psm1                                                                                                                                                                                                          
-RequiredVersion                11.1.0                                                                                                                                                                                                                                         
+RequiredVersion                12.0.1                                                                                                                                                                                                                                         
 whatif                         False                                                                                                                                                                                                                                          
 verbose                        False
-2026-03-20 14:07:48 INFO:  : (Version already updated to match)
-2026-03-20 14:07:48 INFO:  : $objReport
+2026-03-30 11:26:49 INFO:  : (Version already updated to match)
+2026-03-30 11:26:49 INFO:  : $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          False
-2026-03-20 14:07:49 INFO:  : (SET:$objReport.Valid = $true ;)
-2026-03-20 14:07:49 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+2026-03-30 11:26:50 INFO:  : (SET:$objReport.Valid = $true ;)
+2026-03-30 11:26:50 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
 $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          True
-2026-03-20 14:07:49 INFO:  : #*======^ confirm-ModulePsm1Version: C:\sc\VERB-exo\VERB-exo\VERB-exo.psm1 ^======
-2026-03-20 14:07:50 INFO:  : (confirm-ModulePsm1Version:Success)
-2026-03-20 14:07:51 INFO:  : Checking sync of Psd1 module guid to the Pester Test Script: c:\sc\VERB-exo\Tests\VERB-exo.tests.ps1
-2026-03-20 14:07:52 INFO:  : confirm-ModuleTestPs1Guid w
+2026-03-30 11:26:51 INFO:  : #*======^ confirm-ModulePsm1Version: C:\sc\VERB-exo\VERB-exo\VERB-exo.psm1 ^======
+2026-03-30 11:26:51 INFO:  : (confirm-ModulePsm1Version:Success)
+2026-03-30 11:26:51 INFO:  : Checking sync of Psd1 module guid to the Pester Test Script: c:\sc\VERB-exo\Tests\VERB-exo.tests.ps1
+2026-03-30 11:26:52 INFO:  : confirm-ModuleTestPs1Guid w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Path                           c:\sc\VERB-exo\Tests\VERB-exo.tests.ps1                                                                                                                                                                                                        
 RequiredGuid                   b9637e55-12be-4916-8000-a949f9426fa3                                                                                                                                                                                                           
 whatif                         False                                                                                                                                                                                                                                          
 verbose                        False
-2026-03-20 14:07:52 INFO:  : (Guid  already updated to match)
-2026-03-20 14:07:52 INFO:  : $objReport
+2026-03-30 11:26:52 INFO:  : (Guid  already updated to match)
+2026-03-30 11:26:53 INFO:  : $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Guid                           b9637e55-12be-4916-8000-a949f9426fa3                                                                                                                                                                                                           
 Valid                          False
-2026-03-20 14:07:53 INFO:  : (SET:$objReport.Valid = $true ;)
-2026-03-20 14:07:53 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+2026-03-30 11:26:53 INFO:  : (SET:$objReport.Valid = $true ;)
+2026-03-30 11:26:54 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
 $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Guid                           b9637e55-12be-4916-8000-a949f9426fa3                                                                                                                                                                                                           
 Valid                          True
-2026-03-20 14:07:54 INFO:  : (confirm-ModuleTestPs1Guid:Success)
-2026-03-20 14:07:54 INFO:  : $objReport
+2026-03-30 11:26:54 INFO:  : (confirm-ModuleTestPs1Guid:Success)
+2026-03-30 11:26:55 INFO:  : $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Manifest                       C:\sc\VERB-exo\VERB-exo\VERB-exo.psd1                                                                                                                                                                                                          
 Module                         C:\sc\VERB-exo\VERB-exo\VERB-exo.psm1                                                                                                                                                                                                          
 Pester                         c:\sc\VERB-exo\Tests\VERB-exo.tests.ps1                                                                                                                                                                                                        
 Guid                           b9637e55-12be-4916-8000-a949f9426fa3                                                                                                                                                                                                           
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          False
-2026-03-20 14:07:55 INFO:  : (SET:$objReport.Valid = $true ;)
-2026-03-20 14:07:55 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
+2026-03-30 11:26:55 INFO:  : (SET:$objReport.Valid = $true ;)
+2026-03-30 11:26:56 INFO:  : (PIPELINE:New-Object PSObject -Property $objReport | write-output)
 $objReport
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
@@ -374,94 +373,95 @@ Manifest                       C:\sc\VERB-exo\VERB-exo\VERB-exo.psd1
 Module                         C:\sc\VERB-exo\VERB-exo\VERB-exo.psm1                                                                                                                                                                                                          
 Pester                         c:\sc\VERB-exo\Tests\VERB-exo.tests.ps1                                                                                                                                                                                                        
 Guid                           b9637e55-12be-4916-8000-a949f9426fa3                                                                                                                                                                                                           
-Version                        11.1.0                                                                                                                                                                                                                                         
+Version                        12.0.1                                                                                                                                                                                                                                         
 Valid                          True
-2026-03-20 14:07:56 INFO:  : #*======^ confirm-ModuleBuildSync:  ^======
-2026-03-20 14:07:56 INFO:  : (confirm-ModuleBuildSync:Success)
-2026-03-20 14:07:57 INFO:  : Signing appropriate files...
-2026-03-20 14:07:57 INFO:  : set-AuthenticodeSignatureTDO w
+2026-03-30 11:26:56 INFO:  : #*======^ confirm-ModuleBuildSync:  ^======
+2026-03-30 11:26:57 INFO:  : (confirm-ModuleBuildSync:Success)
+2026-03-30 11:26:57 INFO:  : Signing appropriate files...
+2026-03-30 11:26:58 INFO:  : set-AuthenticodeSignatureTDO w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 file                           {C:\sc\VERB-exo\rebuild-module.ps1, C:\sc\VERB-exo\requirements.psd1, C:\sc\VERB-exo\Tests\PPoShScriptingStyle.psd1, C:\sc\VERB-exo\Tests\ToddomationScriptingStyle-medium.psd1...}                                                            
 ErrorAction                    Stop                                                                                                                                                                                                                                           
 whatif                         False
-2026-03-20 14:07:58 INFO:  : Removing existing profile VERB-exo content...
-2026-03-20 14:07:59 INFO:  : Uninstall-ModuleForce w
+2026-03-30 11:26:59 INFO:  : Removing existing profile VERB-exo content...
+2026-03-30 11:26:59 INFO:  : Uninstall-ModuleForce w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 ModuleName                     VERB-exo                                                                                                                                                                                                                                       
 Verbose                        False                                                                                                                                                                                                                                          
 whatif                         False
-2026-03-20 14:08:03 INFO:  : 
-#*------v Uninstall PSGet Mod:verb-EXO:v11.0.8 v------
-2026-03-20 14:08:25 INFO:  : 
-#*------^ Uninstall PSGet Mod:verb-EXO:v11.0.8 ^------
-2026-03-20 14:08:26 INFO:  : (Processing $env:PSModulePath paths, for surviving locked copies of VERB-exo to *manually* purge...)
-2026-03-20 14:08:26 INFO:  : Checking: VERB-exo below: C:\Users\kadritss\Documents\WindowsPowerShell\Modules...
-2026-03-20 14:08:27 INFO:  : Checking: VERB-exo below: C:\ProgramData\Boxstarter...
-2026-03-20 14:08:27 INFO:  : Checking: VERB-exo below: C:\Program Files\WindowsPowerShell\Modules...
-2026-03-20 14:08:28 INFO:  : Checking: VERB-exo below: C:\WINDOWS\system32\WindowsPowerShell\v1.0\Modules...
-2026-03-20 14:08:29 INFO:  : Checking: VERB-exo below: C:\Program Files (x86)\AutoIt3\AutoItX...
-2026-03-20 14:08:29 INFO:  : Copying module to profile (net of .git & .vscode dirs, and backed up content)...
-2026-03-20 14:08:29 INFO:  : $srcFiles:post-filter out:
+2026-03-30 11:27:05 INFO:  : 
+#*------v Uninstall PSGet Mod:verb-EXO:v12.0.0 v------
+2026-03-30 11:27:28 INFO:  : 
+#*------^ Uninstall PSGet Mod:verb-EXO:v12.0.0 ^------
+2026-03-30 11:27:29 INFO:  : (Processing $env:PSModulePath paths, for surviving locked copies of VERB-exo to *manually* purge...)
+2026-03-30 11:27:30 INFO:  : Checking: VERB-exo below: C:\Users\kadritss\Documents\WindowsPowerShell\Modules...
+2026-03-30 11:27:31 INFO:  : Checking: VERB-exo below: C:\ProgramData\Boxstarter...
+2026-03-30 11:27:32 INFO:  : Checking: VERB-exo below: C:\Program Files\WindowsPowerShell\Modules...
+2026-03-30 11:27:32 INFO:  : Checking: VERB-exo below: C:\WINDOWS\system32\WindowsPowerShell\v1.0\Modules...
+2026-03-30 11:27:33 INFO:  : Checking: VERB-exo below: C:\Program Files (x86)\AutoIt3\AutoItX...
+2026-03-30 11:27:34 INFO:  : Copying module to profile (net of .git & .vscode dirs, and backed up content)...
+2026-03-30 11:27:34 INFO:  : $srcFiles:post-filter out:
 \\(Package|Tests|logs)\\|(\.ps[dm]1_(\d+-\d+[AP]M|TMP)|-LOG-BATCH-EXEC-\d+-\d+[AP]M-log\.txt|\\(fingerprint|Psd1filelist))$
-2026-03-20 14:08:30 INFO:  : Discovered mod-copy files ($srcFiles.fullname):w
+2026-03-30 11:27:35 INFO:  : Discovered mod-copy files ($srcFiles.fullname):w
 C:\sc\VERB-exo\verb-EXO\CHANGELOG.md
 C:\sc\VERB-exo\verb-EXO\Quick-Start-Installation-and-Example.md
 C:\sc\VERB-exo\verb-EXO\README.md
 C:\sc\VERB-exo\verb-EXO\verb-EXO.psd1
 C:\sc\VERB-exo\verb-EXO\verb-EXO.psm1
-2026-03-20 14:08:30 INFO:  : Non-Pre-existing:$to:C:\Users\kadritss\Documents\WindowsPowerShell\Modules\VERB-exo\VERB-exo
+2026-03-30 11:27:35 INFO:  : Non-Pre-existing:$to:C:\Users\kadritss\Documents\WindowsPowerShell\Modules\VERB-exo\VERB-exo
 Pre-creating before copy...
-2026-03-20 14:08:31 INFO:  : Mode   LastWriteTime        Length Name    
-----   -------------        ------ ----    
-d----- 3/20/2026 2:08:31 PM        VERB-exo
-2026-03-20 14:08:31 INFO:  : -Merge:exclude $MergeBuildExcl \\(Public|Internal|External|Private)\\.*.ps1$ files from temp build copy
-2026-03-20 14:08:32 INFO:  : Recursively remove empty subdirs below C:\Users\kadritss\Documents\WindowsPowerShell\Modules\VERB-exo\VERB-exo...
-2026-03-20 14:08:32 INFO:  : Move/Flatten Resource etc files into root of temp Build dir...
-2026-03-20 14:08:33 INFO:  : Unable to locate a problematic temp mod dir C:\Users\kadritss\Documents\WindowsPowerShell\Modules\VERB-exo\VERB-exo COPY of Quick-Start-Installation-and-Example.md
-2026-03-20 14:08:33 INFO:  : Unable to locate a problematic temp mod dir C:\Users\kadritss\Documents\WindowsPowerShell\Modules\VERB-exo\VERB-exo COPY of CHANGELOG.md
-2026-03-20 14:08:34 INFO:  : Unable to locate a problematic temp mod dir C:\Users\kadritss\Documents\WindowsPowerShell\Modules\VERB-exo\VERB-exo COPY of README.md
-2026-03-20 14:08:34 INFO:  : copy/Flatten Resource etc files into source root c:\sc\VERB-exo\VERB-exo dir...
-2026-03-20 14:08:35 INFO:  : Resolved $ModPsdPath:
+2026-03-30 11:27:36 INFO:  : Mode   LastWriteTime         Length Name    
+----   -------------         ------ ----    
+d----- 3/30/2026 11:27:36 AM        VERB-exo
+2026-03-30 11:27:37 INFO:  : -Merge:exclude $MergeBuildExcl \\(Public|Internal|External|Private)\\.*.ps1$ files from temp build copy
+2026-03-30 11:27:38 INFO:  : Recursively remove empty subdirs below C:\Users\kadritss\Documents\WindowsPowerShell\Modules\VERB-exo\VERB-exo...
+2026-03-30 11:27:38 INFO:  : Move/Flatten Resource etc files into root of temp Build dir...
+2026-03-30 11:27:39 INFO:  : Unable to locate a problematic temp mod dir C:\Users\kadritss\Documents\WindowsPowerShell\Modules\VERB-exo\VERB-exo COPY of Quick-Start-Installation-and-Example.md
+2026-03-30 11:27:39 INFO:  : Unable to locate a problematic temp mod dir C:\Users\kadritss\Documents\WindowsPowerShell\Modules\VERB-exo\VERB-exo COPY of CHANGELOG.md
+2026-03-30 11:27:40 INFO:  : Unable to locate a problematic temp mod dir C:\Users\kadritss\Documents\WindowsPowerShell\Modules\VERB-exo\VERB-exo COPY of README.md
+2026-03-30 11:27:40 INFO:  : copy/Flatten Resource etc files into source root c:\sc\VERB-exo\VERB-exo dir...
+2026-03-30 11:27:41 INFO:  : Resolved $ModPsdPath:
 C:\sc\VERB-exo\VERB-exo\VERB-exo.psd1
-2026-03-20 14:08:35 INFO:  : 
+2026-03-30 11:27:42 INFO:  : 
 ==Verifying CU:Mods\VERB-exo\VERB-exo\Quick-Start-Installation-and-Example.md:
-2026-03-20 14:08:36 INFO:  : 
+2026-03-30 11:27:42 INFO:  : 
 ==Verifying CU:Mods\VERB-exo\VERB-exo\CHANGELOG.md:
-2026-03-20 14:08:36 INFO:  : 
+2026-03-30 11:27:43 INFO:  : 
 ==Verifying CU:Mods\VERB-exo\VERB-exo\README.md:
-2026-03-20 14:08:37 INFO:  : Running pre-Publish-Module .psd1 test:
+2026-03-30 11:27:43 INFO:  : Running pre-Publish-Module .psd1 test:
 Test-ModuleManifest -path C:\sc\VERB-exo\VERB-exo\VERB-exo.psd1
-2026-03-20 14:08:37 INFO:  : (Test-ModuleManifest:PASSED)
-2026-03-20 14:08:38 INFO:  : (Profiling Repo: get-PSRepository -name lyncRepo...)
-2026-03-20 14:08:39 INFO:  : 
+2026-03-30 11:27:44 INFO:  : (Test-ModuleManifest:PASSED)
+2026-03-30 11:27:45 INFO:  : (Profiling Repo: get-PSRepository -name lyncRepo...)
+2026-03-30 11:27:47 INFO:  : 
 Publish-Module w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Name                           VERB-exo                                                                                                                                                                                                                                       
 Repository                     lyncRepo                                                                                                                                                                                                                                       
-RequiredVersion                11.1.0                                                                                                                                                                                                                                         
+RequiredVersion                12.0.1                                                                                                                                                                                                                                         
 Verbose                        True                                                                                                                                                                                                                                           
 ErrorAction                    Stop                                                                                                                                                                                                                                           
 errorVariable                  pbmo_Err                                                                                                                                                                                                                                       
 whatif                         False
-2026-03-20 14:08:54 WARNING:  :  FOUND $pbmo_Err: import-module HAD ERRORS! (no action, could be non-impacting)
-2026-03-20 14:08:55 WARNING:  :  Publish-Module PBMO UNDEFINED ERROR! System.Management.Automation.StopUpstreamCommandsException: System error.     at Microsoft.PowerShell.Commands.SelectObjectCommand.ProcessRecord()     at System.Management.Automation.CommandProcessor.ProcessRecord() (But PublishModule doesn't bother to return a functional Error object with an Exception, so we can't trust/parse or act on it. Just echo)
-2026-03-20 14:08:56 INFO:  : Waiting for:find-module -name VERB-exo -Repository lyncRepo ...
-2026-03-20 14:08:58 INFO:  : Install-Module w
+2026-03-30 11:28:05 WARNING:  :  FOUND $pbmo_Err: import-module HAD ERRORS! (no action, could be non-impacting)
+2026-03-30 11:28:06 WARNING:  :  Publish-Module PBMO UNDEFINED ERROR! System.Management.Automation.StopUpstreamCommandsException: System error.     at Microsoft.PowerShell.Commands.SelectObjectCommand.ProcessRecord()     at System.Management.Automation.CommandProcessor.ProcessRecord() (But PublishModule doesn't bother to return a functional Error object with an Exception, so we can't trust/parse or act on it. Just echo)
+2026-03-30 11:28:08 WARNING:  :  Publish-Module PBMO UNDEFINED ERROR! System.Management.Automation.StopUpstreamCommandsException: System error.     at Microsoft.PowerShell.Commands.SelectObjectCommand.ProcessRecord()     at System.Management.Automation.CommandProcessor.ProcessRecord() (But PublishModule doesn't bother to return a functional Error object with an Exception, so we can't trust/parse or act on it. Just echo)
+2026-03-30 11:28:09 INFO:  : Waiting for:find-module -name VERB-exo -Repository lyncRepo ...
+2026-03-30 11:28:12 INFO:  : Install-Module w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Name                           VERB-exo                                                                                                                                                                                                                                       
 Repository                     lyncRepo                                                                                                                                                                                                                                       
-RequiredVersion                11.1.0                                                                                                                                                                                                                                         
+RequiredVersion                12.0.1                                                                                                                                                                                                                                         
 scope                          CurrentUser                                                                                                                                                                                                                                    
 force                          True                                                                                                                                                                                                                                           
 AllowClobber                   True                                                                                                                                                                                                                                           
 errorVariable                  ismo_Err                                                                                                                                                                                                                                       
 ErrorAction                    Stop                                                                                                                                                                                                                                           
 whatif                         False
-2026-03-20 14:09:04 INFO:  : Testing Module:Import-Module w
+2026-03-30 11:28:20 INFO:  : Testing Module:Import-Module w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Name                           VERB-exo                                                                                                                                                                                                                                       
@@ -469,10 +469,10 @@ ErrorAction                    Stop
 errorVariable                  ipmo_Err                                                                                                                                                                                                                                       
 force                          True                                                                                                                                                                                                                                           
 verbose                        True
-2026-03-20 14:09:06 INFO:  : Retrieving matching Repo .nupkg file:
-gci \\lynmsv10\lync_fs\scripts\sc\VERB-exo.11.1.0.nupkgl..
-2026-03-20 14:09:06 INFO:  : Proper updated .nupkg file found:VERB-exo.11.1.0.nupkg, copying to local Pkg directory.
-2026-03-20 14:09:07 INFO:  : remove-UnneededFileVariants w
+2026-03-30 11:28:22 INFO:  : Retrieving matching Repo .nupkg file:
+gci \\lynmsv10\lync_fs\scripts\sc\VERB-exo.12.0.1.nupkgl..
+2026-03-30 11:28:23 INFO:  : Proper updated .nupkg file found:VERB-exo.12.0.1.nupkg, copying to local Pkg directory.
+2026-03-30 11:28:24 INFO:  : remove-UnneededFileVariants w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Path                           c:\sc\VERB-exo\Package                                                                                                                                                                                                                         
@@ -483,7 +483,7 @@ Keep                           2
 KeepToday                      True                                                                                                                                                                                                                                           
 verbose                        True                                                                                                                                                                                                                                           
 whatif                         False
-2026-03-20 14:09:08 INFO:  : remove-UnneededFileVariants w
+2026-03-30 11:28:25 INFO:  : remove-UnneededFileVariants w
 Name                           Value                                                                                                                                                                                                                                          
 ----                           -----                                                                                                                                                                                                                                          
 Path                           c:\sc\VERB-exo\Tests                                                                                                                                                                                                                           
@@ -494,7 +494,7 @@ Keep                           4
 KeepToday                      True                                                                                                                                                                                                                                           
 verbose                        True                                                                                                                                                                                                                                           
 whatif                         False
-2026-03-20 14:09:08 INFO:  : 
+2026-03-30 11:28:26 INFO:  : 
 ---------------------------------------------------------------------------------
 Processing completed: VERB-exo :: c:\sc\VERB-exo
 - Script is currently installed (from PsRep: with scope:CurrentUser, under TORO\kadritss profile
@@ -506,14 +506,14 @@ Processing completed: VERB-exo :: c:\sc\VERB-exo
 
     2. Install the current version (or higher) from the Repo:lyncRepo:
 
-        install-Module -name VERB-exo -Repository lyncRepo -RequiredVersion 11.1.0 -scope currentuser -whatif ;
+        install-Module -name VERB-exo -Repository lyncRepo -RequiredVersion 12.0.1 -scope currentuser -whatif ;
 
     3. Reimport the module with -force, to ensure the current installed verison is loaded:
 
         import-Module -name VERB-exo -force -verbose ;
 
 #-=-=-Stacked list for the above: CURRENTUSER=-=-=-=-=-=
-$whatif=$false ;  $tScop = 'CurrentUser' ; $tMod = 'VERB-exo' ; $tVer = '11.1.0' ;
+$whatif=$false ;  $tScop = 'CurrentUser' ; $tMod = 'VERB-exo' ; $tVer = '12.0.1' ;
 if($IsCoreCLR){
     write-warning "WARNING YOU'RE INSTALLING INTO POWERSHELLCORE (7+)!
 THE MODULE WILL GO INTO \DOCS\POWERSHELL\MODULES
@@ -552,7 +552,7 @@ $(($ErrTrapd | fl * -Force|out-string).trim())" ;
 } ;
 #-=-=-=-=-=-=-=-=
 #-=-=-Stacked list for the above: ALLUSERS=-=-=-=-=-=
-$whatif=$false ; $tScop = 'AllUsers' ; $tMod = 'VERB-exo' ; $tVer = '11.1.0' ;  
+$whatif=$false ; $tScop = 'AllUsers' ; $tMod = 'VERB-exo' ; $tVer = '12.0.1' ;  
 if($IsCoreCLR){
     write-warning "WARNING YOU'RE INSTALLING INTO POWERSHELLCORE (7+)!
 THE MODULE WILL GO INTO \DOCS\POWERSHELL\MODULES
@@ -597,10 +597,10 @@ $(($ErrTrapd | fl * -Force|out-string).trim())" ;
 
 Full Processing Details can be found in:
 
-c:\scripts\logs\update-NewModule-VERB-exo-LOG-BATCH-EXEC-20260320-1406PM-log.txt
+c:\scripts\logs\update-NewModule-VERB-exo-LOG-BATCH-EXEC-20260330-1125AM-log.txt
 
 ---------------------------------------------------------------------------------
 
-2026-03-20 14:09:09 INFO:  : 
-(Most recent processing log can be found at:c:\sc\VERB-exo\update-NewModule-VERB-exo-LOG-BATCH-EXEC-20260320-1406PM-log.txt)
-(perm copy stored at:c:\scripts\logs\update-NewModule-VERB-exo-LOG-BATCH-EXEC-20260320-1406PM-log.txt
+2026-03-30 11:28:27 INFO:  : 
+(Most recent processing log can be found at:c:\sc\VERB-exo\update-NewModule-VERB-exo-LOG-BATCH-EXEC-20260330-1125AM-log.txt)
+(perm copy stored at:c:\scripts\logs\update-NewModule-VERB-exo-LOG-BATCH-EXEC-20260330-1125AM-log.txt
