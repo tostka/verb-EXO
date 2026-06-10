@@ -19,6 +19,7 @@ function test-EXOConnectionTDO{
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 8:24 AM 6/10/2026 add: alias:test-xo
     * 11:03 AM 7/9/2024 added txo alias; subbed in silent block for all wv
     * 4:31 PM 7/8/2024 added CBH example demoing variant output ; added blank Org resolution (resolve TenentID into equiv TenantDomain); this should always return a full set of values even if we have to work around the bugs in the MS code.
     * 9:48 AM 7/3/2 add:$AppId to return, need a way to resolve CBA back to identifiable role; resolve-UserNameToUserRole() resolves cert thumb to role, 
@@ -280,7 +281,7 @@ function test-EXOConnectionTDO{
     https://github.com/tostka/verb-EXO
     #>
     [CmdletBinding(DefaultParameterSetName='Prefix')]
-    [Alias('txo')]
+    [Alias('txo','test-xo')]
     PARAM(
         [Parameter(HelpMessage="Office365 TenantDomain to be filtered on returns[-Organization 'TENANTDOMAIN.onmicrosoft.com']")]
             [string]$Organization,
