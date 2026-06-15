@@ -193,6 +193,39 @@ function test-EXOConnectionTerseTDO{
             $connections|%{
             
                 $thisxoc = $_ ;
+                #if($thisxoc.state -eq 'Connected' -AND $thisxoc.TokenStatus -eq 'Active'){$pass = $true}else{$pass=$false} ;
+                # per CPT, tokenstatus isn't dispositive, can still refresh, need to run get-exomailbox -resultsize 1 to know if refreshes cleanly
+                <#
+                ▒▒▒▒▒ [PS]:D:\s\build $ Get-ConnectionInformation
+                ConnectionId                    : ac1992ad-8638-4837-bc86-35288c091967
+                State                           : Broken
+                Id                              : 11
+                Name                            : ExchangeOnline_11
+                UserPrincipalName               : OAuthUser@toroco.onmicrosoft.com
+                ConnectionUri                   : https://outlook.office365.com
+                AzureAdAuthorizationEndpointUri : https://login.microsoftonline.com/toroco.onmicrosoft.com
+                TokenExpiryTimeUTC              :
+                CertificateAuthentication       : True
+                ModuleName                      : C:\Users\kadriTSS\AppData\Local\Temp\3\tmpEXO_js3n4315.qpn
+                ModulePrefix                    : xo
+                Organization                    : toroco.onmicrosoft.com
+                DelegatedOrganization           :
+                AppId                           : da4551ad-e6d9-42a2-8738-3e7e90081afe
+                PageSize                        : 1000
+                TenantID                        : 549366ae-e80a-44b9-8adc-52d0c29ba08b
+                TokenStatus                     : Expired
+                ConnectionUsedForInbuiltCmdlets : True
+                IsEopSession                    : False
+                
+                Issue: get-exomailbox took ~1m to fail:
+                ▒▒▒▒▒ [PS]:D:\s\build $ get-exomailbox -ResultSize 1
+                get-exomailbox : The underlying connection was closed: An unexpected error occurred on a receive.
+                At line:1 char:1
+                + get-exomailbox -ResultSize 1
+                + ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+                    + CategoryInfo          : ProtocolError: (:) [Get-EXOMailbox], DataServiceTransportException
+                    + FullyQualifiedErrorId : The underlying connection was closed: An unexpected error occurred on a receive.,Microsoft.Exchange.Management.RestApiClient.GetExoMailbox                
+                #>                
                 if($thisxoc.state -eq 'Connected' -AND $thisxoc.TokenStatus -eq 'Active'){$pass = $true}else{$pass=$false} ;
                 if($thisxoc.CertificateAuthentication){
                     $smsg = "`n$(($thisxoc|ft -a $prpTxoCBA|out-string).trim())" ; 
