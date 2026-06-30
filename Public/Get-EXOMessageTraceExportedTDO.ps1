@@ -18,6 +18,7 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:53 PM 6/30/2026 rem #reqs
     * 3:34 PM 2/6/2026 fixed typo: no $ RetryThrottle
     * 12:41 PM 1/27/2026 latest conn_svcs block updated
     * 10:48 AM 1/19/2026 bugfix: $pltCcOPSvcs.UserRole (postfilter, not match test)
@@ -382,7 +383,7 @@ function Get-EXOMessageTraceExportedTDO {
         .LINK
         https://github.com/tostka/verb-exo
     #>
-    #Requires -Modules AzureAD, ExchangeOnlineManagement 
+    ##Requires -Modules AzureAD, ExchangeOnlineManagement 
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("US","GB","AU")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)]#positiveInt:[ValidateRange(0,[int]::MaxValue)]#negativeInt:[ValidateRange([int]::MinValue,0)][ValidateCount(1,3)]
     [CmdletBinding(DefaultParameterSetName='Days')]
     [Alias('get-EXOMsgTraceDetailed','Get-EXOMessageTraceExported','Get-EXOMessageTraceTDO')]

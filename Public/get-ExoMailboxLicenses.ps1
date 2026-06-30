@@ -18,6 +18,7 @@ function get-ExoMailboxLicenses {
     Github      : https://github.com/tostka/verb-ex2010
     Tags        : Powershell
     REVISIONS
+    * 1:53 PM 6/30/2026 rem #reqs
     * 12:41 PM 1/27/2026 latest conn_svcs block updated
     * 10:48 AM 1/19/2026 bugfix: $pltCcOPSvcs.UserRole (postfilter, not match test)
     # 2:23 PM 1/12/2026 fixed op break: #804, FORCE:  $useOP = $false ; : This has NO NEED FOR ONPREM, IT JUST DOES A Get-MgSubscribedSku AND RUNS THE STATIC SERVICEPLANLIST CHECK, NOTHING ELSE!
@@ -249,7 +250,7 @@ function get-ExoMailboxLicenses {
     .LINK
     https://github.com/tostka/verb-ex2010
     #>
-    #Requires -Modules verb-IO, verb-logging, verb-Text, AzureAD
+    ##Requires -Modules verb-IO, verb-logging, verb-Text, AzureAD
     [OutputType('System.Collections.Hashtable')]
     [CmdletBinding()]
     PARAM(

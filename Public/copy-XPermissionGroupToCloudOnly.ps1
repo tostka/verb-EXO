@@ -79,7 +79,8 @@ function copy-XPermissionGroupToCloudOnly {
     ###Requires -Version 5
     ##Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Ex2010, verb-Text
     # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
-    #Requires -Modules ActiveDirectory, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Text
+    ##Requires -Modules ActiveDirectory, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Text
+    ##Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Text
     ## MSOnline, 
     ##Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("(lyn|bcc|spb|adl)ms6(4|5)(0|1).(china|global)\.ad\.COMPANY\.com")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]

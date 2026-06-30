@@ -101,8 +101,8 @@ function remove-EXOLicense {
     .LINK
     #>
     # migr to verb-exo, pull the dupe spec...
-    # #Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-MG, verb-Auth, verb-IO, verb-logging, verb-Mods, verb-Text
-    #Requires -RunasAdministrator
+    ##Requires -Modules AzureAD, MSOnline, ExchangeOnlineManagement, verb-MG, verb-Auth, verb-IO, verb-logging, verb-Mods, verb-Text
+    ##Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\s\regex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]

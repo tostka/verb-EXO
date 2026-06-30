@@ -20,6 +20,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:53 PM 6/30/2026 rem #reqs
     * 11:23 AM 3/30/2026 fadded conflict resolution lookups top the OnPrem conflict block, now pulls and puts up comparitive objects with UPN or proxyaddresseses clashes with the MGuser object.
     * 4:25 PM 3/27/2026 fixed OpOU output; add backup lookup against samaccountname@UPNSuffix for provisnion conflicted non-upn-aligned mgu (they are still ahrdmatched for ad lookup, just not mgu);
          added $hsum.iSProvisioningErrors flag to output;
@@ -624,7 +625,7 @@ function resolve-user {
     https://github.com/tostka/verb-exo
     #>
 
-    #Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-IO, verb-logging
+    ##Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-IO, verb-logging
     ##Requires -RunasAdministrator
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]

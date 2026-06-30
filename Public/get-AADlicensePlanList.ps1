@@ -16,6 +16,7 @@ function get-AADlicensePlanList {
     Copyright   : (c) 2020 Todd Kadrie
     Github      : https://github.com/tostka/
     REVISIONS
+    * 1:52 PM 6/30/2026 rem'd #reqs
     * 1:20 PM 6/18/2024 fixed credential code, spliced over code to resolve creds, and assign to $Credential
     * 2:33 PM 5/17/2023 added cred/silent/pltrxo support; 
     * 3:19 PM 5/15/2023 get-AADlicensePlanList() works w latest aad/exo-eom updates
@@ -108,10 +109,10 @@ function get-AADlicensePlanList {
     https://github.com/tostka
     #>
     ##ActiveDirectory, MSOnline, 
-    #Requires -Version 3
+    ##Requires -Version 3
     ##requires -PSEdition Desktop
-    #Requires -Modules AzureAD, verb-Text
-    #Requires -RunasAdministrator
+    ##Requires -Modules AzureAD, verb-Text
+    ##Requires -RunasAdministrator
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("USEA","GBMK","AUSYD")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)][ValidateCount(1,3)]
     [CmdletBinding()]
     PARAM(

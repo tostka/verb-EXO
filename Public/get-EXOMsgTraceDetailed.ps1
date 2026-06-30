@@ -18,6 +18,7 @@ function get-EXOMsgTraceDetailed {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 1:53 PM 6/30/2026 rem #reqs
     * 12:54 PM 10/14/2024 added fully enumerated splat demo    
     * 2:00 PM 10/7/2024 
     * 3:22 PM 9/27/2024 substantial retool, to make it a single goto middleware func for msgtracks, appears working; added params to better approx both Get-xoMessageTrace and existing 7psmsgtrkexo BP calls;
@@ -217,7 +218,7 @@ function get-EXOMsgTraceDetailed {
         .LINK
         https://github.com/tostka/verb-exo
     #>
-    #Requires -Modules AzureAD, ExchangeOnlineManagement 
+    ##Requires -Modules AzureAD, ExchangeOnlineManagement 
     # VALIDATORS: [ValidateNotNull()][ValidateNotNullOrEmpty()][ValidateLength(24,25)][ValidateLength(5)][ValidatePattern("some\sregex\sexpr")][ValidateSet("US","GB","AU")][ValidateScript({Test-Path $_ -PathType 'Container'})][ValidateScript({Test-Path $_})][ValidateRange(21,65)]#positiveInt:[ValidateRange(0,[int]::MaxValue)]#negativeInt:[ValidateRange([int]::MinValue,0)][ValidateCount(1,3)]
     [CmdletBinding(DefaultParameterSetName='Days')]
     PARAM(
