@@ -18,6 +18,7 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 4:09 PM 7/7/2026 re-rem'd remaining #req line
     * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:51 PM 1/14/2022 init
@@ -38,7 +39,7 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
     https://github.com/tostka/verb-EXO
     #>
     # 2:49 PM 3/8/2022 pull verb-ex2010 ref - I think it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
-    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-IO, verb-logging, verb-Network, verb-Text
+    ##Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-ADMS, verb-Auth, verb-IO, verb-logging, verb-Network, verb-Text
     ##Requires -RunasAdministrator
     #Requires -Version 3
     #requires -PSEdition Desktop
