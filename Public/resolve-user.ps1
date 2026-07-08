@@ -20,6 +20,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    # 9:18 AM 7/8/2026 update $mts, stop stripping boolean:$false items
     * 1:53 PM 6/30/2026 rem #reqs
     * 11:23 AM 3/30/2026 fadded conflict resolution lookups top the OnPrem conflict block, now pulls and puts up comparitive objects with UPN or proxyaddresseses clashes with the MGuser object.
     * 4:25 PM 3/27/2026 fixed OpOU output; add backup lookup against samaccountname@UPNSuffix for provisnion conflicted non-upn-aligned mgu (they are still ahrdmatched for ad lookup, just not mgu);
@@ -735,7 +736,7 @@ function resolve-user {
             verbose = [boolean]($PSBoundParameters['Verbose'] -eq $true) ; 
         } ;
         write-verbose "(Purge no value keys from splat)" ; 
-        $mts = $pltRVEnv.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 -whatif:$false -confirm:$false; 
+        $mts = $pltRVEnv.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 -whatif:$false -confirm:$false; 
         $smsg = "resolve-EnvironmentTDO w`n$(($pltRVEnv|out-string).trim())" ; 
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         if(get-command resolve-EnvironmentTDO -ea STOP){}ELSE{
@@ -1739,7 +1740,7 @@ function resolve-user {
                 MGCmdlets = $MGCmdlets ;
             } ;
             write-verbose "(Purge no value keys from splat)" ; 
-            $mts = $pltCco365Svcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
+            $mts = $pltCco365Svcs.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
             if((get-command connect-O365Services -EA STOP).parameters.ContainsKey('whatif')){
                 $pltCco365SvcsnDSR.add('whatif',$($whatif))
             } ; 
@@ -1924,7 +1925,7 @@ function resolve-user {
             } ;
 
             write-verbose "(Purge no value keys from splat)" ;
-            $mts = $pltCcOPSvcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCcOPSvcs.remove($_.Name)} ; rv mts -ea 0 ;
+            $mts = $pltCcOPSvcs.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))}; $mts |%{$pltCcOPSvcs.remove($_.Name)} ; rv mts -ea 0 ;
             if((get-command connect-OPServices -EA STOP).parameters.ContainsKey('whatif')){
                 $pltCcOPSvcsnDSR.add('whatif',$($whatif))
             } ;
