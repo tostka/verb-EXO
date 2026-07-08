@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 13.0.0.0
+  Version     : 13.1.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -7759,6 +7759,7 @@ function get-ExoMailboxLicenses {
     Github      : https://github.com/tostka/verb-ex2010
     Tags        : Powershell
     REVISIONS
+    # 9:18 AM 7/8/2026 update $mts, stop stripping boolean:$false items
     * 1:53 PM 6/30/2026 rem #reqs
     * 12:41 PM 1/27/2026 latest conn_svcs block updated
     * 10:48 AM 1/19/2026 bugfix: $pltCcOPSvcs.UserRole (postfilter, not match test)
@@ -8088,7 +8089,7 @@ function get-ExoMailboxLicenses {
             verbose = [boolean]($PSBoundParameters['Verbose'] -eq $true) ; 
         } ;
         write-verbose "(Purge no value keys from splat)" ; 
-        $mts = $pltRVEnv.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 -whatif:$false -confirm:$false; 
+        $mts = $pltRVEnv.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 -whatif:$false -confirm:$false; 
         $smsg = "resolve-EnvironmentTDO w`n$(($pltRVEnv|out-string).trim())" ; 
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         if(get-command resolve-EnvironmentTDO -ea STOP){}ELSE{
@@ -8436,7 +8437,7 @@ function get-ExoMailboxLicenses {
                 MGCmdlets = $MGCmdlets ;
             } ;
         write-verbose "(Purge no value keys from splat)" ; 
-        $mts = $pltCco365Svcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
+        $mts = $pltCco365Svcs.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
         if((get-command connect-O365Services -EA STOP).parameters.ContainsKey('whatif')){
             $pltCco365SvcsnDSR.add('whatif',$($whatif))
         } ; 
@@ -8619,7 +8620,7 @@ function get-ExoMailboxLicenses {
         } ;
 
         write-verbose "(Purge no value keys from splat)" ;
-        $mts = $pltCcOPSvcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCcOPSvcs.remove($_.Name)} ; rv mts -ea 0 ;
+        $mts = $pltCcOPSvcs.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))} ; $mts |%{$pltCcOPSvcs.remove($_.Name)} ; rv mts -ea 0 ;
         if((get-command connect-OPServices -EA STOP).parameters.ContainsKey('whatif')){
             $pltCcOPSvcsnDSR.add('whatif',$($whatif))
         } ;
@@ -9290,6 +9291,7 @@ function Get-EXOMessageTraceExportedTDO {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    # 9:18 AM 7/8/2026 update $mts, stop stripping boolean:$false items
     * 1:53 PM 6/30/2026 rem #reqs
     * 3:34 PM 2/6/2026 fixed typo: no $ RetryThrottle
     * 12:41 PM 1/27/2026 latest conn_svcs block updated
@@ -10117,7 +10119,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
             verbose = [boolean]($PSBoundParameters['Verbose'] -eq $true) ; 
         } ;
         write-verbose "(Purge no value keys from splat)" ; 
-        $mts = $pltRVEnv.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 -whatif:$false -confirm:$false; 
+        $mts = $pltRVEnv.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 -whatif:$false -confirm:$false; 
         $smsg = "resolve-EnvironmentTDO w`n$(($pltRVEnv|out-string).trim())" ; 
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         if(get-command resolve-EnvironmentTDO -ea STOP){}ELSE{
@@ -10683,7 +10685,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
             MGCmdlets = $MGCmdlets ;
         } ;
         write-verbose "(Purge no value keys from splat)" ; 
-        $mts = $pltCco365Svcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
+        $mts = $pltCco365Svcs.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
         if((get-command connect-O365Services -EA STOP).parameters.ContainsKey('whatif')){
             $pltCco365SvcsnDSR.add('whatif',$($whatif))
         } ; 
@@ -10866,7 +10868,7 @@ Transfer|The recipient was moved to a bifurcated message because of content conv
         } ;
 
         write-verbose "(Purge no value keys from splat)" ;
-        $mts = $pltCcOPSvcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCcOPSvcs.remove($_.Name)} ; rv mts -ea 0 ;
+        $mts = $pltCcOPSvcs.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))}; $mts |%{$pltCcOPSvcs.remove($_.Name)} ; rv mts -ea 0 ;
         if((get-command connect-OPServices -EA STOP).parameters.ContainsKey('whatif')){
             $pltCcOPSvcsnDSR.add('whatif',$($whatif))
         } ;
@@ -22912,6 +22914,7 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    # 9:18 AM 7/8/2026 update $mts, stop stripping boolean:$false items
     * 1:53 PM 6/30/2026 rem #reqs
     * 11:23 AM 3/30/2026 fadded conflict resolution lookups top the OnPrem conflict block, now pulls and puts up comparitive objects with UPN or proxyaddresseses clashes with the MGuser object.
     * 4:25 PM 3/27/2026 fixed OpOU output; add backup lookup against samaccountname@UPNSuffix for provisnion conflicted non-upn-aligned mgu (they are still ahrdmatched for ad lookup, just not mgu);
@@ -23627,7 +23630,7 @@ function resolve-user {
             verbose = [boolean]($PSBoundParameters['Verbose'] -eq $true) ; 
         } ;
         write-verbose "(Purge no value keys from splat)" ; 
-        $mts = $pltRVEnv.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 -whatif:$false -confirm:$false; 
+        $mts = $pltRVEnv.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 -whatif:$false -confirm:$false; 
         $smsg = "resolve-EnvironmentTDO w`n$(($pltRVEnv|out-string).trim())" ; 
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         if(get-command resolve-EnvironmentTDO -ea STOP){}ELSE{
@@ -24631,7 +24634,7 @@ function resolve-user {
                 MGCmdlets = $MGCmdlets ;
             } ;
             write-verbose "(Purge no value keys from splat)" ; 
-            $mts = $pltCco365Svcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
+            $mts = $pltCco365Svcs.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
             if((get-command connect-O365Services -EA STOP).parameters.ContainsKey('whatif')){
                 $pltCco365SvcsnDSR.add('whatif',$($whatif))
             } ; 
@@ -24816,7 +24819,7 @@ function resolve-user {
             } ;
 
             write-verbose "(Purge no value keys from splat)" ;
-            $mts = $pltCcOPSvcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCcOPSvcs.remove($_.Name)} ; rv mts -ea 0 ;
+            $mts = $pltCcOPSvcs.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))}; $mts |%{$pltCcOPSvcs.remove($_.Name)} ; rv mts -ea 0 ;
             if((get-command connect-OPServices -EA STOP).parameters.ContainsKey('whatif')){
                 $pltCcOPSvcsnDSR.add('whatif',$($whatif))
             } ;
@@ -32222,8 +32225,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUri1ANYDSoOM9KfLcmzBQ34oN
-# wf2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUUCytOZP0hZXCuwaiavFAoCQN
+# ss2gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -32238,9 +32241,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRppGV2
-# MfydKBspDTRafONWgx3VGTANBgkqhkiG9w0BAQEFAASBgKQqqweuOlpkO8wQi8ER
-# yn9D5k/bX8hi584cKwEzFy+kDFfBt2CuKRG+QrOV1vsaF/0RhqeDvS9MYpB21tNb
-# alAFfK9/TezMzIcy1rW4Bt0Yc9FP9DeVzyeCgyHkqHb0WXvPuLVBWIB4vpoRIPIr
-# cCZKPU1JTLeyaShhTEwlzDdd
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBQO8d2c
+# 9oH9nzpHcYH0oX1mYV5X1DANBgkqhkiG9w0BAQEFAASBgFStnEhfRgl6pOvSRJIp
+# Xjiz+k1fcxIl4guFMT8VFOWdw9D6XWihwYKtbSJRCUAh1jbSSpiGD/4qjhGSuL1A
+# YLO+hjWAQzRMc2i2RAdphAGnhBU2h40E94Z/v1kzwPNR3JZnW99f70Z1Mhl8N7II
+# ocKodyBkg8xQZF+PyAQTVfGB
 # SIG # End signature block
