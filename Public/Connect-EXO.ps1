@@ -17,6 +17,8 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 12:43 PM 7/10/2026 updated for function testing, diverted tests into test-exoconnectiontdo(); added mgauth/eom load order requirements and testing, 
+        add Test-MGAuthConflict() which tests for MGAuth-conflicting loaded assemblies in mem (which survive rv ExchangeOnlineManagement); 
     * 9:01 AM 1/21/2026 NEVER pass whatif into a conn maint call, it's non-impactful, no real change;
     *2:48 PM 5/22/2025 rolled reconnect-exo into an alias of this (found updating it, that I was copying most of cxo's logic over, no point wo local baseicauth creds being moved anymore); 
         dbgd working cxo, rxo, csc & rsc, looks functional. put through a build, anduse it with Invoke-SCMailboxFolderContentPurgeV2.ps1; 
@@ -142,6 +144,8 @@ Function Connect-EXO {
     .PARAMETER Pagesize
     Pagesize Param
     .PARAMETER silent
+    .PARAMETER skipMGAChecks
+    skip MGAuth conflict assembly checks (MGA must ipmo before EOM, or crashes)[-skipMGAChecks]
     Switch to suppress all non-error echos
     .PARAMETER showDebug
     Debugging Flag [-showDebug]
@@ -242,10 +246,13 @@ Function Connect-EXO {
         #    [uint32]$PageSize = 1000,
         [Parameter(HelpMessage="Silent output (suppress status echos)[-silent]")]
             [switch] $silent,
+        [Parameter(HelpMessage="skip MGAuth conflict assembly checks (MGA must ipmo before EOM, or crashes)[-skipMGAChecks]")]
+            [switch] $skipMGAChecks,
         [Parameter(HelpMessage = "Debugging Flag [-showDebug]")]
             [switch] $showDebug
     ) ;
     BEGIN {
+        #region CONSTANTS_AND_ENVIRO ; #*======v CONSTANTS_AND_ENVIRO v======
         # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
         $rPSCmdlet = $PSCmdlet ; 
         $rPSScriptRoot = $PSScriptRoot ; 
@@ -294,10 +301,12 @@ Function Connect-EXO {
         if($ppMiss){write-warning "Missing Dependant Meta vari properties:`n$(($ppMiss |%{"`$$($_)" }) -join ',')" } ; 
         if(-not $isBased){ write-warning  "missing critical dependancy profile config!" } ; 
         #endregion CHKPREREQ ; #*------^ END CHKPREREQ ^------
+        #endregion CONSTANTS_AND_ENVIRO ; #*======^ CONSTANTS_AND_ENVIRO ^======
 
         if(-not (gv rgxCertThumbprint -ea 0)){$rgxCertThumbprint = '[0-9a-fA-F]{40}' ; } ;
         if(-not (gv rgxCertFNameSuffix -ea 0)){$rgxCertFNameSuffix = '-([A-Z]{3})$' ; } ; 
 
+        #region LOCAL_CONSTANTS ; #*------v LOCAL_CONSTANTS v------
         #*------v PSS & GMO VARIS v------
         # move into a param
         #$MinNoWinRMVersion = '3.0.0' ; 
@@ -337,10 +346,12 @@ Function Connect-EXO {
         # add get-connectioninformation.ConnectionURI targeting rgxs for Prvw vs EXO
         if(-not $rgxConnectionUriEXO){$rgxConnectionUriEXO = 'https://outlook\.office365\.com'} ; 
         if(-not $rgxConnectionUriPrvw){$rgxConnectionUriPrvw = 'https://ps\.compliance\.protection\.outlook\.com'} ; 
+        if(-not $DepModsOrder){$DepModsOrder = @('Microsoft.Graph.Authentication','ExchangeOnlineManagement') };        
+        if(-not $msgGErr){$msgGErr = "Graph-related (or known-problem EOM/MSOL) assemblies are already loaded.`nIf Microsoft.Graph.Authentication requires different versions,`nImport-Module may fail and a new PowerShell process may be required." };
         $sTitleBarTag = @("EXO2") ;
-        #*------^ END PSS & GMO VARIS ^------
+        #endregion LOCAL_CONSTANTS ; #*------^ END LOCAL_CONSTANTS ^------  
 
-        #*======v FUNCTIONS v======
+        #region FUNCTIONS_INTERNAL ; #*======v FUNCTIONS_INTERNAL v======
         if(-not(get-command test-uri -ea 0)){
             #*------v Function Test-Uri v------
             function Test-Uri {
@@ -356,7 +367,67 @@ Function Connect-EXO {
             } ; 
             #*------^ END Function Test-Uri ^------
         } ;
-        #*======^ END FUNCTIONS ^======
+
+        #region TEST_MGAUTHCONFLICT ; #*------v Test-MGAuthConflict v------
+        if(-not(get-command Test-MGAuthConflict -ea 0)){
+            function Test-MGAuthConflict {
+                                                                                                                                                                    <#
+            .SYNOPSIS
+            Test-MGAuthConflict - Try to predetect conflicting Auth sourcees that block ipmo Microsoft.Graph.Authentication
+            .NOTES
+            Version     : 0.0.
+            Author      : Todd Kadrie
+            Website     : http://www.toddomation.com
+            Twitter     : @tostka / http://twitter.com/tostka
+            CreatedDate : 2026-
+            FileName    : Test-MGAuthConflict.ps1
+            License     : MIT License
+            Copyright   : (c) 2026 Todd Kadrie
+            Github      : https://github.com/tostka/verb-XXX
+            Tags        : Powershell
+            AddedCredit : REFERENCE
+            AddedWebsite: URL
+            AddedTwitter: URL
+            REVISIONS
+            * 9:24 AM 7/10/2026 init, CPT concept code
+            .DESCRIPTION
+            Test-MGAuthConflict - Try to predetect conflicting Auth sourcees that block ipmo Microsoft.Graph.Authentication
+            ipmo Microsoft.Graph.Authentication will not run, after ipmo exchangeonlinemanagement, MGA thows an error. 
+            Only fix is to exit and reopen Powershell, to clear locked obsolete/non-MGA compatible auth assemblies in memory. 
+            This is a pretest to spot those specific conflicts, more effectivley than a simple...
+
+                Try{ipmo exchangeonlinemanagement}catch{write-warning 'conflict!'}
+
+            ...could. 
+            .OUTPUTS
+            System.Boolean
+            .EXAMPLE
+            PS> if(Test-MGAuthConflict){
+            PS>     write-warning "MGAUTH CONFLICT! Close Powershell and open a new clean session, then pre-load the modules in MGA,EOM order!" ; 
+            PS> }else{
+            PS>     $tmods = @('microsoft.graph.authentication','exchangeonlinemanagement') ;
+            PS>     $tmods | %{Import-Module $_ -force -EA stop} ; 
+            PS> }
+            .LINK
+            https://github.com/tostka/verb-MG
+            #>
+                # add EOM to the suspect filter, add Msonline/msol as well (CPT commented AAD & msol both can conflict)
+                $rgxSuspectnames = 'Microsoft\.Graph|Azure\.Identity|Microsoft\.Identity\.Client|Kiota|Microsoft\.Exchange|Microsoft\.Online' ;
+                $assemblies = [System.AppDomain]::CurrentDomain.GetAssemblies() 
+                $suspects = $assemblies | Where-Object {$_.GetName().Name -match $rgxSuspectnames } ;    
+                if($suspects){
+                    Write-Warning "Graph-related (or known-problem EOM) assemblies are already loaded.`nIf Microsoft.Graph.Authentication requires different versions,`nImport-Module may fail and a new PowerShell process may be required." ; 
+                    $suspects |
+                        Select-Object @{N='Assembly';E={$_.GetName().Name}},
+                            @{N='Version';E={$_.GetName().Version}},'Location'
+                    return $true ;
+                } ;
+                return $false ;
+            } ;
+        }
+        #endregion TEST_MGAUTHCONFLICT ; #*------^ END Test-MGAuthConflict ^------
+
+        #endregion FUNCTIONS_INTERNAL ; #*======^ END FUNCTIONS_INTERNAL ^======
 
         # 'Reconnect-EXO','Reconnect-Purview','Reconnect-SC'
         if($ConnectPurview -OR ($rMyInvocation.Line -match 'Connect-(Purview|SC)' )){
@@ -437,18 +508,46 @@ Function Connect-EXO {
             $CertTag = $uRoleReturn.TenOrg
         } ; 
         #>
+        #region MODULES_FORCE_LOAD ; #*------v MODULES_FORCE_LOAD v------
+        # pretest dep mod load order
+        $oWPref = $WarningPreference ; $WarningPreference = 'SilentlyContinue' ; 
+        $i = 0 ; $DepModsOrder | foreach-object{ $i++ ; set-variable -name "ModO$($i)" -value $_; write-verbose "`$ModO$($i):`t$((get-variable -name "ModO$($i)").value)" } ;  
+        if(-not $skipMGAChecks -AND (get-module $modO1 -ea 0)){write-verbose "$modO1 already successfully loaded" }else{
+            if(Test-MGAuthConflict){Write-Warning $msgGErr} ; 
+            if(-not (get-module $modO1 -ea 0)){write-host -foregroundcolor green "Loading 1st Mod:$($modO1)";Import-Module -force $modO1 -EA stop;} ;         
+        }
+        $i = 1 ; $DepModsOrder | select -skip 1 |  foreach-object{
+            $thisOMod = $_ ; $i++ ;
+            if(-not (get-module $thisOMod -ea 0)){write-host -foregroundcolor green "Loading #$($i) Mod:$($thisOMod)";Import-Module -force $thisOMod -EA stop;} ;
+        } ; 
+        $WarningPreference = $oWPref ; 
+        #endregion MODULES_FORCE_LOAD ; #*------^ END MODULES_FORCE_LOAD ^------
 
         if(-not $isBased){
-            # default to most basic rudimentary connection
-            $connections = Get-ConnectionInformation -ErrorAction SilentlyContinue
-            if($connections|?{$_.ConnectionUri -match $rgxConnectionUriEXO -AND $_.TokenStatus -ne 'Expired'  -AND $_.ModulePrefix -eq $Prefix}){
+            $pltTXO=[ordered]@{
+                    erroraction = 'STOP' ;
+            } ;
+            if($Prefix){
+                $pltTXO.add('Prefix',$Prefix) ; 
+            } ; 
+            if($ConnectPurview -AND ( (get-command test-EXOConnectionTDO).Parameters.Keys -contains 'ConnectPurview') ){
+                $pltTXO.add('ConnectPurview',$ConnectPurview) ; 
+            } ; 
+
+            $smsg = "test-EXOConnectionTDO w`n$(($pltTXO|out-string).trim())" ; 
+            if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
+            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+
+            $bExistingEXOGood = $bExistingPrvwGood = $false ;
+            $isGood = test-EXOConnectionTDO @pltTXO ; 
+            if($isGood){
                 $smsg = "EXO connected" ; 
                 if($Prefix){
                     $smsg += " w Prefix:$($Prefix)" ; 
                 }else{
                     $smsg += " w *no* Prefix" ; 
                 } ; 
-                $smsg += "/non-Expired Token" ;
+                $smsg += "Valid Functional" ;
                 if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
