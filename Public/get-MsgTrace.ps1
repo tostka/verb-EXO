@@ -15,6 +15,7 @@ function get-MsgTrace {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
+    * 11:21 AM 8/4/2026 swap ral -> ri
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
      * 12:17 PM 5/14/2021 updated passstatus code to curr, and added -ea to the gv's (suppress errors when not present)
@@ -533,7 +534,7 @@ function get-MsgTrace {
         
     } ;  # PROC-E
     END {
-        remove-alias ps1GetMsgTrace ;
+        get-alias ps1GetMsgTrace -ea 0 | %{remove-item alias:$_ -verbose } 
     } ; 
 }
 

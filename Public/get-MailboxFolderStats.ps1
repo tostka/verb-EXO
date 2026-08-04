@@ -15,6 +15,7 @@ function get-MailboxFolderStats {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
+    * 11:21 AM 8/4/2026 swap ral -> ri
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     # 12:17 PM 5/14/2021 updated passstatus code to curr, and added -ea to the gv's (suppress errors when not present)
     * 11:54 AM 4/2/2021 updated wlt & recstat support, updated catch blocks
@@ -270,7 +271,7 @@ function get-MailboxFolderStats {
         } ; 
     } ;  # PROC-E
     END {
-        remove-alias ps1GetMbxFldrStat ;
+        get-alias ps1GetMbxFldrStat -ea 0 | %{remove-item alias:$_ -verbose }  ;
     } ; 
     
 }

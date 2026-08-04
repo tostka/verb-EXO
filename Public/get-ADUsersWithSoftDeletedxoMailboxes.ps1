@@ -18,6 +18,7 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 11:13 AM 8/4/2026 swapp out ral for ri
     * 4:09 PM 7/7/2026 re-rem'd remaining #req line
     * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
@@ -248,7 +249,8 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
             } ;
         } ;# ...
         # cleanup
-        get-alias -scope Script |?{$_.name -match '^ps1.*'} | %{Remove-Alias -alias $_.name} ; 
+        get-alias -scope Script |?{$_.name -match '^ps1.*'} | %{remove-item alias:$_ -verbose } 
+        
         #endregion EXO-v-EXOv2-ALIASING #*------^ END Function EXO V EXOv2 ALIASING ^------
         
         #endregion EXCH-CMD-ALIASING-OPTS #*======^ END EXCH-CMD-ALIASING-OPTS ^======

@@ -15,6 +15,7 @@ Function resolve-Name {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell,ExchangeOnline,Exchange,MsolUser,AzureADUser,ADUser
     REVISIONS
+    * 11:17 AM 8/4/2026 swap ral for ri
     * 1:53 PM 6/30/2026 rem #reqs
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
@@ -502,7 +503,7 @@ Function resolve-Name {
         #>
         # clear the script aliases
         write-verbose "clearing ps1* aliases in Script scope" ; 
-        get-alias -scope Script |Where-Object{$_.name -match '^ps1.*'} | ForEach-Object{Remove-Alias -alias $_.name} ;
+        get-alias -scope Script |Where-Object{$_.name -match '^ps1.*'} | %{remove-item alias:$_ -verbose } 
 
         write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($sBnr.replace('=v','=^').replace('v=','^='))" ;
         

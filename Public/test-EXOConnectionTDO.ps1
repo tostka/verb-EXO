@@ -385,19 +385,38 @@ function test-EXOConnectionTDO{
 
         #region MODULES_FORCE_LOAD ; #*------v MODULES_FORCE_LOAD v------
         # pretest dep mod load order
-        $oWPref = $WarningPreference ; $WarningPreference = 'SilentlyContinue' ; 
-        $i = 0 ; $DepModsOrder | foreach-object{ $i++ ; set-variable -name "ModO$($i)" -value $_; write-verbose "`$ModO$($i):`t$((get-variable -name "ModO$($i)").value)" } ;  
-        if(-not $skipMGAChecks -AND (get-module $modO1 -ea 0)){write-verbose "$modO1 already successfully loaded" }else{
-            if(Test-MGAuthConflict){Write-Warning $msgGErr} ; 
-            if(-not (get-module $modO1 -ea 0)){write-host -foregroundcolor green "Loading 1st Mod:$($modO1)";Import-Module -force $modO1 -EA stop;} ;         
+        if (-not $DepModsOrder) { $DepModsOrder = @('Microsoft.Graph.Authentication', 'ExchangeOnlineManagement') };
+        function Test-MGAuthConflict {$rgxBadAssms = 'Microsoft\.Graph|Azure\.Identity|Microsoft\.Identity\.Client|Kiota|Microsoft\.Exchange|Microsoft\.Online' ; $prpAss = @{N='Assembly';E={$_.GetName().Name}},@{N='Version';E={$_.GetName().Version}},'Location' ; $cnflcts = [System.AppDomain]::CurrentDomain.GetAssemblies() |  Where-Object {$_.GetName().Name -match $rgxBadAssms } ; if($cnflcts){$smsg = "Following potential Microsoft.Graph.Authentication-blocking assemblies are PRE-LOADED.`n=> CAN CAUSE Import-Module to fail. A NEW PS PROCESS MAY BE REQUIRED!`n$(($cnflcts |select $prpAss|out-string).trim())" ;write-error $smsg ; return $true ;} else {return $false } ;} ;
+        $oWPref = $WarningPreference ; $WarningPreference = 'SilentlyContinue' ;
+        $i = 0 ; $DepModsOrder | foreach-object{ $i++ ; set-variable -name "ModO$($i)" -value $_; write-verbose -verbose "`$ModO$($i):`t$((get-variable -name "ModO$($i)").value)" } ;
+        if(-not $skipMGAChecks -AND (get-module $modO1 -ea 0)){write-verbose "$modO1 already successfully loaded"}else{
+            $error.clear() ;
+            TRY{
+                write-host -foregroundcolor green "Loading 1st Mod:$($modO1)";Import-Module -force $modO1 -EA stop;
+            } CATCH [System.TypeLoadException] {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ; 
+                write-error $smsg ; 
+                #write-warning $smsg ; 
+                if(($ModO1 -eq 'Microsoft.Graph.Authentication') -AND (Test-MGAuthConflict)){
+                    write-error "MGAuth LIKELY BLOCKED!"
+                }else{throw $ErrTrapd } ;
+            } CATCH {$ErrTrapd=$Error[0] ;
+              write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
+              $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+              write-error "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+            } ;
         }
         $i = 1 ; $DepModsOrder | select -skip 1 |  foreach-object{
             $thisOMod = $_ ; $i++ ;
             if(-not (get-module $thisOMod -ea 0)){write-host -foregroundcolor green "Loading #$($i) Mod:$($thisOMod)";Import-Module -force $thisOMod -EA stop;} ;
-        } ; 
-        $WarningPreference = $oWPref ; 
+        } ;
+        $DepModsOrder | gmo -ea STOP | ft -a modulet*,vers*,name ; 
+        $WarningPreference = $oWPref ;
         #endregion MODULES_FORCE_LOAD ; #*------^ END MODULES_FORCE_LOAD ^------
-        
+
+        if($Prefix){set-alias -name g-xorecipient -Value "get-$($Prefix)Recipient" ; set-alias -name g-xoOrgConfig -Value "get-$($xoconn.ModulePrefix)Organizationconfig"}else{set-alias -name g-xorecipient -Value "get-Recipient"; set-alias -name g-xoOrgConfig -Value "get-Organizationconfig" }
+
         TRY{
             $pltGConn=[ordered]@{
                 erroraction = 'STOP' ;
@@ -424,15 +443,11 @@ function test-EXOConnectionTDO{
         } ; 
     } ;  # BEG-E
     PROCESS{
+        #if($Prefix){set-alias -name g-xorecipient -Value "get-$($Prefix)Recipient" ; set-alias -name g-xoOrgConfig -Value "get-$($xoconn.ModulePrefix)Organizationconfig"}else{set-alias -name g-xorecipient -Value "get-Recipient"; set-alias -name g-xoOrgConfig -Value "get-Organizationconfig" }
         $isGood = $false ;         
-        if($connections){
-            if($Prefix){
-                set-alias -name g-xorecipient -Value "get-$($Prefix)Recipient"  ; 
-                try {g-xorecipient -Res 1 -wa 0 -ErrorAction Stop | Out-Null ; $isGood = $true}catch {$isGood = $false}
-                remove-alias -alias g-xorecipient ; 
-            }else{
-                try {get-recipient -Res 1 -wa 0 -ErrorAction Stop | Out-Null ; $isGood = $true}catch {$isGood = $false}
-            } ;             
+        if($connections){            
+            try {g-xorecipient -Res 1 -wa 0 -ErrorAction Stop | Out-Null ; $isGood = $true}catch {$isGood = $false}
+            #remove-alias -alias g-xorecipient ; 
         } 
         if ($isGood) {
             $connections | ?{ $_.State -eq 'Broken' } |%{Disconnect-ExchangeOnline -ConnectionId $_.ConnectionId -Confirm:$false -ErrorAction SilentlyContinue} ;
@@ -455,7 +470,9 @@ function test-EXOConnectionTDO{
                     #$null ; 
                 } ; 
                 if($null -eq $sessRet.Organization -AND $sessRet.TenantID){
-                    $Tenantdomain = convert-TenantIdToDomainName -TenantId $sessRet.TenantID ;
+                    if(gcm convert-TenantIdToDomainName -ea 0){$Tenantdomain = convert-TenantIdToDomainName -TenantId $sessRet.TenantID }else{
+                        try{$Tenantdomain = (g-xoOrgConfig -ea STOP ).name}CATCH{$isGood = $false} ; 
+                    } ; 
                     $smsg = "(coercing blank Session Org, to resolved TenantID equivelent TenantDomain)" ; 
                     if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
@@ -493,6 +510,8 @@ function test-EXOConnectionTDO{
             $false | write-output ;
         } ; 
     } ;  # PROC-E
-    END{} ; 
+    END{
+        @('g-xorecipient','g-xoOrgConfig') | %{get-alias -name $_ | remove-alias -verbose }
+    } ; 
 } ; 
 
