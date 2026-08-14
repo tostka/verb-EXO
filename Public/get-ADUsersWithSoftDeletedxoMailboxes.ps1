@@ -249,7 +249,7 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
             } ;
         } ;# ...
         # cleanup
-        get-alias -scope Script |?{$_.name -match '^ps1.*'} | %{remove-item alias:$_ -verbose } 
+        get-alias -scope Script |?{$_.name -match '^ps1.*'} | %{remove-item -path alias:$_ -verbose } 
         
         #endregion EXO-v-EXOv2-ALIASING #*------^ END Function EXO V EXOv2 ALIASING ^------
         

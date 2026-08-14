@@ -534,7 +534,7 @@ function get-MsgTrace {
         
     } ;  # PROC-E
     END {
-        get-alias ps1GetMsgTrace -ea 0 | %{remove-item alias:$_ -verbose } 
+        get-alias ps1GetMsgTrace -ea 0 | %{remove-item -path alias:$_ -verbose } 
     } ; 
 }
 

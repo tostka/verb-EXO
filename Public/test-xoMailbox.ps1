@@ -1,4 +1,5 @@
-﻿#*------v test-xoMailbox.ps1 v------
+﻿
+#*------v test-xoMailbox.ps1 v------
 Function test-xoMailbox {
     <#
     .SYNOPSIS
@@ -1456,7 +1457,7 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
         # clear the script aliases
         write-verbose "clearing ps1* aliases in Script scope" ; 
-        get-alias -scope Script |Where-Object{$_.name -match '^ps1.*'} | %{remove-item alias:$_ -verbose } 
+        get-alias -scope Script |Where-Object{$_.name -match '^ps1.*'} | %{remove-item -path alias:$_ -verbose } 
 
         write-verbose "(explicit EXIT...)" ;
         Break ;

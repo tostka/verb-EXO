@@ -271,7 +271,7 @@ function get-MailboxFolderStats {
         } ; 
     } ;  # PROC-E
     END {
-        get-alias ps1GetMbxFldrStat -ea 0 | %{remove-item alias:$_ -verbose }  ;
+        get-alias ps1GetMbxFldrStat -ea 0 | %{remove-item -path alias:$_ -verbose }  ;
     } ; 
     
 }
