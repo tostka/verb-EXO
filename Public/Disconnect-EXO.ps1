@@ -20,7 +20,6 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
-    * 1:52 PM 6/30/2026 rem'd #reqs
     * 11:31 AM 7/9/2024 subd in silent for write-verbose 
     * 1:25 PM 7/8/2024 spliced in cxo constatns
     * 9:47 am 4/9/2024:validated updated disconnect-exo -prefix cc -verbose ; 
@@ -90,7 +89,7 @@ Function Disconnect-EXO {
 
     ) 
     $verbose = ($VerbosePreference -eq "Continue") ; 
-    
+    $dbgdate = '8/25/2026' ;
     #*------v PSS & GMO VARIS v------
     # move into a param
     #$MinNoWinRMVersion = '3.0.0' ; 
@@ -156,6 +155,46 @@ Function Disconnect-EXO {
         $UserRole = @('SID') ; 
         $sTitleBarTag = @("CCMS") ;
     } ; 
+
+    #region MODULES_FORCE_LOAD ; #*------v MODULES_FORCE_LOAD v------
+    # pretest dep mod load order
+    if (-not $DepModsOrder) { $DepModsOrder = @('Microsoft.Graph.Authentication', 'ExchangeOnlineManagement') };
+    function Test-MGAuthConflict {$rgxBadAssms = 'Microsoft\.Graph|Azure\.Identity|Microsoft\.Identity\.Client|Kiota|Microsoft\.Exchange|Microsoft\.Online' ; $prpAss = @{N='Assembly';E={$_.GetName().Name}},@{N='Version';E={$_.GetName().Version}},'Location' ; $cnflcts = [System.AppDomain]::CurrentDomain.GetAssemblies() |  Where-Object {$_.GetName().Name -match $rgxBadAssms } ; if($cnflcts){$smsg = "Following potential Microsoft.Graph.Authentication-blocking assemblies are PRE-LOADED.`n=> CAN CAUSE Import-Module to fail. A NEW PS PROCESS MAY BE REQUIRED!`n$(($cnflcts |select $prpAss|out-string).trim())" ;write-error $smsg ; return $true ;} else {return $false } ;} ;
+    $oWPref = $WarningPreference ; $WarningPreference = 'SilentlyContinue' ;
+    $i = 0 ; $DepModsOrder | foreach-object{ $i++ ; set-variable -name "ModO$($i)" -value $_; write-verbose -verbose "`$ModO$($i):`t$((get-variable -name "ModO$($i)").value)" } ;
+    if(-not $skipMGAChecks -AND (get-module $modO1 -ea 0)){write-verbose "$modO1 already successfully loaded"}else{
+        $error.clear() ;
+        TRY{
+            write-host -foregroundcolor green "Loading 1st Mod:$($modO1)";Import-Module -force $modO1 -EA stop;
+        } CATCH [System.TypeLoadException] {
+            $ErrTrapd=$Error[0] ;
+            $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ; 
+            write-error $smsg ; 
+            #write-warning $smsg ; 
+            if(($ModO1 -eq 'Microsoft.Graph.Authentication') -AND (Test-MGAuthConflict)){
+                write-error "MGAuth LIKELY BLOCKED!"
+            }else{throw $ErrTrapd } ;
+        } CATCH {$ErrTrapd=$Error[0] ;
+          write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
+          $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+          write-error "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+        } ;
+    }
+    $i = 1 ; $DepModsOrder | select -skip 1 |  foreach-object{
+        $thisOMod = $_ ; $i++ ;
+        if(-not (get-module $thisOMod -ea 0)){write-host -foregroundcolor green "Loading #$($i) Mod:$($thisOMod)";Import-Module -force $thisOMod -EA stop;} ;
+    } ;
+    $tstMods = $DepModsOrder | get-module -ea STOP ; 
+    if($tstMods.count -eq $DepModsOrder.count){
+        #$tstMods | ft -a modulet*,vers*,name ; 
+        write-host -foregroundcolor green "`n$(($tstMods | ft -a modulet*,vers*,name|out-string).trim())" ; 
+    }else{
+        $smsg = "MISSING `$DepModsOrder!$($DepModsOrder -join ','):!" ; 
+        $smsg += "`n`n$(($tstMods|out-string).trim())" ; 
+        throw $smsg ; 
+    }    
+    $WarningPreference = $oWPref ;
+    #endregion MODULES_FORCE_LOAD ; #*------^ END MODULES_FORCE_LOAD ^------
 
     # it's pulling the verb-EXO vers of disconnect-exchangeonline, force load the v206:
     #region EOMREV ; #*------v EOMREV Check v------

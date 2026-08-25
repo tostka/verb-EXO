@@ -1,11 +1,11 @@
-﻿# verb-EXO.psm1
+﻿# verb-exo.psm1
 
 
   <#
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 13.1.1.0
+  Version     : 14.0.0.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -1300,6 +1300,7 @@ Function Connect-EXO {
     BEGIN {
         #region CONSTANTS_AND_ENVIRO ; #*======v CONSTANTS_AND_ENVIRO v======
         # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
+        $dbgdate = '8/25/2026' ;
         $rPSCmdlet = $PSCmdlet ; 
         $rPSScriptRoot = $PSScriptRoot ; 
         $rPSCommandPath = $PSCommandPath ; 
@@ -1556,18 +1557,39 @@ Function Connect-EXO {
         #>
         #region MODULES_FORCE_LOAD ; #*------v MODULES_FORCE_LOAD v------
         # pretest dep mod load order
-        $oWPref = $WarningPreference ; $WarningPreference = 'SilentlyContinue' ; 
-        $i = 0 ; $DepModsOrder | foreach-object{ $i++ ; set-variable -name "ModO$($i)" -value $_; write-verbose "`$ModO$($i):`t$((get-variable -name "ModO$($i)").value)" } ;  
-        if(-not $skipMGAChecks -AND (get-module $modO1 -ea 0)){write-verbose "$modO1 already successfully loaded" }else{
-            if(Test-MGAuthConflict){Write-Warning $msgGErr} ; 
-            if(-not (get-module $modO1 -ea 0)){write-host -foregroundcolor green "Loading 1st Mod:$($modO1)";Import-Module -force $modO1 -EA stop;} ;         
+        if (-not $DepModsOrder) { $DepModsOrder = @('Microsoft.Graph.Authentication', 'ExchangeOnlineManagement') };
+        function Test-MGAuthConflict {$rgxBadAssms = 'Microsoft\.Graph|Azure\.Identity|Microsoft\.Identity\.Client|Kiota|Microsoft\.Exchange|Microsoft\.Online' ; $prpAss = @{N='Assembly';E={$_.GetName().Name}},@{N='Version';E={$_.GetName().Version}},'Location' ; $cnflcts = [System.AppDomain]::CurrentDomain.GetAssemblies() |  Where-Object {$_.GetName().Name -match $rgxBadAssms } ; if($cnflcts){$smsg = "Following potential Microsoft.Graph.Authentication-blocking assemblies are PRE-LOADED.`n=> CAN CAUSE Import-Module to fail. A NEW PS PROCESS MAY BE REQUIRED!`n$(($cnflcts |select $prpAss|out-string).trim())" ;write-error $smsg ; return $true ;} else {return $false } ;} ;
+        $oWPref = $WarningPreference ; $WarningPreference = 'SilentlyContinue' ;
+        $i = 0 ; $DepModsOrder | foreach-object{ $i++ ; set-variable -name "ModO$($i)" -value $_; write-verbose -verbose "`$ModO$($i):`t$((get-variable -name "ModO$($i)").value)" } ;
+        if(-not $skipMGAChecks -AND (get-module $modO1 -ea 0)){write-verbose "$modO1 already successfully loaded"}else{
+            $error.clear() ;
+            TRY{
+                write-host -foregroundcolor green "Loading 1st Mod:$($modO1)";Import-Module -force $modO1 -EA stop;
+            } CATCH [System.TypeLoadException] {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ; 
+                write-error $smsg ; 
+                #write-warning $smsg ; 
+                if(($ModO1 -eq 'Microsoft.Graph.Authentication') -AND (Test-MGAuthConflict)){
+                    write-error "MGAuth LIKELY BLOCKED!"
+                }else{throw $ErrTrapd } ;
+            } CATCH {$ErrTrapd=$Error[0] ;
+              write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
+              $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+              write-error "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+            } ;
         }
         $i = 1 ; $DepModsOrder | select -skip 1 |  foreach-object{
             $thisOMod = $_ ; $i++ ;
             if(-not (get-module $thisOMod -ea 0)){write-host -foregroundcolor green "Loading #$($i) Mod:$($thisOMod)";Import-Module -force $thisOMod -EA stop;} ;
-        } ; 
-        $WarningPreference = $oWPref ; 
+        } ;
+        #$DepModsOrder | gmo -ea STOP | ft -a modulet*,vers*,name ; 
+        # above blows buffer, cap it!
+        write-host -foregroundcolor gray "`n$(($DepModsOrder | get-module -ea STOP | ft -a modulet*,vers*,name |out-string).trim())" ; 
+        $WarningPreference = $oWPref ;
         #endregion MODULES_FORCE_LOAD ; #*------^ END MODULES_FORCE_LOAD ^------
+
+        if($Prefix){set-alias -name g-xorecipient -Value "get-$($Prefix)Recipient" ; set-alias -name g-xoOrgConfig -Value "get-$($xoconn.ModulePrefix)Organizationconfig"}else{set-alias -name g-xorecipient -Value "get-Recipient"; set-alias -name g-xoOrgConfig -Value "get-Organizationconfig" }
 
         if(-not $isBased){
             $pltTXO=[ordered]@{
@@ -1585,6 +1607,13 @@ Function Connect-EXO {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
+            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){
+                if((gcm $tcmd).source -eq ''){}else{
+                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
+                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
+                } ; 
+            } ; 
             $isGood = test-EXOConnectionTDO @pltTXO ; 
             if($isGood){
                 $smsg = "EXO connected" ; 
@@ -1597,14 +1626,15 @@ Function Connect-EXO {
                 if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-            }elseif($connections|?{$_.ConnectionUri -eq $rgxConnectionUriPrvw -AND $_.TokenStatus -ne 'Expired'  -AND $_.ModulePrefix -eq $Prefix}){
+            #}elseif($connections|?{$_.ConnectionUri -eq $rgxConnectionUriPrvw -AND $_.TokenStatus -ne 'Expired'  -AND $_.ModulePrefix -eq $Prefix}){
+            }elseif($connections|?{$_.ConnectionUri -eq $rgxConnectionUriPrvw -AND $_.ModulePrefix -eq $Prefix}){
                 $smsg = 'Purview S&C connected' ; 
                 if($Prefix){
                     $smsg += " w Prefix:$($Prefix)" ; 
                 }else{
                     $smsg += " w *no* Prefix" ; 
                 } ; 
-                $smsg += "/non-Expired Token" ;
+                #$smsg += "/non-Expired Token" ;
                 if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
@@ -1623,7 +1653,6 @@ Function Connect-EXO {
                 } ; 
             } ; 
         } else {
-
             # transplat fr rxo ---
             if(-not $Credential -AND -not $UserPrincipalName){
                 if($UserRole){
@@ -1877,10 +1906,19 @@ Function Connect-EXO {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
+            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){
+                if((gcm $tcmd).source -eq ''){}else{
+                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
+                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
+                } ; 
+            } ; 
             if($oRet = test-EXOConnectionTDO @pltTXO ){
                 foreach($xSess in $oRet){
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){
-                        $Tenantdomain = convert-TenantIdToDomainName -TenantId $xSess.TenantID ;
+                        if(gcm convert-TenantIdToDomainName -ea 0){$Tenantdomain = convert-TenantIdToDomainName -TenantId $sessRet.TenantID }else{
+                            try{$Tenantdomain = (g-xoOrgConfig -ea STOP ).name}CATCH{$isGood = $false} ; 
+                        } ; 
                         $smsg = "(coercing blank Session Org, to resolved TenantID equivelent TenantDomain)" ; 
                         if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;  
@@ -2262,6 +2300,13 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
+            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){
+                if((gcm $tcmd).source -eq ''){}else{
+                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
+                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
+                } ; 
+            } ; 
             if($oRet = test-EXOConnectionTDO @pltTXO ){
                 foreach($xSess in $oRet){
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){
@@ -6593,7 +6638,6 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
-    * 1:52 PM 6/30/2026 rem'd #reqs
     * 11:31 AM 7/9/2024 subd in silent for write-verbose 
     * 1:25 PM 7/8/2024 spliced in cxo constatns
     * 9:47 am 4/9/2024:validated updated disconnect-exo -prefix cc -verbose ; 
@@ -6663,7 +6707,7 @@ Function Disconnect-EXO {
 
     ) 
     $verbose = ($VerbosePreference -eq "Continue") ; 
-    
+    $dbgdate = '8/25/2026' ;
     #*------v PSS & GMO VARIS v------
     # move into a param
     #$MinNoWinRMVersion = '3.0.0' ; 
@@ -6729,6 +6773,46 @@ Function Disconnect-EXO {
         $UserRole = @('SID') ; 
         $sTitleBarTag = @("CCMS") ;
     } ; 
+
+    #region MODULES_FORCE_LOAD ; #*------v MODULES_FORCE_LOAD v------
+    # pretest dep mod load order
+    if (-not $DepModsOrder) { $DepModsOrder = @('Microsoft.Graph.Authentication', 'ExchangeOnlineManagement') };
+    function Test-MGAuthConflict {$rgxBadAssms = 'Microsoft\.Graph|Azure\.Identity|Microsoft\.Identity\.Client|Kiota|Microsoft\.Exchange|Microsoft\.Online' ; $prpAss = @{N='Assembly';E={$_.GetName().Name}},@{N='Version';E={$_.GetName().Version}},'Location' ; $cnflcts = [System.AppDomain]::CurrentDomain.GetAssemblies() |  Where-Object {$_.GetName().Name -match $rgxBadAssms } ; if($cnflcts){$smsg = "Following potential Microsoft.Graph.Authentication-blocking assemblies are PRE-LOADED.`n=> CAN CAUSE Import-Module to fail. A NEW PS PROCESS MAY BE REQUIRED!`n$(($cnflcts |select $prpAss|out-string).trim())" ;write-error $smsg ; return $true ;} else {return $false } ;} ;
+    $oWPref = $WarningPreference ; $WarningPreference = 'SilentlyContinue' ;
+    $i = 0 ; $DepModsOrder | foreach-object{ $i++ ; set-variable -name "ModO$($i)" -value $_; write-verbose -verbose "`$ModO$($i):`t$((get-variable -name "ModO$($i)").value)" } ;
+    if(-not $skipMGAChecks -AND (get-module $modO1 -ea 0)){write-verbose "$modO1 already successfully loaded"}else{
+        $error.clear() ;
+        TRY{
+            write-host -foregroundcolor green "Loading 1st Mod:$($modO1)";Import-Module -force $modO1 -EA stop;
+        } CATCH [System.TypeLoadException] {
+            $ErrTrapd=$Error[0] ;
+            $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ; 
+            write-error $smsg ; 
+            #write-warning $smsg ; 
+            if(($ModO1 -eq 'Microsoft.Graph.Authentication') -AND (Test-MGAuthConflict)){
+                write-error "MGAuth LIKELY BLOCKED!"
+            }else{throw $ErrTrapd } ;
+        } CATCH {$ErrTrapd=$Error[0] ;
+          write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
+          $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+          write-error "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+        } ;
+    }
+    $i = 1 ; $DepModsOrder | select -skip 1 |  foreach-object{
+        $thisOMod = $_ ; $i++ ;
+        if(-not (get-module $thisOMod -ea 0)){write-host -foregroundcolor green "Loading #$($i) Mod:$($thisOMod)";Import-Module -force $thisOMod -EA stop;} ;
+    } ;
+    $tstMods = $DepModsOrder | get-module -ea STOP ; 
+    if($tstMods.count -eq $DepModsOrder.count){
+        #$tstMods | ft -a modulet*,vers*,name ; 
+        write-host -foregroundcolor green "`n$(($tstMods | ft -a modulet*,vers*,name|out-string).trim())" ; 
+    }else{
+        $smsg = "MISSING `$DepModsOrder!$($DepModsOrder -join ','):!" ; 
+        $smsg += "`n`n$(($tstMods|out-string).trim())" ; 
+        throw $smsg ; 
+    }    
+    $WarningPreference = $oWPref ;
+    #endregion MODULES_FORCE_LOAD ; #*------^ END MODULES_FORCE_LOAD ^------
 
     # it's pulling the verb-EXO vers of disconnect-exchangeonline, force load the v206:
     #region EOMREV ; #*------v EOMREV Check v------
@@ -7255,6 +7339,7 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 11:13 AM 8/4/2026 swapp out ral for ri
     * 4:09 PM 7/7/2026 re-rem'd remaining #req line
     * 2:16 PM 6/24/2024: rem'd out #Requires -RunasAdministrator; sec chgs in last x mos wrecked RAA detection
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
@@ -7485,7 +7570,8 @@ function get-ADUsersWithSoftDeletedxoMailboxes {
             } ;
         } ;# ...
         # cleanup
-        get-alias -scope Script |?{$_.name -match '^ps1.*'} | %{Remove-Alias -alias $_.name} ; 
+        get-alias -scope Script |?{$_.name -match '^ps1.*'} | %{remove-item -path alias:$_ -verbose } 
+        
         #endregion EXO-v-EXOv2-ALIASING #*------^ END Function EXO V EXOv2 ALIASING ^------
         
         #endregion EXCH-CMD-ALIASING-OPTS #*======^ END EXCH-CMD-ALIASING-OPTS ^======
@@ -14691,6 +14777,7 @@ function get-MailboxFolderStats {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
+    * 11:21 AM 8/4/2026 swap ral -> ri
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     # 12:17 PM 5/14/2021 updated passstatus code to curr, and added -ea to the gv's (suppress errors when not present)
     * 11:54 AM 4/2/2021 updated wlt & recstat support, updated catch blocks
@@ -14946,7 +15033,7 @@ function get-MailboxFolderStats {
         } ; 
     } ;  # PROC-E
     END {
-        remove-alias ps1GetMbxFldrStat ;
+        get-alias ps1GetMbxFldrStat -ea 0 | %{remove-item -path alias:$_ -verbose }  ;
     } ; 
     
 }
@@ -14971,6 +15058,7 @@ function get-MsgTrace {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Mailbox,Statistics,Reporting
     REVISIONS
+    * 11:21 AM 8/4/2026 swap ral -> ri
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
      * 12:17 PM 5/14/2021 updated passstatus code to curr, and added -ea to the gv's (suppress errors when not present)
@@ -15489,7 +15577,7 @@ function get-MsgTrace {
         
     } ;  # PROC-E
     END {
-        remove-alias ps1GetMsgTrace ;
+        get-alias ps1GetMsgTrace -ea 0 | %{remove-item -path alias:$_ -verbose } 
     } ; 
 }
 
@@ -22492,6 +22580,7 @@ Function resolve-Name {
     Github      : https://github.com/tostka/verb-EXO
     Tags        : Powershell,ExchangeOnline,Exchange,MsolUser,AzureADUser,ADUser
     REVISIONS
+    * 11:17 AM 8/4/2026 swap ral for ri
     * 1:53 PM 6/30/2026 rem #reqs
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
@@ -22979,7 +23068,7 @@ Function resolve-Name {
         #>
         # clear the script aliases
         write-verbose "clearing ps1* aliases in Script scope" ; 
-        get-alias -scope Script |Where-Object{$_.name -match '^ps1.*'} | ForEach-Object{Remove-Alias -alias $_.name} ;
+        get-alias -scope Script |Where-Object{$_.name -match '^ps1.*'} | %{remove-item -path alias:$_ -verbose } 
 
         write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($sBnr.replace('=v','=^').replace('v=','^='))" ;
         
@@ -28935,6 +29024,7 @@ function test-EXOConnectionTDO{
         #,[switch]$isCBA
     ); 
     BEGIN{
+        $dbgdate = '8/25/2026' ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         $rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" ; 
         #$rgxConnectionUriCCMS = 'https://ps\.compliance\.protection\.outlook\.com' ; 
@@ -29008,19 +29098,40 @@ function test-EXOConnectionTDO{
 
         #region MODULES_FORCE_LOAD ; #*------v MODULES_FORCE_LOAD v------
         # pretest dep mod load order
-        $oWPref = $WarningPreference ; $WarningPreference = 'SilentlyContinue' ; 
-        $i = 0 ; $DepModsOrder | foreach-object{ $i++ ; set-variable -name "ModO$($i)" -value $_; write-verbose "`$ModO$($i):`t$((get-variable -name "ModO$($i)").value)" } ;  
-        if(-not $skipMGAChecks -AND (get-module $modO1 -ea 0)){write-verbose "$modO1 already successfully loaded" }else{
-            if(Test-MGAuthConflict){Write-Warning $msgGErr} ; 
-            if(-not (get-module $modO1 -ea 0)){write-host -foregroundcolor green "Loading 1st Mod:$($modO1)";Import-Module -force $modO1 -EA stop;} ;         
+        if (-not $DepModsOrder) { $DepModsOrder = @('Microsoft.Graph.Authentication', 'ExchangeOnlineManagement') };
+        function Test-MGAuthConflict {$rgxBadAssms = 'Microsoft\.Graph|Azure\.Identity|Microsoft\.Identity\.Client|Kiota|Microsoft\.Exchange|Microsoft\.Online' ; $prpAss = @{N='Assembly';E={$_.GetName().Name}},@{N='Version';E={$_.GetName().Version}},'Location' ; $cnflcts = [System.AppDomain]::CurrentDomain.GetAssemblies() |  Where-Object {$_.GetName().Name -match $rgxBadAssms } ; if($cnflcts){$smsg = "Following potential Microsoft.Graph.Authentication-blocking assemblies are PRE-LOADED.`n=> CAN CAUSE Import-Module to fail. A NEW PS PROCESS MAY BE REQUIRED!`n$(($cnflcts |select $prpAss|out-string).trim())" ;write-error $smsg ; return $true ;} else {return $false } ;} ;
+        $oWPref = $WarningPreference ; $WarningPreference = 'SilentlyContinue' ;
+        $i = 0 ; $DepModsOrder | foreach-object{ $i++ ; set-variable -name "ModO$($i)" -value $_; write-verbose -verbose "`$ModO$($i):`t$((get-variable -name "ModO$($i)").value)" } ;
+        if(-not $skipMGAChecks -AND (get-module $modO1 -ea 0)){write-verbose "$modO1 already successfully loaded"}else{
+            $error.clear() ;
+            TRY{
+                write-host -foregroundcolor green "Loading 1st Mod:$($modO1)";Import-Module -force $modO1 -EA stop;
+            } CATCH [System.TypeLoadException] {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ; 
+                write-error $smsg ; 
+                #write-warning $smsg ; 
+                if(($ModO1 -eq 'Microsoft.Graph.Authentication') -AND (Test-MGAuthConflict)){
+                    write-error "MGAuth LIKELY BLOCKED!"
+                }else{throw $ErrTrapd } ;
+            } CATCH {$ErrTrapd=$Error[0] ;
+              write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
+              $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+              write-error "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+            } ;
         }
         $i = 1 ; $DepModsOrder | select -skip 1 |  foreach-object{
             $thisOMod = $_ ; $i++ ;
             if(-not (get-module $thisOMod -ea 0)){write-host -foregroundcolor green "Loading #$($i) Mod:$($thisOMod)";Import-Module -force $thisOMod -EA stop;} ;
-        } ; 
-        $WarningPreference = $oWPref ; 
+        } ;
+        # this blows into pipeline! echo it!
+        #$DepModsOrder | gmo -ea STOP | ft -a modulet*,vers*,name ; 
+        write-host -foregroundcolor gray "`n$(($DepModsOrder | get-module -ea STOP | ft -a modulet*,vers*,name |out-string).trim())" ; 
+        $WarningPreference = $oWPref ;
         #endregion MODULES_FORCE_LOAD ; #*------^ END MODULES_FORCE_LOAD ^------
-        
+
+        if($Prefix){set-alias -name g-xorecipient -Value "get-$($Prefix)Recipient" ; set-alias -name g-xoOrgConfig -Value "get-$($xoconn.ModulePrefix)Organizationconfig"}else{set-alias -name g-xorecipient -Value "get-Recipient"; set-alias -name g-xoOrgConfig -Value "get-Organizationconfig" }
+
         TRY{
             $pltGConn=[ordered]@{
                 erroraction = 'STOP' ;
@@ -29047,15 +29158,10 @@ function test-EXOConnectionTDO{
         } ; 
     } ;  # BEG-E
     PROCESS{
+        #if($Prefix){set-alias -name g-xorecipient -Value "get-$($Prefix)Recipient" ; set-alias -name g-xoOrgConfig -Value "get-$($xoconn.ModulePrefix)Organizationconfig"}else{set-alias -name g-xorecipient -Value "get-Recipient"; set-alias -name g-xoOrgConfig -Value "get-Organizationconfig" }
         $isGood = $false ;         
-        if($connections){
-            if($Prefix){
-                set-alias -name g-xorecipient -Value "get-$($Prefix)Recipient"  ; 
-                try {g-xorecipient -Res 1 -wa 0 -ErrorAction Stop | Out-Null ; $isGood = $true}catch {$isGood = $false}
-                remove-alias -alias g-xorecipient ; 
-            }else{
-                try {get-recipient -Res 1 -wa 0 -ErrorAction Stop | Out-Null ; $isGood = $true}catch {$isGood = $false}
-            } ;             
+        if($connections){            
+            try {g-xorecipient -Res 1 -wa 0 -ErrorAction Stop | Out-Null ; $isGood = $true}catch {$isGood = $false}
         } 
         if ($isGood) {
             $connections | ?{ $_.State -eq 'Broken' } |%{Disconnect-ExchangeOnline -ConnectionId $_.ConnectionId -Confirm:$false -ErrorAction SilentlyContinue} ;
@@ -29078,7 +29184,9 @@ function test-EXOConnectionTDO{
                     #$null ; 
                 } ; 
                 if($null -eq $sessRet.Organization -AND $sessRet.TenantID){
-                    $Tenantdomain = convert-TenantIdToDomainName -TenantId $sessRet.TenantID ;
+                    if(gcm convert-TenantIdToDomainName -ea 0){$Tenantdomain = convert-TenantIdToDomainName -TenantId $sessRet.TenantID }else{
+                        try{$Tenantdomain = (g-xoOrgConfig -ea STOP ).name}CATCH{$isGood = $false} ; 
+                    } ; 
                     $smsg = "(coercing blank Session Org, to resolved TenantID equivelent TenantDomain)" ; 
                     if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                     else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;
@@ -29116,7 +29224,11 @@ function test-EXOConnectionTDO{
             $false | write-output ;
         } ; 
     } ;  # PROC-E
-    END{} ; 
+    END{
+        #@('g-xorecipient','g-xoOrgConfig') | %{get-alias -name $_ | remove-alias -verbose }
+        # use natvie code, not vio/profile alias
+        @('g-xorecipient','g-xoOrgConfig') | get-alias -ea 0 | %{remove-item alias:$_ -verbose }
+    } ; 
 }
 
 #*------^ test-EXOConnectionTDO.ps1 ^------
@@ -30910,6 +31022,7 @@ Function test-xoMailbox {
     Github      : https://github.com/tostka/verb-XXX
     Tags        : Powershell,ExchangeOnline,Exchange,Resource,MessageTrace
     REVISIONS
+    * 11:12 AM 8/4/2026 swapped out remove-alias for native ri
     * 4:47 PM 7/7/2026 rem'd #req vaad 
     # 2:49 PM 3/8/2022 pull Requires -modules ...verb-ex2010 ref - it's generating nested errors, when ex2010 requires exo requires ex2010 == loop.
     * 2:40 PM 12/10/2021 more cleanup 
@@ -32350,7 +32463,7 @@ $(($exofldrs | ft -auto $propsmbxfldrs|out-string).trim())
 
         # clear the script aliases
         write-verbose "clearing ps1* aliases in Script scope" ; 
-        get-alias -scope Script |Where-Object{$_.name -match '^ps1.*'} | ForEach-Object{Remove-Alias -alias $_.name} ;
+        get-alias -scope Script |Where-Object{$_.name -match '^ps1.*'} | %{remove-item -path alias:$_ -verbose } 
 
         write-verbose "(explicit EXIT...)" ;
         Break ;
@@ -32435,7 +32548,7 @@ function test-xoMailboxHasEWSAccess {
 
 #*======^ END FUNCTIONS ^======
 
-Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test-Uri,Test-MGAuthConflict,Connect-EXO,Test-Uri,connect-O365Services,get-CodeProfileAST,get-MGCodeCmdletPermissionsTDO,2b4,2b4c,fb4,convert-ADUserRecipientTypeRemoteSharedMailbox,convert-ADUserRecipientTypeRemoteUserMailbox,convert-exoMailboxTypeSharedMailbox,convert-exoMailboxTypeUserMailbox,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxoTOL,cxoTOR,Disconnect-EXO,get-AADlicensePlanList,get-ADUsersWithSoftDeletedxoMailboxes,get-ExoGxMTEventType,get-ExoMailboxLicenses,2b4,2b4c,fb4,get-ExoMessageTraceEventType,Get-EXOMessageTraceExportedTDO,Remove-InvalidVariableNameChars,Initialize-exoStatusTable,pull-GetxoMessageTraceDetail,2b4,2b4c,fb4,get-ExoMessageTraceSourceType,get-EXOMsgTraceDetailed,Remove-InvalidVariableNameChars,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,get-XOMailboxFolderList,Get-xoMailboxFolderPermissionsRecursive,get-XOMailboxFolderPermissionsSummary,get-xoMessageTraceLatencyTDO,Get-TraceDetailTotalLatency,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,remove-EXOLicense,Reset-xoMailboxFolderPermissionsRecursive,resolve-AppIDToCBAFriendlyName,resolve-Name,resolve-user,2b4,2b4c,fb4,resolve-RMbxForwards,get-xoMobileData,get-MgUserFull,Convert-ADUserObjectGuidToImmutableID,Convert-MGUserOnPremisesImmutableIdToADUserObjectGuid,Resolve-xoRcps,rxoTOL,rxoTOR,test-EXOConnectionTDO,Test-MGAuthConflict,test-EXOConnectionTerseTDO,test-EXOConnectionTerseTDO,test-ExoDnsRecordTDO,test-EXOIsLicensed,test-EXOv2Connection,test-xoMailbox,_cleanup,test-xoMailboxHasEWSAccess -Alias *
+Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test-Uri,Test-MGAuthConflict,Test-MGAuthConflict,Connect-EXO,Test-Uri,connect-O365Services,get-CodeProfileAST,get-MGCodeCmdletPermissionsTDO,2b4,2b4c,fb4,convert-ADUserRecipientTypeRemoteSharedMailbox,convert-ADUserRecipientTypeRemoteUserMailbox,convert-exoMailboxTypeSharedMailbox,convert-exoMailboxTypeUserMailbox,convert-HistoricalSearchCSV,copy-XPermissionGroupToCloudOnly,cxoTOL,cxoTOR,Disconnect-EXO,Test-MGAuthConflict,get-AADlicensePlanList,get-ADUsersWithSoftDeletedxoMailboxes,get-ExoGxMTEventType,get-ExoMailboxLicenses,2b4,2b4c,fb4,get-ExoMessageTraceEventType,Get-EXOMessageTraceExportedTDO,Remove-InvalidVariableNameChars,Initialize-exoStatusTable,pull-GetxoMessageTraceDetail,2b4,2b4c,fb4,get-ExoMessageTraceSourceType,get-EXOMsgTraceDetailed,Remove-InvalidVariableNameChars,get-MailboxFolderStats,get-MsgTrace,Get-OrgNameFromUPN,get-xoHistSearch,_cleanup,get-XOMailboxFolderList,Get-xoMailboxFolderPermissionsRecursive,get-XOMailboxFolderPermissionsSummary,get-xoMessageTraceLatencyTDO,Get-TraceDetailTotalLatency,move-MailboxToXo,check-ReqMods,new-DgTor,_cleanup,new-xoDGFromProperty,remove-EXOLicense,Reset-xoMailboxFolderPermissionsRecursive,resolve-AppIDToCBAFriendlyName,resolve-Name,resolve-user,2b4,2b4c,fb4,resolve-RMbxForwards,get-xoMobileData,get-MgUserFull,Convert-ADUserObjectGuidToImmutableID,Convert-MGUserOnPremisesImmutableIdToADUserObjectGuid,Resolve-xoRcps,rxoTOL,rxoTOR,test-EXOConnectionTDO,Test-MGAuthConflict,Test-MGAuthConflict,test-EXOConnectionTerseTDO,test-EXOConnectionTerseTDO,test-ExoDnsRecordTDO,test-EXOIsLicensed,test-EXOv2Connection,test-xoMailbox,_cleanup,test-xoMailboxHasEWSAccess -Alias *
 
 
 
@@ -32443,8 +32556,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQU86Reh8/wF5wZ7OeYzoBRBmQf
-# aXWgggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUgFQz7wZTxX8w1j2XmDoJrw6Q
+# Zo+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -32459,9 +32572,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBSTPqvc
-# k48h7vjQ933SXtYGU3W80DANBgkqhkiG9w0BAQEFAASBgE3ATm08ueB9MJOgpaZH
-# 9SDv9KJF0vkY6kPejyNctUSdiuF+xUa246xNQFot/O6TsUI2xF7U9EN1Z/VJzUXZ
-# CLS28wzC2p+03+GySX172MqUgqEOoV1NFbWPADQMK+TW4Pq7GM83nM0d0nlXW3Wt
-# awmQPTOp2pD2zeFBheZ/p4bY
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTXu2QN
+# jxvzuMu11kYGBPv3TKvaKDANBgkqhkiG9w0BAQEFAASBgEgCBtyo1NcA30/PG3fq
+# NTs8DVKgPuc249NvzhkS4l3G/pnUi/Q9xGb6wVnEIeukX/C7ODPexqf6swlzGpw+
+# 7dbhJQTlTPv68uZJD+oC3oOHECMuiZzXSOz/DVcof00U+I42WJ69moPdNp0+7X3m
+# weUdMvdY8BQHdx4c+VV2vhDy
 # SIG # End signature block

@@ -254,6 +254,7 @@ Function Connect-EXO {
     BEGIN {
         #region CONSTANTS_AND_ENVIRO ; #*======v CONSTANTS_AND_ENVIRO v======
         # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
+        $dbgdate = '8/25/2026' ;
         $rPSCmdlet = $PSCmdlet ; 
         $rPSScriptRoot = $PSScriptRoot ; 
         $rPSCommandPath = $PSCommandPath ; 
@@ -510,18 +511,39 @@ Function Connect-EXO {
         #>
         #region MODULES_FORCE_LOAD ; #*------v MODULES_FORCE_LOAD v------
         # pretest dep mod load order
-        $oWPref = $WarningPreference ; $WarningPreference = 'SilentlyContinue' ; 
-        $i = 0 ; $DepModsOrder | foreach-object{ $i++ ; set-variable -name "ModO$($i)" -value $_; write-verbose "`$ModO$($i):`t$((get-variable -name "ModO$($i)").value)" } ;  
-        if(-not $skipMGAChecks -AND (get-module $modO1 -ea 0)){write-verbose "$modO1 already successfully loaded" }else{
-            if(Test-MGAuthConflict){Write-Warning $msgGErr} ; 
-            if(-not (get-module $modO1 -ea 0)){write-host -foregroundcolor green "Loading 1st Mod:$($modO1)";Import-Module -force $modO1 -EA stop;} ;         
+        if (-not $DepModsOrder) { $DepModsOrder = @('Microsoft.Graph.Authentication', 'ExchangeOnlineManagement') };
+        function Test-MGAuthConflict {$rgxBadAssms = 'Microsoft\.Graph|Azure\.Identity|Microsoft\.Identity\.Client|Kiota|Microsoft\.Exchange|Microsoft\.Online' ; $prpAss = @{N='Assembly';E={$_.GetName().Name}},@{N='Version';E={$_.GetName().Version}},'Location' ; $cnflcts = [System.AppDomain]::CurrentDomain.GetAssemblies() |  Where-Object {$_.GetName().Name -match $rgxBadAssms } ; if($cnflcts){$smsg = "Following potential Microsoft.Graph.Authentication-blocking assemblies are PRE-LOADED.`n=> CAN CAUSE Import-Module to fail. A NEW PS PROCESS MAY BE REQUIRED!`n$(($cnflcts |select $prpAss|out-string).trim())" ;write-error $smsg ; return $true ;} else {return $false } ;} ;
+        $oWPref = $WarningPreference ; $WarningPreference = 'SilentlyContinue' ;
+        $i = 0 ; $DepModsOrder | foreach-object{ $i++ ; set-variable -name "ModO$($i)" -value $_; write-verbose -verbose "`$ModO$($i):`t$((get-variable -name "ModO$($i)").value)" } ;
+        if(-not $skipMGAChecks -AND (get-module $modO1 -ea 0)){write-verbose "$modO1 already successfully loaded"}else{
+            $error.clear() ;
+            TRY{
+                write-host -foregroundcolor green "Loading 1st Mod:$($modO1)";Import-Module -force $modO1 -EA stop;
+            } CATCH [System.TypeLoadException] {
+                $ErrTrapd=$Error[0] ;
+                $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ; 
+                write-error $smsg ; 
+                #write-warning $smsg ; 
+                if(($ModO1 -eq 'Microsoft.Graph.Authentication') -AND (Test-MGAuthConflict)){
+                    write-error "MGAuth LIKELY BLOCKED!"
+                }else{throw $ErrTrapd } ;
+            } CATCH {$ErrTrapd=$Error[0] ;
+              write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
+              $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
+              write-error "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
+            } ;
         }
         $i = 1 ; $DepModsOrder | select -skip 1 |  foreach-object{
             $thisOMod = $_ ; $i++ ;
             if(-not (get-module $thisOMod -ea 0)){write-host -foregroundcolor green "Loading #$($i) Mod:$($thisOMod)";Import-Module -force $thisOMod -EA stop;} ;
-        } ; 
-        $WarningPreference = $oWPref ; 
+        } ;
+        #$DepModsOrder | gmo -ea STOP | ft -a modulet*,vers*,name ; 
+        # above blows buffer, cap it!
+        write-host -foregroundcolor gray "`n$(($DepModsOrder | get-module -ea STOP | ft -a modulet*,vers*,name |out-string).trim())" ; 
+        $WarningPreference = $oWPref ;
         #endregion MODULES_FORCE_LOAD ; #*------^ END MODULES_FORCE_LOAD ^------
+
+        if($Prefix){set-alias -name g-xorecipient -Value "get-$($Prefix)Recipient" ; set-alias -name g-xoOrgConfig -Value "get-$($xoconn.ModulePrefix)Organizationconfig"}else{set-alias -name g-xorecipient -Value "get-Recipient"; set-alias -name g-xoOrgConfig -Value "get-Organizationconfig" }
 
         if(-not $isBased){
             $pltTXO=[ordered]@{
@@ -539,6 +561,13 @@ Function Connect-EXO {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
+            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){
+                if((gcm $tcmd).source -eq ''){}else{
+                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
+                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
+                } ; 
+            } ; 
             $isGood = test-EXOConnectionTDO @pltTXO ; 
             if($isGood){
                 $smsg = "EXO connected" ; 
@@ -551,14 +580,15 @@ Function Connect-EXO {
                 if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
-            }elseif($connections|?{$_.ConnectionUri -eq $rgxConnectionUriPrvw -AND $_.TokenStatus -ne 'Expired'  -AND $_.ModulePrefix -eq $Prefix}){
+            #}elseif($connections|?{$_.ConnectionUri -eq $rgxConnectionUriPrvw -AND $_.TokenStatus -ne 'Expired'  -AND $_.ModulePrefix -eq $Prefix}){
+            }elseif($connections|?{$_.ConnectionUri -eq $rgxConnectionUriPrvw -AND $_.ModulePrefix -eq $Prefix}){
                 $smsg = 'Purview S&C connected' ; 
                 if($Prefix){
                     $smsg += " w Prefix:$($Prefix)" ; 
                 }else{
                     $smsg += " w *no* Prefix" ; 
                 } ; 
-                $smsg += "/non-Expired Token" ;
+                #$smsg += "/non-Expired Token" ;
                 if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
                 else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                 #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
@@ -577,7 +607,6 @@ Function Connect-EXO {
                 } ; 
             } ; 
         } else {
-
             # transplat fr rxo ---
             if(-not $Credential -AND -not $UserPrincipalName){
                 if($UserRole){
@@ -831,10 +860,19 @@ Function Connect-EXO {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
+            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){
+                if((gcm $tcmd).source -eq ''){}else{
+                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
+                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
+                } ; 
+            } ; 
             if($oRet = test-EXOConnectionTDO @pltTXO ){
                 foreach($xSess in $oRet){
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){
-                        $Tenantdomain = convert-TenantIdToDomainName -TenantId $xSess.TenantID ;
+                        if(gcm convert-TenantIdToDomainName -ea 0){$Tenantdomain = convert-TenantIdToDomainName -TenantId $sessRet.TenantID }else{
+                            try{$Tenantdomain = (g-xoOrgConfig -ea STOP ).name}CATCH{$isGood = $false} ; 
+                        } ; 
                         $smsg = "(coercing blank Session Org, to resolved TenantID equivelent TenantDomain)" ; 
                         if($silent){}elseif($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } 
                         else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ;  
@@ -1216,6 +1254,13 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
+            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){
+                if((gcm $tcmd).source -eq ''){}else{
+                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
+                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
+                } ; 
+            } ; 
             if($oRet = test-EXOConnectionTDO @pltTXO ){
                 foreach($xSess in $oRet){
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){

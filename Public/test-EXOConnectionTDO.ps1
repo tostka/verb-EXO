@@ -312,6 +312,7 @@ function test-EXOConnectionTDO{
         #,[switch]$isCBA
     ); 
     BEGIN{
+        $dbgdate = '8/25/2026' ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         $rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" ; 
         #$rgxConnectionUriCCMS = 'https://ps\.compliance\.protection\.outlook\.com' ; 
@@ -411,7 +412,9 @@ function test-EXOConnectionTDO{
             $thisOMod = $_ ; $i++ ;
             if(-not (get-module $thisOMod -ea 0)){write-host -foregroundcolor green "Loading #$($i) Mod:$($thisOMod)";Import-Module -force $thisOMod -EA stop;} ;
         } ;
-        $DepModsOrder | gmo -ea STOP | ft -a modulet*,vers*,name ; 
+        # this blows into pipeline! echo it!
+        #$DepModsOrder | gmo -ea STOP | ft -a modulet*,vers*,name ; 
+        write-host -foregroundcolor gray "`n$(($DepModsOrder | get-module -ea STOP | ft -a modulet*,vers*,name |out-string).trim())" ; 
         $WarningPreference = $oWPref ;
         #endregion MODULES_FORCE_LOAD ; #*------^ END MODULES_FORCE_LOAD ^------
 
@@ -447,7 +450,6 @@ function test-EXOConnectionTDO{
         $isGood = $false ;         
         if($connections){            
             try {g-xorecipient -Res 1 -wa 0 -ErrorAction Stop | Out-Null ; $isGood = $true}catch {$isGood = $false}
-            #remove-alias -alias g-xorecipient ; 
         } 
         if ($isGood) {
             $connections | ?{ $_.State -eq 'Broken' } |%{Disconnect-ExchangeOnline -ConnectionId $_.ConnectionId -Confirm:$false -ErrorAction SilentlyContinue} ;
@@ -511,7 +513,10 @@ function test-EXOConnectionTDO{
         } ; 
     } ;  # PROC-E
     END{
-        @('g-xorecipient','g-xoOrgConfig') | %{get-alias -name $_ | remove-alias -verbose }
+        #@('g-xorecipient','g-xoOrgConfig') | %{get-alias -name $_ | remove-alias -verbose }
+        # use natvie code, not vio/profile alias
+        @('g-xorecipient','g-xoOrgConfig') | get-alias -ea 0 | %{remove-item alias:$_ -verbose }
     } ; 
 } ; 
+
 
