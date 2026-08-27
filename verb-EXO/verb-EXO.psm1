@@ -5,7 +5,7 @@
   .SYNOPSIS
   verb-EXO - Powershell Exchange Online generic functions module
   .NOTES
-  Version     : 14.0.0.0
+  Version     : 14.0.1.0
   Author      : Todd Kadrie
   Website     :	https://www.toddomation.com
   Twitter     :	@tostka
@@ -1063,6 +1063,7 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 12:20 PM 8/27/2026 only changes was addition of 7psdbgfct blocks for tshooting exo conn issues
     * 12:43 PM 7/10/2026 updated for function testing, diverted tests into test-exoconnectiontdo(); added mgauth/eom load order requirements and testing, 
         add Test-MGAuthConflict() which tests for MGAuth-conflicting loaded assemblies in mem (which survive rv ExchangeOnlineManagement); 
     * 9:01 AM 1/21/2026 NEVER pass whatif into a conn maint call, it's non-impactful, no real change;
@@ -1300,7 +1301,7 @@ Function Connect-EXO {
     BEGIN {
         #region CONSTANTS_AND_ENVIRO ; #*======v CONSTANTS_AND_ENVIRO v======
         # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
-        $dbgdate = '8/25/2026' ;
+        $dbgdate = '8/27/2026' ;
         $rPSCmdlet = $PSCmdlet ; 
         $rPSScriptRoot = $PSScriptRoot ; 
         $rPSCommandPath = $PSCommandPath ; 
@@ -1607,13 +1608,8 @@ Function Connect-EXO {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
-            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; 
-            if($psise -AND (get-date ).tostring() -match $dbgdate){
-                if((gcm $tcmd).source -eq ''){}else{
-                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
-                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
-                } ; 
-            } ; 
+            $tDbgcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/27/2026' ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
             $isGood = test-EXOConnectionTDO @pltTXO ; 
             if($isGood){
                 $smsg = "EXO connected" ; 
@@ -1906,13 +1902,8 @@ Function Connect-EXO {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
-            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; ; 
-            if($psise -AND (get-date ).tostring() -match $dbgdate){
-                if((gcm $tcmd).source -eq ''){}else{
-                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
-                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
-                } ; 
-            } ; 
+            $tDbgcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/27/2026' ; ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
             if($oRet = test-EXOConnectionTDO @pltTXO ){
                 foreach($xSess in $oRet){
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){
@@ -2300,13 +2291,8 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
-            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; 
-            if($psise -AND (get-date ).tostring() -match $dbgdate){
-                if((gcm $tcmd).source -eq ''){}else{
-                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
-                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
-                } ; 
-            } ; 
+            $tDbgcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/27/2026' ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
             if($oRet = test-EXOConnectionTDO @pltTXO ){
                 foreach($xSess in $oRet){
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){
@@ -3778,6 +3764,9 @@ function connect-O365Services {
             .NOTES
     
             REVISIONS
+            * 11:37 AM 8/27/2026 spliced over dbg'd call from resolve-user(); add xoPrefix to the return object;  
+                use $MGPermissionsScope = $o365_Toroco_SIDMGScopes , when no -MGPermissionsScope
+                added CBH output doc & updated full call exmpl ; 
             * 5:28 PM 1/28/2026 Err suppress: added pretest for $xcon.Appid, before trying to resolve it (only CBA creds have them)
             * 4:59 PM 1/20/2026 fixed returning populated CredentialO365 in return object
             * 4:12 PM 1/6/2026 revised for verb-MG compait
@@ -3815,7 +3804,217 @@ function connect-O365Services {
             Silent output (suppress status echos)[-silent]
             .PARAMETER MGPermissionsScope
             Optional Array of MG Permission Names(avoids manual discovery against configured cmdlets)[-MGPermissionsScope @('Domain.Read.All','Domain.ReadWrite.All','Directory.Read.All') ]
-    
+            .OUTPUT
+                PsCustomObject summary of connection status information
+                
+                Name                           Value
+                ----                           -----
+                hasAAD                         boolean
+                hasEXO                         boolean
+                hasMG                          boolean
+                hasMSOL                        boolean
+                hasSC                          boolean
+                CredentialO365
+                MGContext
+                MGtoken
+                UserPrincipalNameO365
+                xoPrefix                       string
+
+            .EXAMPLE
+            #region CALL_CONNECT_O365SERVICES ; #*======v CALL_CONNECT_O365SERVICES v======
+            #$useO365 = $true ; 
+            if($useO365){
+                $pltCco365Svcs=[ordered]@{
+                    # environment parameters:
+                    EnvSummary = $rvEnv ; 
+                    NetSummary = $netsettings ; 
+                    # service choices
+                    useEXO = $true ;
+                    useSC = $false ; 
+                    UseMSOL = $false ;
+                    UseAAD = $false ; # M$ is actively blocking all AAD access now: Message: Access blocked to AAD Graph API for this application. https://aka.ms/AzureADGraphMigration.
+                    UseMG = $true ;
+                    # Service Connection parameters
+                    TenOrg = $TenOrg ; # $global:o365_TenOrgDefault ; 
+                    Credential = $Credential ;
+                    AdminAccount = $AdminAccount ; 
+                    #[ValidateSet("SID","CSID","UID","B2BI","CSVC","ESVC","LSVC","ESvcCBA","CSvcCBA","SIDCBA")]
+                    UserRole = $UserRole ; # @('SID','CSVC') ;
+                    # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
+                    silent = $silent ;
+                    MGPermissionsScope = $MGPermissionsScope ;
+                    MGCmdlets = $MGCmdlets ;
+                } ;
+                write-verbose "(Purge no value keys from splat)" ; 
+                $mts = $pltCco365Svcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
+                if((get-command connect-O365Services -EA STOP).parameters.ContainsKey('whatif')){
+                    $pltCco365SvcsnDSR.add('whatif',$($whatif))
+                } ; 
+                # add rertry on fail, up to $DoRetries
+                $Exit = 0 ; # zero out $exit each new cmd try/retried
+                # do loop until up to 4 retries...
+                Do {
+                    $smsg = "connect-O365Services w`n$(($pltCco365Svcs|out-string).trim())" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $tDbgcmd = 'connect-O365Services' ; #$dbgdate = '8/27/2026' ; 
+                    if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
+                    $ret_ccSO365 = connect-O365Services @pltCco365Svcs ; 
+                    #region CONFIRM_CCEXORETURN ; #*------v CONFIRM_CCEXORETURN v------
+                    # matches each: $plt.useXXX:$true to matching returned $ret.hasXXX:$true 
+                    $vplt = $pltCco365Svcs ; $vret = 'ret_ccSO365' ; $ACtionCommand = 'connect-O365Services' ; $vtests = @() ; $vFailMsgs = @()  ; 
+                    $vplt.GetEnumerator() |?{$_.key -match '^use' -ANd $_.value -match $true} | foreach-object{
+                        $pltkey = $_ ;
+                        $smsg = "$(($pltkey | ft -HideTableHeaders name,value|out-string).trim())" ; 
+                        if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                        else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                        $tprop = $pltkey.name -replace '^use','has';
+                        if($rProp = (gv $vret).Value.psobject.properties | ?{$_.name -match $tprop}){
+                            $smsg = "$(($rprop | ft -HideTableHeaders name,value |out-string).trim())" ; 
+                            if($verbose){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                            else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+                            if($rprop.Value -eq $pltkey.value){
+                                $vtests += $true ; 
+                                $smsg = "Validated: $($pltKey.name):$($pltKey.value) => $($rprop.name):$($rprop.value)" ;
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
+                                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                            } else {
+                                $smsg = "NOT VALIDATED: $($pltKey.name):$($pltKey.value) => $($rprop.name):$($rprop.value)" ;
+                                $vtests += $false ; 
+                                $vFailMsgs += "`n$($smsg)" ; 
+                                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                            };
+                        } else{
+                            $smsg = "Unable to locate: $($pltKey.name):$($pltKey.value) to any matching $($rprop.name)!)" ;
+                            $smsg = "" ; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        } ; 
+                    } ; 
+                    if($vtests -notcontains $false){
+                        $smsg = "==> $($ACtionCommand): confirmed specified connections *all* successful " ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Success } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                        # populuate the $pltRXO.credential
+                        if($ret_ccSO365.CredentialO365){
+                            $pltRXO = [ordered]@{
+                                Credential = $ret_ccSO365.CredentialO365 ;
+                                verbose = $($VerbosePreference -eq "Continue")  ;
+                            } ;
+                        }else{
+                            $smsg = "Unpopulated returnd:connect-O365Services.CredentialO365!" ; 
+                            $smsg += "`nUNABLE TO POPULATE `$pltRXO!" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        }
+                        $Exit = $DoRetries ;
+                    } else {
+                        $smsg = "==> $($ACtionCommand): FAILED SOME SPECIFIED CONNECTIONS" ; 
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        $smsg = "MISSING SOME KEY CONNECTIONS. DO YOU WANT TO IGNORE, AND CONTINUE WITH CONNECTED SERVICES?" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                        else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                        $Exit ++ ;
+                        $smsg = "Try #: $Exit" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Warn } 
+                        else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        if($Exit -eq $DoRetries){
+                            $smsg = "Unable to exec cmd!"; 
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                            #-=-=-=-=-=-=-=-=
+                            $sdEmail.SMTPSubj = "FAIL Rpt:$($ScriptBaseName):$(get-date -format 'yyyyMMdd-HHmmtt')"
+                            $sdEmail.SmtpBody = "`n===Processing Summary:" ;
+                            if($vFailMsgs){
+                                $sdEmail.SmtpBody += "`n$(($vFailMsgs|out-string).trim())" ; 
+                            } ; 
+                            $sdEmail.SmtpBody += "`n" ;
+                            if($SmtpAttachment){
+                                $sdEmail.SmtpAttachment = $SmtpAttachment
+                                $sdEmail.smtpBody +="`n(Logs Attached)" ;
+                            };
+                            $sdEmail.SmtpBody += "Pass Completed $([System.DateTime]::Now)" ;
+                            $smsg = "Send-EmailNotif w`n$(($sdEmail|out-string).trim())" ;
+                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                            else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                            Send-EmailNotif @sdEmail ;
+                            $bRet=Read-Host "Enter YYY to continue. Anything else will exit"  ;
+                            if ($bRet.ToUpper() -eq "YYY") {
+                                $smsg = "(Moving on), WITH THE FOLLOW PARTIAL CONNECTION STATUS" ;
+                                $smsg += "`n`n$(($ret_CcOPSvcs|out-string).trim())" ; 
+                                write-host -foregroundcolor green $smsg  ;
+                            } else {
+                                throw $smsg ; 
+                                break ; #exit 1
+                            } ;  
+                        } ;        
+                    } ; 
+                    #endregion CONFIRM_CCEXORETURN ; #*------^ END CONFIRM_CCEXORETURN ^------
+                } Until ($Exit -eq $DoRetries) ; 
+            } ; #  useO365-E
+            #endregion CALL_CONNECT_O365SERVICES ; #*======^ END CALL_CONNECT_O365SERVICES ^======
+            #region TEST_EXO_CONN ; #*------v TEST_EXO_CONN v------
+            # ALT: simplified verify EXO conn: ALT to full CONNECT_O365SERVICES block - USE ONE OR THE OTHER!
+            $useEXO = $TRUE ; 
+            $useSC = $false ; 
+            if(-not $XOConnectionUri ){$XOConnectionUri = 'https://outlook.office365.com'} ;
+            if(-not $SCConnectionUri){$SCConnectionUri = 'https://ps.compliance.protection.outlook.com'} ;
+            $EXOtestCmdlet = 'Get-xoOrganizationConfig' ; 
+            if($useEXO){
+                $tDbgcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/27/2026' ; 
+                if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;              
+                $pltTXO=[ordered]@{
+                    Prefix = $ret_ccSO365.xoPrefix ; 
+                    Verbose = ($VerbosePreference -eq 'Continue') ; 
+                } ; 
+                $isGood = test-EXOConnectionTDO @pltTXO ; 
+                if($isGood){
+                    $smsg = "EXO connected" ; 
+                    $thisPrefix = @($Prefix,$ret_ccSO365.xoPrefix) |  select -unique  ; 
+                    if($thisPrefix){
+                        $smsg += " w Prefix:$($thisPrefix -join ','). " ; 
+                    }else{
+                        $smsg += " w *no* Prefix. " ; 
+                    } ; 
+                    $smsg += "Valid Functional" ;
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                }elseif($connections|?{$_.ConnectionUri -eq $rgxConnectionUriPrvw -AND $_.ModulePrefix -eq $Prefix}){
+                    $smsg = 'Purview S&C connected' ; 
+                    if($Prefix){
+                        $smsg += " w Prefix:$($Prefix)" ; 
+                    }else{
+                        $smsg += " w *no* Prefix" ; 
+                    } ; 
+                    #$smsg += "/non-Expired Token" ;
+                    if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                    else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+                } else {
+                    if($ConnectPurview){
+                        write-host 'Purview S&C disconnected or Expired Token';
+                        Import-Module $EOMmodname -ErrorAction stop ;
+                        Connect-IPPSSession  -ErrorAction stop ;
+                    } else {
+                        #Connect-ExchangeOnline -SkipLoadingCmdletHelp
+                        #Connect-ExchangeOnline -SkipLoadingCmdletHelp -ShowBanner:$false ; 
+                        write-host 'EXO disconnected or Expired Token';
+                        Import-Module $EOMmodname -ErrorAction stop ;
+                        Connect-ExchangeOnline -SkipLoadingCmdletHelp
+                    } ; 
+                } ; 
+            }else{
+                $smsg = "useEXO:$($useEXO): skipping EXO tests" ; 
+                if($VerbosePreference -eq "Continue"){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
+                else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
+            } 
+            #endregion TEST_EXO_CONN ; #*------^ END TEST_EXO_CONN ^------
+            Detailed call demo (from psparamt)
+            .LINK
+            https://github.com/tostka/verb-exo
             #>
             ##Requires -Modules AzureAD, verb-AAD
             [CmdletBinding()]
@@ -3868,6 +4067,7 @@ function connect-O365Services {
                     [string[]]$MGCmdlets
             );
             BEGIN {
+                $dbgdate = '8/27/2026' ;
                 # for scripts wo support, can use regions to fake BEGIN;PROCESS;END: (tho' can use the real deal in scripts as well as adv funcs, as long as all code is inside the blocks)
                 # ps1 faked:#region BEGIN ; #*------v BEGIN v------
                 # 8:59 PM 4/23/2025 with issues in CMW - funcs unrecog'd unless loaded before any code use - had to move the entire FUNCTIONS block to the top of BEGIN{}
@@ -4323,7 +4523,9 @@ function connect-O365Services {
                 else {$ret_ccO365S = @{Dummy = $null ;} } ;
                 if($ret_ccO365S.keys -contains 'dummy'){$ret_ccO365S.remove('Dummy') };
                 $fieldsBoolean = 'hasEXO','hasSC','hasMSOL','hasAAD','hasMG' | select -unique  | sort ; $fieldsBoolean | % { $ret_ccO365S.add($_,$false) } ;
-                $fieldsnull = 'CredentialO365','UserPrincipalNameO365','MGContext','MGtoken' | select -unique  | sort ; $fieldsnull | % { $ret_ccO365S.add($_,$null) } ;
+                #$fieldsnull = 'CredentialO365','UserPrincipalNameO365','MGContext','MGtoken' | select -unique  | sort ; $fieldsnull | % { $ret_ccO365S.add($_,$null) } ;
+                # add xo prefix - some are autosteered, so need to spec on return
+                $fieldsnull = 'CredentialO365','UserPrincipalNameO365','MGContext','MGtoken','xoPrefix' | select -unique  | sort ; $fieldsnull | % { $ret_ccO365S.add($_,$null) } ;
 
                  # PRETUNE STEERING separately *before* pasting in balance of region
                 # THIS BLOCK DEPS ON VERB-* FANCY CRED/AUTH HANDLING MODULES THAT *MUST* BE INSTALLED LOCALLY TO FUNCTION
@@ -4339,10 +4541,18 @@ function connect-O365Services {
                 #>
                 #Optional Array of MG Permission Names(avoids manual discovery against configured cmdlets) @('Domain.Read.All','Domain.ReadWrite.All','Directory.Read.All') ]")]
                 if($UseMG -AND -not (get-variable -name MGPermissionsScope -ea 0).value){
-                    [string[]]$MGPermissionsScope = @() ;
-                    # if $MGPermissionsScope is omitted, get-MGCodeCmdletPermissionsTDO will be run to discover -  via Find-MGGraphCommand - and resolve into working ACL Scopes for connect-mgGraph
-                    # if $MgCmdlets is populated with a an Array of -MG*/Microsoft.Graph* cmdlets, AST Parser details will not be run by get-MGCodeCmdletPermissionsTDO, solely the leaf Find-MGGraphCommand
-                    if(-not (get-variable -name MGCmdlets  -ea 0).value){[string[]]$MGCmdlets = @()} ;
+                    if($o365_Toroco_SIDMGScopes){
+                        $smsg = "No -MGPermissionsScope, but populated o365_Toroco_SIDMGScopes: using o365_Toroco_SIDMGScopes"
+                        $smsg += "`nUsing `$o365_Toroco_SIDMGScopes for `MGPermissionsScope" ;
+                        $smsg += "`n(Resolve actuals: run target code through get-MGCodeCmdletPermissionsTDO -Path 'pathto\code.ps1'" ;
+                        write-host -foregroundcolor yellow $smsg ; 
+                        $MGPermissionsScope = $o365_Toroco_SIDMGScopes ; 
+                    }else{
+                        [string[]]$MGPermissionsScope = @() ;
+                        # if $MGPermissionsScope is omitted, get-MGCodeCmdletPermissionsTDO will be run to discover -  via Find-MGGraphCommand - and resolve into working ACL Scopes for connect-mgGraph
+                        # if $MgCmdlets is populated with a an Array of -MG*/Microsoft.Graph* cmdlets, AST Parser details will not be run by get-MGCodeCmdletPermissionsTDO, solely the leaf Find-MGGraphCommand
+                        if(-not (get-variable -name MGCmdlets  -ea 0).value){[string[]]$MGCmdlets = @()} ;
+                    }
                 } ;
                 if($env:userdomain -eq $env:computername){
                     $isNonDomainServer = $true ;
@@ -4454,6 +4664,8 @@ function connect-O365Services {
                     $smsg = "Connect-EXO w`n$(($pltCXO|out-string).trim())" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $tDbgcmd = 'connect-exo' ; #$dbgdate = '8/27/2026' ; ; 
+                    if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
                     connect-exo @pltCXO ; 
                 } else {
                     $smsg = "(`$useEXO:$($useEXO))" ;
@@ -4483,6 +4695,8 @@ function connect-O365Services {
                     $smsg = "Connect-SC (Connect-IPPSSession Purview) w`n$(($pltCSC|out-string).trim())" ; 
                     if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
                     else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                    $tDbgcmd = 'connect-exo' ; #$dbgdate = '8/27/2026' ; ; 
+                    if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
                     connect-exo @pltCSC ; 
                 } else {
                     $smsg = "(`$useSC:$($useSC))" ;
@@ -4492,10 +4706,16 @@ function connect-O365Services {
                 #endregion useSC ; #*------^ END useSC ^------
                 #region VALIDATE_XOSC ; #*------v VALIDATE_XOSC v------
                 if($useEXO -OR $useSC){
-                    $XOconnections = test-exoconnectiontdo ; 
+                    $tDbgcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/27/2026' ; ; 
+                    if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
+                    # 9:09 AM 8/27/2026 SOMETHING IN THIS CALL IS BREAKING THE OPEN CONFIRMED XO CONN!
+                    #$XOconnections = test-exoconnectiontdo ; 
+                    $XOconnections = test-exoconnectiontdo -Prefix:$($pltCXO.Prefix) 
                     foreach($xcon in $XOconnections){
                         if($xcon.connection -ANd $xcon.isXO -ANd $xcon.isValid -AND $xcon.TokenLifeMins -gt 0){
                             $ret_rxo = $xcon; $ret_ccO365S.hasEXO = $true ; 
+                            # 10:45 AM 8/27/2026 add prefix return, in case wasn't passed in as a pref (auto-steered by logic)
+                            $ret_ccO365S.xoPrefix = $xcon.Prefix
                             # 5:09 PM 1/28/2026 SID non cba don't have appid, exempt test, throws error in console
                             if($xcon.AppID){
                                 if($rai = (resolve-AppIDToCBAFriendlyName -AppId $xcon.AppID)){
@@ -4555,16 +4775,8 @@ function connect-O365Services {
                 #region CONNECT_MG ; #*------v CONNECT_MG v------
                 #$UseMG = $false;
                 if($UseMG){
-                    if(-not (get-command  test-mgconnection)){
-                        TRY{
-                            ipmo -fo -verb verb-mg -verbose 
-                        } CATCH {$ErrTrapd=$Error[0] ;
-                            write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
-                            $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
-                            write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
-                            BREAK ; 
-                        } ;
-                    } ;
+                    $tDbgcmd = 'test-MGConnection' ; #$dbgdate = '8/27/2026' ; ; 
+                    #if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
                     $MGCntxt = test-mgconnection -Verbose:($VerbosePreference -eq 'Continue') ;
                     if($MGCntxt.CertificateThumbprint -match $rgxCertThumbprint -AND $MgCntxt.AppName -AND $mgCntxt.isCBA){
                         $smsg = "CBA-auth'd existing conn: skipping RequirePermissions scope discovery" ; 
@@ -4638,16 +4850,8 @@ function connect-O365Services {
                     }
 
                     #region cMG_SCAFFOLD ; #*------v cMG_SCAFFOLD v------
-                    if(-not (get-command  test-mgconnection)){
-                        TRY{
-                            ipmo -fo -verb verb-mg -verbose 
-                        } CATCH {$ErrTrapd=$Error[0] ;
-                            write-host -foregroundcolor gray "TargetCatch:} CATCH [$($ErrTrapd.Exception.GetType().FullName)] {"  ;
-                            $smsg = "`n$(($ErrTrapd | fl * -Force|out-string).trim())" ;
-                            write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" ;
-                            BREAK ; 
-                        } ;
-                    } ;
+                    $tDbgcmd = 'test-MGConnection' ; #$dbgdate = '8/27/2026' ; ; 
+                    #if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
                     $MGCntxt = test-mgconnection -Verbose:($VerbosePreference -eq 'Continue') ;
                     $o365Cred = $null ;
                     if($Credential -AND $MGCntxt.isConnected){
@@ -4656,6 +4860,8 @@ function connect-O365Services {
                         else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
                         # Dmg returns a get-mgcontext into pipe, if you don't cap it corrupts the pipe on your current flow
                         $dOut = Disconnect-MgGraph -Verbose:($VerbosePreference -eq 'Continue')
+                        $tDbgcmd = 'test-MGConnection' ; #$dbgdate = '8/27/2026' ; ; 
+                        #if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
                         $MGCntxt = test-mgconnection -Verbose:($VerbosePreference -eq 'Continue') ;
                     };
                     if($Credential){
@@ -4752,8 +4958,12 @@ function connect-O365Services {
                     #>
                     #endregion cMG_SCAFFOLD ; #*------^ END cMG_SCAFFOLD ^------
                     #------
+                    $tDbgcmd = 'connect-mg' ; #$dbgdate = '8/27/2026' ; ; 
+                    #if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
                     connect-MG @pltCMG 
                     # need to update the hasMG flag: TRY{$AADTenant = Get-AzureADTenantDetail -ea stop ; $ret_ccO365S.hasAAD = $true} CATCH {$ret_ccO365S.hasAAD = $false }  ; 
+                    $tDbgcmd = 'test-MGConnection' ; #$dbgdate = '8/27/2026' ; ; 
+                    #if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
                     TRY{
                         $MGCntxt = test-mgconnection -Verbose:($VerbosePreference -eq 'Continue') -ea Stop ;
                         if($MGCntxt.isConnected){
@@ -6638,6 +6848,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 12:23 PM 8/27/2026  added 7psdbgfct code for conn debugging
     * 11:31 AM 7/9/2024 subd in silent for write-verbose 
     * 1:25 PM 7/8/2024 spliced in cxo constatns
     * 9:47 am 4/9/2024:validated updated disconnect-exo -prefix cc -verbose ; 
@@ -6707,7 +6918,7 @@ Function Disconnect-EXO {
 
     ) 
     $verbose = ($VerbosePreference -eq "Continue") ; 
-    $dbgdate = '8/25/2026' ;
+    $dbgdate = '8/27/2026' ;
     #*------v PSS & GMO VARIS v------
     # move into a param
     #$MinNoWinRMVersion = '3.0.0' ; 
@@ -23102,8 +23313,10 @@ function resolve-user {
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
-    # 9:18 AM 7/8/2026 update $mts, stop stripping boolean:$false items
-    * 1:53 PM 6/30/2026 rem #reqs
+    * 11:37 AM 8/27/2026 fixed lic resolution, defer rgx for lic grp to $xxxmeta.rgx spec (was out of day to modern e3 grant grp); 
+        debugged/fixed mggroup memberof lookup; 
+        add -MGPermissionsScope, defaulted to get-MGCodeCmdletPermissionsTDO output on this script
+        reworked mg-connectivity around latest f-ery; added verb-mb\test-mgconnection(), and support; 
     * 11:23 AM 3/30/2026 fadded conflict resolution lookups top the OnPrem conflict block, now pulls and puts up comparitive objects with UPN or proxyaddresseses clashes with the MGuser object.
     * 4:25 PM 3/27/2026 fixed OpOU output; add backup lookup against samaccountname@UPNSuffix for provisnion conflicted non-upn-aligned mgu (they are still ahrdmatched for ad lookup, just not mgu);
          added $hsum.iSProvisioningErrors flag to output;
@@ -23494,6 +23707,8 @@ function resolve-user {
     Credential User Role spec (SID|CSID|UID|B2BI|CSVC|ESVC|LSVC|ESvcCBA|CSvcCBA|SIDCBA)[-UserRole @('SIDCBA','SID','CSVC')]
     .PARAMETER useEXOv2
     Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]
+    .PARAMETER MGPermissionsScope
+    Optional Array of MG delegated Permission Names(avoids manual discovery against configured cmdlets)[-MGPermissionsScope @('Domain.Read.All','Domain.ReadWrite.All','Directory.Read.All') ]    
     .PARAMETER silent
     Silent output (suppress status echos, defaults true)[-silent]
     .PARAMETER outObject
@@ -23709,6 +23924,7 @@ function resolve-user {
     #>
 
     ##Requires -Modules ActiveDirectory, MSOnline, AzureAD, ExchangeOnlineManagement, verb-AAD, verb-ADMS, verb-Auth, verb-IO, verb-logging
+    #Requires -Modules ActiveDirectory, ExchangeOnlineManagement, verb-MG, verb-ADMS, verb-Auth, verb-IO, verb-logging
     ##Requires -RunasAdministrator
     ## [OutputType('bool')] # optional specified output type
     [CmdletBinding()]
@@ -23760,6 +23976,8 @@ function resolve-user {
             # svcAcct use: @('ESvcCBA','CSvcCBA','SIDCBA')
         [Parameter(HelpMessage="Use EXOv2 (ExchangeOnlineManagement) over basic auth legacy connection [-useEXOv2]")]
             [switch] $useEXOv2=$true,
+        [Parameter(HelpMessage="Optional Array of MG delegated Permission Names(avoids manual discovery against configured cmdlets)[-MGPermissionsScope @('Domain.Read.All','Domain.ReadWrite.All','Directory.Read.All') ]")]
+            [string[]]$MGPermissionsScope = @('User.ReadBasic.All','User.Read','AgentIdUser.ReadWrite.IdentityParentedBy','DeviceManagementManagedDevices.Read.All','DeviceManagementApps.Read.All','DeviceManagementApps.ReadWrite.All','DeviceManagementConfiguration.Read.All','DeviceManagementConfiguration.ReadWrite.All','DeviceManagementServiceConfig.Read.All','User.ReadWrite.CrossCloud','DeviceManagementServiceConfig.ReadWrite.All','Directory.Read.All','Directory.ReadWrite.All','User.Read.All','User.ReadWrite.All','DeviceManagementManagedDevices.ReadWrite.All','User.ReadWrite','AgentIdUser.ReadWrite.All'),
         [Parameter(HelpMessage="Silent output (suppress status echos, defaults true)[-silent]")]
             [switch] $silent=$true,
         [Parameter(HelpMessage="switch to return a system.object summary to the pipeline[-outObject]")]
@@ -23772,6 +23990,7 @@ function resolve-user {
     BEGIN{
         #region CONSTANTS_AND_ENVIRO ; #*======v CONSTANTS_AND_ENVIRO v======
         #region CONSTANTS_AND_ENVIRO ; #*======v CONSTANTS_AND_ENVIRO v======
+        $dbgdate = '8/27/2026' ;
         #region ENVIRO_DISCOVER ; #*------v ENVIRO_DISCOVER v------
         push-TLSLatest
         $Verbose = [boolean]($VerbosePreference -eq 'Continue') ; 
@@ -23818,7 +24037,7 @@ function resolve-user {
             verbose = [boolean]($PSBoundParameters['Verbose'] -eq $true) ; 
         } ;
         write-verbose "(Purge no value keys from splat)" ; 
-        $mts = $pltRVEnv.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 -whatif:$false -confirm:$false; 
+        $mts = $pltRVEnv.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltRVEnv.remove($_.Name)} ; rv mts -ea 0 -whatif:$false -confirm:$false; 
         $smsg = "resolve-EnvironmentTDO w`n$(($pltRVEnv|out-string).trim())" ; 
         if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
         if(get-command resolve-EnvironmentTDO -ea STOP){}ELSE{
@@ -23975,6 +24194,8 @@ function resolve-user {
         # - AADU Licensing group checks
         # calc the rgxLicGrpName fr the existing $xxxmeta.rgxLicGrpDN: (get-variable tormeta).value.rgxLicGrpDN.split(',')[0].replace('^','').replace('CN=','')
         #$rgxLicGrpName = (get-variable -name "$($tenorg)meta").value.rgxLicGrpDN.split(',')[0].replace('^','').replace('CN=','')
+        # calc the rgxLicGrpName fr the existing $xxxmeta.
+        if(-not $rgxLicGrpName){$rgxLicGrpName = (get-variable -name "tormeta").value.rgxLicGrpName} ; 
         # use the dn vers LicGrouppDN = $null ; # | ?{$_ -match $tormeta.rgxLicGrpDN}
         #$rgxLicGrpDN = (get-variable -name "$($tenorg)meta").value.rgxLicGrpDN
         # email trigger vari, it will be semi-delimd list of mail-triggering events
@@ -24191,8 +24412,12 @@ function resolve-user {
             $prpMPerms = 'Identity','User','AccessRights'
 
         } ; 
-        $rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
-        $rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
+        #$rgxOPLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
+        #$rgxXLic = '^CN\=ENT\-APP\-Office365\-(EXOK|F1|MF1)-DL$' ;
+        # defer these to $tormeta.rgxLicGrpName
+        if($rgxLicGrpName){
+            $rgxXLic = $rgxOPLic = $rgxLicGrpName ; 
+        } ; 
         #endregion LOCAL_CONSTANTS ; #*------^ END LOCAL_CONSTANTS ^------        
     
         #region ENCODED_CONTANTS ; #*------v ENCODED_CONTANTS v------
@@ -24509,16 +24734,17 @@ function resolve-user {
                     ) | select -unique ; 
                     #region MG_CONNECT ; #*------v MG_CONNECT v------
                     #$isMgConn = [boolean]( (gcm get-mgcontext -ea 0) -AND (get-mgcontext -ea 0 )); if(-not $isMgConn ){connect-mg }else{write-verbose "MG connected"};
-                    if(-not (get-command  test-mgconnection)){
-                        if(-not (get-module -list Microsoft.Graph -ea 0)){
-                            $smsg = "MISSING Microsoft.Graph!" ; 
-                            $smsg += "`nUse: install-module Microsoft.Graph -scope CurrentUser" ;
-                            if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                            else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                        } ;             
-                    } ;
+                    $tDbgcmd = 'test-MGConnection' ; #$dbgdate = '8/27/2026' ; 
+                    #if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
                     $MGCntxt = test-mgconnection -Verbose:($VerbosePreference -eq 'Continue') ;
                     if($MGCntxt.isConnected){}else {
+                        $tDbgcmd = 'connect-mg' ; #$dbgdate = '8/27/2026' ; 
+                        if($psise -AND (get-date ).tostring() -match $dbgdate){
+                            if((gcm $tDbgcmd).source -eq ''){}else{
+                                gi function:$tDbgcmd -ea 0| remove-item -force -verbose ;
+                                gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ; 
+                            } ; 
+                        } ; 
                         connect-mg ; 
                     }
                     if(-not (get-command Get-MgUser)){
@@ -24822,7 +25048,7 @@ function resolve-user {
                 MGCmdlets = $MGCmdlets ;
             } ;
             write-verbose "(Purge no value keys from splat)" ; 
-            $mts = $pltCco365Svcs.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
+            $mts = $pltCco365Svcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCco365Svcs.remove($_.Name)} ; rv mts -ea 0 ; 
             if((get-command connect-O365Services -EA STOP).parameters.ContainsKey('whatif')){
                 $pltCco365SvcsnDSR.add('whatif',$($whatif))
             } ; 
@@ -24832,6 +25058,8 @@ function resolve-user {
             Do {
                 $smsg = "connect-O365Services w`n$(($pltCco365Svcs|out-string).trim())" ; 
                 if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                $tDbgcmd = 'connect-O365Services' ; #$dbgdate = '8/27/2026' ; 
+                if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
                 $ret_ccSO365 = connect-O365Services @pltCco365Svcs ; 
                 #region CONFIRM_CCEXORETURN ; #*------v CONFIRM_CCEXORETURN v------
                 # matches each: $plt.useXXX:$true to matching returned $ret.hasXXX:$true 
@@ -24934,42 +25162,57 @@ function resolve-user {
 
         #region TEST_EXO_CONN ; #*------v TEST_EXO_CONN v------
         # ALT: simplified verify EXO conn: ALT to full CONNECT_O365SERVICES block - USE ONE OR THE OTHER!
-        $useEXO = $FALSE ; 
+        $useEXO = $TRUE ; 
         $useSC = $false ; 
         if(-not $XOConnectionUri ){$XOConnectionUri = 'https://outlook.office365.com'} ;
         if(-not $SCConnectionUri){$SCConnectionUri = 'https://ps.compliance.protection.outlook.com'} ;
         $EXOtestCmdlet = 'Get-xoOrganizationConfig' ; 
         if($useEXO){
-            if(gcm $EXOtestCmdlet -ea 0){
-                $conns = Get-ConnectionInformation -ea STOP  ; 
-                $hasEXO = $hasSC = $false ; 
-                #if($conns | %{$_ | ?{$_.ConnectionUri -eq 'https://outlook.office365.com' -AND $_.State -eq 'Connected' -AND $_.TokenStatus -eq 'Active'}}){
-                $conns | %{
-                    if($_ | ?{$_.ConnectionUri -eq $XOConnectionUri}){$hasEXO = $true } ; 
-                    if($_ | ?{$_.ConnectionUri -eq $SCConnectionUri}){$hasSC = $true } ; 
-                }
-                if($useEXO -AND $hasEXO){
-                    write-verbose "EXO ConnectionURI present" ; 
-                }elseif(-not $useEXO){}else{
-                    $smsg = "No Active EXO connection: Run - Connect-ExchangeOnline -Prefix xo -  before running this script!" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    BREAK ; 
+            $tDbgcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/27/2026' ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;              
+            $pltTXO=[ordered]@{
+                Prefix = $ret_ccSO365.xoPrefix ; 
+                Verbose = ($VerbosePreference -eq 'Continue') ; 
+            } ; 
+            $isGood = test-EXOConnectionTDO @pltTXO ; 
+            if($isGood){
+                $smsg = "EXO connected" ; 
+                $thisPrefix = @($Prefix,$ret_ccSO365.xoPrefix) |  select -unique  ; 
+                if($thisPrefix){
+                    $smsg += " w Prefix:$($thisPrefix -join ','). " ; 
+                }else{
+                    $smsg += " w *no* Prefix. " ; 
                 } ; 
-                if($useSC -AND $hasSC){
-                    write-verbose "SCI ConnectionURI present" ; 
-                }elseif(-not $useSC){}else{
-                    $smsg = "No Active SC connection: Run - Connect-IPPSSession -Prefix SC -  before running this script!" ; 
-                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                    BREAK ; 
+                $smsg += "Valid Functional" ;
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            #}elseif($connections|?{$_.ConnectionUri -eq $rgxConnectionUriPrvw -AND $_.TokenStatus -ne 'Expired'  -AND $_.ModulePrefix -eq $Prefix}){
+            }elseif($connections|?{$_.ConnectionUri -eq $rgxConnectionUriPrvw -AND $_.ModulePrefix -eq $Prefix}){
+                $smsg = 'Purview S&C connected' ; 
+                if($Prefix){
+                    $smsg += " w Prefix:$($Prefix)" ; 
+                }else{
+                    $smsg += " w *no* Prefix" ; 
                 } ; 
-            }else {
-                $smsg = "Missing gcm get-xoMailboxFolderStatistics: ExchangeOnlineManagement module *not* loaded!" ; 
-                if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
-                else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
-                BREAK ; 
-            } ;    
+                #$smsg += "/non-Expired Token" ;
+                if($silent){}elseif ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Prompt }
+                else{ write-host -foregroundcolor green "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                #Levels:Error|Warn|Info|H1|H2|H3|H4|H5|Debug|Verbose|Prompt|Success
+            #}elseIf (-not ($connections)) {
+            } else {
+                if($ConnectPurview){
+                    write-host 'Purview S&C disconnected or Expired Token';
+                    Import-Module $EOMmodname -ErrorAction stop ;
+                    Connect-IPPSSession  -ErrorAction stop ;
+                } else {
+                    #Connect-ExchangeOnline -SkipLoadingCmdletHelp
+                    #Connect-ExchangeOnline -SkipLoadingCmdletHelp -ShowBanner:$false ; 
+                    write-host 'EXO disconnected or Expired Token';
+                    Import-Module $EOMmodname -ErrorAction stop ;
+                    Connect-ExchangeOnline -SkipLoadingCmdletHelp
+                } ; 
+            } ; 
         }else{
             $smsg = "useEXO:$($useEXO): skipping EXO tests" ; 
             if($VerbosePreference -eq "Continue"){if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level VERBOSE } 
@@ -25007,7 +25250,7 @@ function resolve-user {
             } ;
 
             write-verbose "(Purge no value keys from splat)" ;
-            $mts = $pltCcOPSvcs.GetEnumerator() |?{ $_.value -isnot [boolean] -AND (($_.value -eq $null) -OR ($_.value -eq '') -OR ($_.value.length -eq 0))}; $mts |%{$pltCcOPSvcs.remove($_.Name)} ; rv mts -ea 0 ;
+            $mts = $pltCcOPSvcs.GetEnumerator() |?{$_.value -eq $null} ; $mts |%{$pltCcOPSvcs.remove($_.Name)} ; rv mts -ea 0 ;
             if((get-command connect-OPServices -EA STOP).parameters.ContainsKey('whatif')){
                 $pltCcOPSvcsnDSR.add('whatif',$($whatif))
             } ;
@@ -25453,6 +25696,7 @@ function resolve-user {
                 MsolUser = $null ;
                 #AADUser = $null ; # added for MailUser variant
                 MGUser = $null ; # 12:43 PM 12/10/2025 added with M$ forced block of all azuread access, and forced migration to crappy MG module calls
+                MGMemberOf = $null ; # 8:06 AM 8/20/2026 add Get-MgUserMemberOfAsGroup resolved mggroups list, as the xoMemberOf is mail-enabled dgs only, no secgrps
                 #AADUserMgr = $null ;
                 MGUserMgr = $null ; # 12:43 PM 12/10/2025 added with M$ forced block of all azuread access, and forced migration to crappy MG module calls
                 #AADUserLics = $null ; 
@@ -27321,6 +27565,25 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                     else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
                 }
                 #>
+                # 8:17 AM 8/20/2026 xomemberof is mail-enabled only, doesn't includ mg secgrps
+                if(-not $hSum.mgMemberOf -AND $hSum.MGUser.UserPrincipalName){
+                    TRY {
+                        write-verbose "Get-MgUserMemberOfAsGroup -UserId $($hSum.MGUser.UserPrincipalName)"
+                        $hSum.mgMemberOf  +=  Get-MgUserMemberOfAsGroup -UserId $hSum.MGUser.UserPrincipalName ;
+                        write-verbose "`$hSum.mgMemberOf:`n$(($hSum.mgMemberOf|out-string).trim())" ;
+                    } CATCH {
+                        $ErrTrapd=$Error[0] ;
+                        $smsg = "Failed processing $($ErrTrapd.Exception.ItemName). `nError Message: $($ErrTrapd.Exception.Message)`nError Details: $($ErrTrapd)" ;
+                        if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level Info } #Error|Warn|Debug
+                        else{ write-warning "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ;
+                        Continue ;
+                    } ;
+                }else{
+                    $smsg = "Unable to: `$hSum.mgMemberOf = Get-MgUserMemberOfAsGroup -UserId $($hSum.MGUser.UserPrincipalName)" ; 
+                    if ($logging) { Write-Log -LogContent $smsg -Path $logfile -useHost -Level WARN -Indent} 
+                    else{ write-WARNING "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; 
+                }
+
                 #endregion FORCE_MGU_MEMBEROF ; #*------^ END FORCE_MGU_MEMBEROF ^------
                 # display user info:
                 #region OUTPUT_P1 ; #*------v OUTPUT_P1 v------
@@ -27455,6 +27718,8 @@ $(($thisADU | ft -a  $prpADU[8..11]|out-string).trim())
                 #region LIC_GRP ; #*------v LIC_GRP v------
                 if($hSum.ADUser){$hSum.LicenseGroup  +=  $hSum.ADUser.memberof |?{$_ -match $rgxOPLic }}
                 elseif($hSum.xoMemberOf){$hSum.LicenseGroup  +=  $hSum.xoMemberOf.Name |?{$_ -match $rgxXLic}}
+                # 9:53 AM 8/27/2026 fixed: name isn't a prop, it's dname on mggroup output
+                if(-not $hSum.LicenseGroup){$hSum.LicenseGroup  +=  $hSum.mgMemberOf.displayname |?{$_ -match $rgxXLic}} ; 
 
                 #if(-not ($hSum.LicenseGroup) -AND ($hSum.MsolUser.licenses.AccountSkuId -contains "$($TORMeta.o365_TenantDom.tolower()):ENTERPRISEPACK")){$hSum.LicenseGroup  +=  '(direct-assigned E3)'} ;
                 # $hSum.AADUser ; $aadu | Get-AzureADUserLicenseDetail  | select -exp SkuPartNumber
@@ -28731,6 +28996,7 @@ function test-EXOConnectionTDO{
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:21 PM 8/27/2026 fixed a newly-added prefix-tied bug. added 7psdbgfct code for conn debugging
     * 12:43 PM 7/10/2026 updated for function testing, diverted tests into test-exoconnectiontdo(); added mgauth/eom load order requirements and testing, 
         add Test-MGAuthConflict() which tests for MGAuth-conflicting loaded assemblies in mem (which survive rv ExchangeOnlineManagement); 
     * 3:51 PM 6/18/2026 recoded with broken status recovery test: get-connection + get-recipient -resultsize 1 == isGood; otherwise, dxo, and reconnect; also returns explicit $false on fail
@@ -28874,7 +29140,7 @@ function test-EXOConnectionTDO{
     PS> if((test-EXOConnectionTDO -prefix cc | ?{$_.isXO -AND $_.isValid}){}{connect-ExchangeOnline} ; get-xomailbox -ResultSize 1 ; 
     Simple pre-connection test/connection trigger prior to running an EXO command
     .EXAMPLE
-    PS> $results = test-EXOConnectionTDO ; 
+    PS> $results = test-EXOConnectionTDO -Prefix:$($pltCXO.Prefix) ; 
     PS> results ; 
 
         Connection        : Microsoft.Exchange.Management.ExoPowershellSnapin.ConnectionInformation
@@ -29024,7 +29290,7 @@ function test-EXOConnectionTDO{
         #,[switch]$isCBA
     ); 
     BEGIN{
-        $dbgdate = '8/25/2026' ;
+        $dbgdate = '8/27/2026' ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         $rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" ; 
         #$rgxConnectionUriCCMS = 'https://ps\.compliance\.protection\.outlook\.com' ; 
@@ -32556,8 +32822,8 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # SIG # Begin signature block
 # MIIELgYJKoZIhvcNAQcCoIIEHzCCBBsCAQExCzAJBgUrDgMCGgUAMGkGCisGAQQB
 # gjcCAQSgWzBZMDQGCisGAQQBgjcCAR4wJgIDAQAABBAfzDtgWUsITrck0sYpfvNR
-# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUgFQz7wZTxX8w1j2XmDoJrw6Q
-# Zo+gggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
+# AgEAAgEAAgEAAgEAAgEAMCEwCQYFKw4DAhoFAAQUrfPJFkYu66dLZ9FIIN2wys4h
+# SUagggI4MIICNDCCAaGgAwIBAgIQWsnStFUuSIVNR8uhNSlE6TAJBgUrDgMCHQUA
 # MCwxKjAoBgNVBAMTIVBvd2VyU2hlbGwgTG9jYWwgQ2VydGlmaWNhdGUgUm9vdDAe
 # Fw0xNDEyMjkxNzA3MzNaFw0zOTEyMzEyMzU5NTlaMBUxEzARBgNVBAMTClRvZGRT
 # ZWxmSUkwgZ8wDQYJKoZIhvcNAQEBBQADgY0AMIGJAoGBALqRVt7uNweTkZZ+16QG
@@ -32572,9 +32838,9 @@ Export-ModuleMember -Function add-EXOLicense,check-EXOLegalHold,Connect-EXO,Test
 # AWAwggFcAgEBMEAwLDEqMCgGA1UEAxMhUG93ZXJTaGVsbCBMb2NhbCBDZXJ0aWZp
 # Y2F0ZSBSb290AhBaydK0VS5IhU1Hy6E1KUTpMAkGBSsOAwIaBQCgeDAYBgorBgEE
 # AYI3AgEMMQowCKACgAChAoAAMBkGCSqGSIb3DQEJAzEMBgorBgEEAYI3AgEEMBwG
-# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBTXu2QN
-# jxvzuMu11kYGBPv3TKvaKDANBgkqhkiG9w0BAQEFAASBgEgCBtyo1NcA30/PG3fq
-# NTs8DVKgPuc249NvzhkS4l3G/pnUi/Q9xGb6wVnEIeukX/C7ODPexqf6swlzGpw+
-# 7dbhJQTlTPv68uZJD+oC3oOHECMuiZzXSOz/DVcof00U+I42WJ69moPdNp0+7X3m
-# weUdMvdY8BQHdx4c+VV2vhDy
+# CisGAQQBgjcCAQsxDjAMBgorBgEEAYI3AgEVMCMGCSqGSIb3DQEJBDEWBBRdBT2z
+# MUmIx6+wcrqPpHXA5tQSkjANBgkqhkiG9w0BAQEFAASBgEHpt+eRo0frC55fXdtm
+# RI10s3+uJHR520mRBfuou+nvhpyDUBkvNSBKu3vE12lVa1kTM2osijHUHn5/MDTL
+# LpKEhnodRzK1Kw4ivXllyGCxaSc3d/qtsjNijorakKP0V0YZXV/UbWtOuwLjpQyH
+# +fivigWQCbAUQDxE4lTevG4L
 # SIG # End signature block
