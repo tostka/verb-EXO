@@ -17,6 +17,7 @@ Function Connect-EXO {
     Github      : https://github.com/tostka/verb-exo
     Tags        : Powershell,ExchangeOnline,Exchange,RemotePowershell,Connection,MFA
     REVISIONS   :
+    * 12:20 PM 8/27/2026 only changes was addition of 7psdbgfct blocks for tshooting exo conn issues
     * 12:43 PM 7/10/2026 updated for function testing, diverted tests into test-exoconnectiontdo(); added mgauth/eom load order requirements and testing, 
         add Test-MGAuthConflict() which tests for MGAuth-conflicting loaded assemblies in mem (which survive rv ExchangeOnlineManagement); 
     * 9:01 AM 1/21/2026 NEVER pass whatif into a conn maint call, it's non-impactful, no real change;
@@ -254,7 +255,7 @@ Function Connect-EXO {
     BEGIN {
         #region CONSTANTS_AND_ENVIRO ; #*======v CONSTANTS_AND_ENVIRO v======
         # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
-        $dbgdate = '8/25/2026' ;
+        $dbgdate = '8/27/2026' ;
         $rPSCmdlet = $PSCmdlet ; 
         $rPSScriptRoot = $PSScriptRoot ; 
         $rPSCommandPath = $PSCommandPath ; 
@@ -561,13 +562,8 @@ Function Connect-EXO {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
-            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; 
-            if($psise -AND (get-date ).tostring() -match $dbgdate){
-                if((gcm $tcmd).source -eq ''){}else{
-                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
-                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
-                } ; 
-            } ; 
+            $tDbgcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/27/2026' ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
             $isGood = test-EXOConnectionTDO @pltTXO ; 
             if($isGood){
                 $smsg = "EXO connected" ; 
@@ -860,13 +856,8 @@ Function Connect-EXO {
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
-            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; ; 
-            if($psise -AND (get-date ).tostring() -match $dbgdate){
-                if((gcm $tcmd).source -eq ''){}else{
-                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
-                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
-                } ; 
-            } ; 
+            $tDbgcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/27/2026' ; ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
             if($oRet = test-EXOConnectionTDO @pltTXO ){
                 foreach($xSess in $oRet){
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){
@@ -1254,13 +1245,8 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
             else{ write-verbose "$((get-date).ToString('HH:mm:ss')):$($smsg)" } ; } ; 
 
             $bExistingEXOGood = $bExistingPrvwGood = $false ;
-            $tcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/25/2026' ; 
-            if($psise -AND (get-date ).tostring() -match $dbgdate){
-                if((gcm $tcmd).source -eq ''){}else{
-                    gi function:$tcmd -ea 0| remove-item -force -verbose ;
-                    gci "d:\scripts\$($tcmd)_func.ps1" | ipmo -fo -verb  ; 
-                } ; 
-            } ; 
+            $tDbgcmd = 'test-EXOConnectionTDO' ; #$dbgdate = '8/27/2026' ; 
+            if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
             if($oRet = test-EXOConnectionTDO @pltTXO ){
                 foreach($xSess in $oRet){
                     if($null -eq $xSess.Organization -AND $xSess.TenantID){
@@ -1431,3 +1417,4 @@ $(
     }  # END-E
 } ; 
 #*------^ Connect-EXO.ps1 ^------
+
