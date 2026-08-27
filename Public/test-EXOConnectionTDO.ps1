@@ -19,6 +19,7 @@ function test-EXOConnectionTDO{
     AddedWebsite: URL
     AddedTwitter: URL
     REVISIONS
+    * 12:21 PM 8/27/2026 fixed a newly-added prefix-tied bug. added 7psdbgfct code for conn debugging
     * 12:43 PM 7/10/2026 updated for function testing, diverted tests into test-exoconnectiontdo(); added mgauth/eom load order requirements and testing, 
         add Test-MGAuthConflict() which tests for MGAuth-conflicting loaded assemblies in mem (which survive rv ExchangeOnlineManagement); 
     * 3:51 PM 6/18/2026 recoded with broken status recovery test: get-connection + get-recipient -resultsize 1 == isGood; otherwise, dxo, and reconnect; also returns explicit $false on fail
@@ -162,7 +163,7 @@ function test-EXOConnectionTDO{
     PS> if((test-EXOConnectionTDO -prefix cc | ?{$_.isXO -AND $_.isValid}){}{connect-ExchangeOnline} ; get-xomailbox -ResultSize 1 ; 
     Simple pre-connection test/connection trigger prior to running an EXO command
     .EXAMPLE
-    PS> $results = test-EXOConnectionTDO ; 
+    PS> $results = test-EXOConnectionTDO -Prefix:$($pltCXO.Prefix) ; 
     PS> results ; 
 
         Connection        : Microsoft.Exchange.Management.ExoPowershellSnapin.ConnectionInformation
@@ -312,7 +313,7 @@ function test-EXOConnectionTDO{
         #,[switch]$isCBA
     ); 
     BEGIN{
-        $dbgdate = '8/25/2026' ;
+        $dbgdate = '8/27/2026' ;
         $Verbose = ($VerbosePreference -eq 'Continue') ;
         $rgxExoPsHostName="^(ps\.outlook\.com|outlook\.office365\.com)$" ; 
         #$rgxConnectionUriCCMS = 'https://ps\.compliance\.protection\.outlook\.com' ; 
@@ -518,5 +519,7 @@ function test-EXOConnectionTDO{
         @('g-xorecipient','g-xoOrgConfig') | get-alias -ea 0 | %{remove-item alias:$_ -verbose }
     } ; 
 } ; 
+
+
 
 
