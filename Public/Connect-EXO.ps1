@@ -255,7 +255,7 @@ Function Connect-EXO {
     BEGIN {
         #region CONSTANTS_AND_ENVIRO ; #*======v CONSTANTS_AND_ENVIRO v======
         # Debugger:proxy automatic variables that aren't directly accessible when debugging (must be assigned and read back from another vari) ; 
-        $dbgdate = '8/27/2026' ;
+        $DbgDate = '8/27/2026' ;
         $rPSCmdlet = $PSCmdlet ; 
         $rPSScriptRoot = $PSScriptRoot ; 
         $rPSCommandPath = $PSCommandPath ; 
@@ -871,6 +871,12 @@ Function Connect-EXO {
 
                     } ; 
                     if($xSess.isCBA){
+                        #region PSFCTDBG ; #*------v psFctDbg v------
+                        # pre-defer target function to _func.ps1 debug copy before exec
+                        $tDbgcmd = 'resolve-AppIDToCBAFriendlyName' ; #$DbgDate = '8/27/2026' ;
+                        if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
+                        #$RESULT= VERB-NOUN @pltXXX ;
+                        #endregion PSFCTDBG ; #*------^ END psFCTDBG ^------
                         $uRoleReturn = resolve-AppIDToCBAFriendlyName -AppID $xSess.AppId -verbose:$($VerbosePreference -eq "Continue")  ;
                         $certUname = $uRoleReturn.FriendlyName ;
                         $certTag = $uRoleReturn.TenOrg ;
@@ -1257,6 +1263,12 @@ gci "Cert:\CurrentUser\My\$([string]$Credential.UserName)" | Update-AADAppRegist
                         $xSess.Organization = $Tenantdomain ; 
                     } ; 
                     if($xSess.isCBA){
+                        #region PSFCTDBG ; #*------v psFctDbg v------
+                        # pre-defer target function to _func.ps1 debug copy before exec
+                        $tDbgcmd = 'resolve-AppIDToCBAFriendlyName' ; #$DbgDate = '8/27/2026' ;
+                        if($psise -AND (get-date ).tostring() -match $dbgdate){ if((gcm $tDbgcmd).source -eq ''){}else{ gi function:$tDbgcmd -ea 0| remove-item -force -verbose ; gci "d:\scripts\$($tDbgcmd)_func.ps1" | ipmo -fo -verb  ;  } ;  } ;  
+                        #$RESULT= VERB-NOUN @pltXXX ;
+                        #endregion PSFCTDBG ; #*------^ END psFCTDBG ^------
                         $uRoleReturn = resolve-AppIDToCBAFriendlyName -AppID $xSess.AppId -verbose:$($VerbosePreference -eq "Continue")  ;
                         $certUname = $uRoleReturn.FriendlyName ;
                         $certTag = $uRoleReturn.TenOrg ;
