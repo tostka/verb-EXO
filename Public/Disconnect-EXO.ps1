@@ -20,6 +20,7 @@ Function Disconnect-EXO {
     AddedWebsite:	https://social.technet.microsoft.com/Forums/msonline/en-US/f3292898-9b8c-482a-86f0-3caccc0bd3e5/exchange-powershell-monitoring-remote-sessions?forum=onlineservicesexchange
     AddedTwitter:	
     REVISIONS   :
+    * 12:23 PM 8/27/2026  added 7psdbgfct code for conn debugging
     * 11:31 AM 7/9/2024 subd in silent for write-verbose 
     * 1:25 PM 7/8/2024 spliced in cxo constatns
     * 9:47 am 4/9/2024:validated updated disconnect-exo -prefix cc -verbose ; 
@@ -89,7 +90,7 @@ Function Disconnect-EXO {
 
     ) 
     $verbose = ($VerbosePreference -eq "Continue") ; 
-    $dbgdate = '8/25/2026' ;
+    $dbgdate = '8/27/2026' ;
     #*------v PSS & GMO VARIS v------
     # move into a param
     #$MinNoWinRMVersion = '3.0.0' ; 
@@ -362,3 +363,5 @@ Function Disconnect-EXO {
 } ; 
 
 #*------^ Disconnect-EXO.ps1 ^------
+
+
