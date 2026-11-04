@@ -1713,6 +1713,7 @@ resolve-user:TenOrg
 resolve-user:Credential
 resolve-user:UserRole
 resolve-user:useEXOv2
+resolve-user:MGPermissionsScope
 resolve-user:silent
 resolve-user:outObject
 resolve-user:useJson
